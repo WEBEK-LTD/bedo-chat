@@ -1,0 +1,12 @@
+# Netlify site for the Bedo Chat web app (D-15).
+# Netlify UI: Base directory = (empty, repository root), Package directory = apps/web.
+# The Next.js runtime (OpenNext adapter) is applied automatically; do not pin it.
+[build]
+  # Turborepo builds the shared packages this app depends on first. Works from any folder in the repo.
+  command = "pnpm turbo run build --filter=@bedo/web"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "24"
+  NEXT_TELEMETRY_DISABLED = "1"
+  TURBO_TELEMETRY_DISABLED = "1"

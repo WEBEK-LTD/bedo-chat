@@ -1,0 +1,4 @@
+{
+  "$comment": "Material Symbols (Outlined, weight 400) used by Bedo Chat. Add a name here, then run `pnpm --filter @bedo/ui icons`.",
+  "icons": ["arrow_back", "close", "menu", "more_vert", "search"]
+}

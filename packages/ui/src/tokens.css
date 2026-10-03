@@ -1,0 +1,57 @@
+/*
+ * Bedo Chat design tokens.
+ *
+ * Colours below are neutral placeholders until the brand assets are supplied (open decision O-23:
+ * logo, colours, typeface, dark theme). Components must use these variables, never raw values,
+ * so the brand can be applied in one place.
+ */
+:root {
+  /* Surfaces */
+  --bedo-color-bg: #ffffff;
+  --bedo-color-bg-subtle: #f4f5f7;
+  --bedo-color-bg-hover: #eceef1;
+  --bedo-color-bg-selected: #e3e8f0;
+  --bedo-color-border: #dfe2e6;
+
+  /* Text */
+  --bedo-color-text: #16191d;
+  --bedo-color-text-secondary: #5f6670;
+  --bedo-color-text-disabled: #9aa1aa;
+  --bedo-color-text-on-accent: #ffffff;
+
+  /* Accent and status (placeholders) */
+  --bedo-color-accent: #2f5bd3;
+  --bedo-color-accent-hover: #2549b0;
+  --bedo-color-focus-ring: #2f5bd3;
+  --bedo-color-danger: #c62828;
+  --bedo-color-success: #2e7d32;
+
+  /* Typography: system font stack until a typeface is chosen (O-23) */
+  --bedo-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --bedo-font-size-xs: 0.75rem;
+  --bedo-font-size-sm: 0.875rem;
+  --bedo-font-size-md: 0.9375rem;
+  --bedo-font-size-lg: 1.125rem;
+  --bedo-font-size-xl: 1.375rem;
+  --bedo-line-height: 1.4;
+
+  /* Spacing (4px grid) */
+  --bedo-space-1: 0.25rem;
+  --bedo-space-2: 0.5rem;
+  --bedo-space-3: 0.75rem;
+  --bedo-space-4: 1rem;
+  --bedo-space-6: 1.5rem;
+  --bedo-space-8: 2rem;
+
+  /* Shape: restrained radii, flat surfaces, 1px dividers (spec §25) */
+  --bedo-radius-sm: 4px;
+  --bedo-radius-md: 8px;
+  --bedo-border-width: 1px;
+
+  /* Layout */
+  --bedo-header-height: 56px;
+  --bedo-chat-list-width: 360px;
+  --bedo-control-height: 40px;
+
+  --bedo-transition-fast: 120ms ease-out;
+}

@@ -1,0 +1,30 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Supply-chain policy (carried from the approved baseline):
+# - packages must have been published for at least 14 days before they can be installed
+# - dependency install scripts are blocked; any package that wants to run one fails the
+#   install until it is explicitly reviewed and listed below
+minimumReleaseAge: 20160
+# Security exceptions to the 14-day rule. Each entry needs a reason and is removed once the
+# patched version is older than 14 days (recorded in docs/DECISIONS.md).
+# - next: 16.3.6 fixes GHSA critical "Remote Code Execution in next/og ImageResponse" in 16.2.0-16.3.5.
+#   Published 2026-09-22; pinned exactly in apps/web and apps/admin (with its own @next/* packages). Remove after 2026-10-06.
+minimumReleaseAgeExclude:
+  - next
+  - '@next/*'
+strictDepBuilds: true
+# Every package with an install script must be listed in allowBuilds after review:
+# true = allowed to run, false = reviewed and deliberately NOT run.
+#
+# - msgpackr-extract (via bullmq > msgpackr): its install step only builds a native accelerator from
+#   source when no prebuilt binary exists; prebuilt binaries ship as optional packages and msgpackr
+#   falls back to pure JavaScript, so skipping the script is safe.
+allowBuilds:
+  msgpackr-extract: false
+
+# Force patched transitive versions (security advisories found by `pnpm audit`).
+# - fastify >=5.12.5: DoS via unhandled exception on HTTP/2 trailer responses (@nestjs/platform-fastify pins 5.12.4).
+overrides:
+  fastify: ^5.12.5

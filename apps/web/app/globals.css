@@ -1,0 +1,43 @@
+@import 'tailwindcss';
+@import '@bedo/ui/tokens.css';
+
+/* Expose the design tokens to Tailwind utilities (bg-surface, text-secondary, border-line, ...). */
+@theme inline {
+  --color-surface: var(--bedo-color-bg);
+  --color-surface-subtle: var(--bedo-color-bg-subtle);
+  --color-surface-hover: var(--bedo-color-bg-hover);
+  --color-surface-selected: var(--bedo-color-bg-selected);
+  --color-line: var(--bedo-color-border);
+  --color-ink: var(--bedo-color-text);
+  --color-ink-secondary: var(--bedo-color-text-secondary);
+  --color-ink-disabled: var(--bedo-color-text-disabled);
+  --color-accent: var(--bedo-color-accent);
+  --color-accent-hover: var(--bedo-color-accent-hover);
+  --color-on-accent: var(--bedo-color-text-on-accent);
+  --color-danger: var(--bedo-color-danger);
+  --font-sans: var(--bedo-font-sans);
+  --radius-sm: var(--bedo-radius-sm);
+  --radius-md: var(--bedo-radius-md);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bedo-color-bg);
+    color: var(--bedo-color-text);
+    font-family: var(--bedo-font-sans);
+    font-size: var(--bedo-font-size-md);
+    line-height: var(--bedo-line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--bedo-color-focus-ring);
+    outline-offset: 2px;
+  }
+}
