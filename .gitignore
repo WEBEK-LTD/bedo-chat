@@ -4,6 +4,7 @@ dist-test/
 .next/
 out/
 .turbo/
+.netlify/
 coverage/
 *.tsbuildinfo
 next-env.d.ts

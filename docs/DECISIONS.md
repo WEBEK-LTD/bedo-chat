@@ -28,6 +28,7 @@ source of truth; if the two ever differ, the blueprint wins and this file is cor
 | D-19 (O-17) | System admin accounts | Separate from student accounts; phone code plus mandatory authenticator app; roles Super Admin and Moderator; first Super Admin created from the command line | 2026-10-04 |
 | D-20 (O-32) | Admin screens in Phase 2 | Admin sign-in plus the academy phone list, deletion requests and 2-Step reset screens are built in Phase 2; the rest of the dashboard in Phase 10 | 2026-10-04 |
 | D-21 (O-31) | Push for login alerts in Phase 2 | Push pipeline built in Phase 2 with Web Push delivery to web sessions; APNs and FCM join the same pipeline in Phase 12; Phase 7 adds message notifications on top | 2026-10-04 |
+| D-22 | OTP delivery in development and testing | Phase 2 testing uses the real Waabek OTP flow with the owner's real API key, supplied only through the server-side `WAABEK_API_KEY` variable: never committed, never in any ZIP, never in frontend or client bundles, never logged. A development-only code sender is an optional fallback for local automated tests only, can never be enabled in production, and does not replace the Waabek integration | 2026-10-04 |
 | R-01 | Standing rules | No feature outside the approved specification. No AI features, AI branding, AI artwork, AI-generated icons or illustrations. Google Material Symbols only. User app limited to Login → Chat Interface. Admin Dashboard separate. Phase work starts only after its decisions are recorded | 2026-10-04 |
 
 ## Phase 1 implementation choices

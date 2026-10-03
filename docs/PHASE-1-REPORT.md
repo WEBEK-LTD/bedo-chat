@@ -75,6 +75,26 @@ Added after D-15 and D-16 were approved, so Phase 1 can be deployed as well as t
 | Statement timeout | Now applied through `pg-pool`'s awaited `onConnect` hook instead of a startup parameter that some poolers reject | Integration test |
 | Deployment guide | `docs/DEPLOYMENT.md` | — |
 
+## Phase 1.2 — Netlify path correction
+
+The Phase 1.1 Admin deployment built successfully on Netlify and then failed in the Next.js plugin with
+"publish directory was not found": Netlify resolves every path in `netlify.toml` from the base directory
+(the repository root), so `publish = ".next"` pointed at `<repo>/.next` instead of `apps/admin/.next`. The web
+app's file had the same error.
+
+| Item | Change | How it was checked |
+| --- | --- | --- |
+| `apps/admin/netlify.toml` | `publish = "apps/admin/.next"`; comments explain the base-directory rule | Netlify CLI 27.10.2 `netlify build --offline --filter @bedo/admin` on a clean copy: failed with the old file (same error as on Netlify), completes with the new one; Next.js Runtime v5.16.1 generated the server function rooted at `apps/admin` |
+| `apps/web/netlify.toml` | `publish = "apps/web/.next"` | Same check with `--filter @bedo/web` |
+| Regression test | `scripts/checks.test.mjs` checks both files' `publish` and `command`, and that neither sets `base` or names a secret | Fails on the old value, passes on the new |
+| `.gitignore` | Ignores Netlify's local `.netlify/` output | — |
+| `docs/DEPLOYMENT.md` | Exact Netlify site settings | — |
+
+Each site's Netlify output contains only its own app and pages. Built with placeholder values for
+`WAABEK_API_KEY`, `DATABASE_URL` and `REDIS_URL` present, none of those values and no Waabek address appear
+anywhere in either site's deployable output. Not testable here: serving the built sites locally (the CLI must
+download Netlify's edge runtime, which this build environment blocks) and a real deployment.
+
 ## Next
 
 Phase 2 (Accounts) needs answers to O-14 (2-Step password recovery), O-15 (login alert channel) and O-16

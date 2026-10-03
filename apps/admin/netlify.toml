@@ -1,10 +1,18 @@
-# Netlify site for the Bedo Chat admin app (D-15).
-# Netlify UI: Base directory = (empty, repository root), Package directory = apps/admin.
-# The Next.js runtime (OpenNext adapter) is applied automatically; do not pin it.
+# Netlify site: Bedo Chat admin app (D-15). Exact site settings are in docs/DEPLOYMENT.md.
+#
+# Monorepo rules (Netlify documentation, "Monorepos" and "File-based configuration"):
+# - This file is found because the site's Package directory is apps/admin. Netlify only lets the
+#   package directory be set in its UI; it has no netlify.toml property.
+# - The Base directory stays empty (repository root). Dependencies install and the build command runs
+#   there, so pnpm sees the whole workspace.
+# - Every path below is relative to the base directory (repository root), NOT to this folder. That is
+#   why publish names the app folder explicitly; a bare ".next" would point at <repo>/.next.
+# The Next.js runtime (@netlify/plugin-nextjs, OpenNext adapter) is applied automatically; do not pin it.
+
 [build]
-  # Turborepo builds the shared packages this app depends on first. Works from any folder in the repo.
+  # Builds @bedo/admin and the workspace packages it depends on (Turborepo).
   command = "pnpm turbo run build --filter=@bedo/admin"
-  publish = ".next"
+  publish = "apps/admin/.next"
 
 [build.environment]
   NODE_VERSION = "24"

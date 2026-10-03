@@ -126,3 +126,21 @@ test('every server-only variable reaches the build, so the bundle guard can catc
     assert.ok(passThrough.includes(name), `${name} is missing from turbo.json tasks.build.passThroughEnv`);
   }
 });
+
+test('each Netlify site config builds its own app and publishes from the repository root', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { SERVER_ONLY_ENV_NAMES } = await import('../packages/config/dist/index.js');
+  for (const app of ['web', 'admin']) {
+    const toml = readFileSync(new URL(`../apps/${app}/netlify.toml`, import.meta.url), 'utf8');
+    const { name } = JSON.parse(readFileSync(new URL(`../apps/${app}/package.json`, import.meta.url), 'utf8'));
+    const value = (key) => toml.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
+    // Netlify resolves paths in netlify.toml from the base directory (the repository root), not from
+    // this app's folder: a bare ".next" would point at <repo>/.next.
+    assert.equal(value('publish'), `apps/${app}/.next`, `apps/${app}/netlify.toml publish`);
+    assert.equal(value('command'), `pnpm turbo run build --filter=${name}`, `apps/${app}/netlify.toml command`);
+    assert.equal(value('base'), undefined, `apps/${app}/netlify.toml must not set base`);
+    for (const secret of SERVER_ONLY_ENV_NAMES) {
+      assert.ok(!toml.includes(secret), `apps/${app}/netlify.toml must not mention ${secret}`);
+    }
+  }
+});
