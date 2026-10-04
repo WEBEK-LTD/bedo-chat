@@ -1,5 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
+import http from 'node:http';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type OtpJobData, QUEUE_NAMES } from '@bedo/contracts';
@@ -7,20 +9,110 @@ import { defaultMigrationsDir, runMigrations } from '@bedo/db';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import pg from 'pg';
+import { destinationUrl, publicLocation, route, type RouterEnv } from '../../../deploy/cloudflare/worker.js';
 
 /**
  * A complete local stack for browser tests: a fresh migrated database, the built API (connecting as the
- * least-privilege runtime role), and the built web and admin apps served by `next start`.
+ * least-privilege runtime role), the built web and admin apps served by `next start`, and in front of them
+ * one local "site" that routes paths exactly like the production Cloudflare Worker (D-25):
+ *   http://localhost:3100/        student web app      http://localhost:3100/admin  Admin Dashboard
+ *   http://localhost:3100/api/... API (prefix removed, WebSocket upgrades passed through)
  *
- * The apps must be built with NEXT_PUBLIC_API_URL pointing at API_URL (`pnpm e2e` does this). Codes are
+ * The apps must be built with NEXT_PUBLIC_API_URL=http://localhost:3100/api (`pnpm e2e` does this). Codes are
  * read from the OTP job queue, exactly what the worker would send through Waabek; no WhatsApp is sent.
  */
-export const API_PORT = 4100;
-export const WEB_PORT = 3100;
-export const ADMIN_PORT = 3101;
-export const API_URL = `http://localhost:${API_PORT}`;
-export const WEB_URL = `http://localhost:${WEB_PORT}`;
-export const ADMIN_URL = `http://localhost:${ADMIN_PORT}`;
+export const SITE_PORT = 3100;
+const WEB_PORT = 3200;
+const ADMIN_PORT = 3201;
+const API_PORT = 4100;
+export const SITE_URL = `http://localhost:${SITE_PORT}`;
+export const WEB_URL = SITE_URL;
+export const ADMIN_URL = `${SITE_URL}/admin`;
+export const API_URL = `${SITE_URL}/api`;
+/** Shared with the API like the production Worker's EDGE_SECRET. */
+const EDGE_SECRET = randomBytes(32).toString('base64');
+const ORIGINS: RouterEnv = {
+  WEB_ORIGIN: `http://127.0.0.1:${WEB_PORT}`,
+  ADMIN_ORIGIN: `http://127.0.0.1:${ADMIN_PORT}`,
+  API_ORIGIN: `http://127.0.0.1:${API_PORT}`,
+};
+
+/**
+ * Local stand-in for the Cloudflare edge: the Worker's own route(), destinationUrl() and publicLocation()
+ * decide where each request goes; the client IP is passed as X-Forwarded-For (the API trusts one proxy
+ * hop here); the edge secret is added for the API only; upgrades are piped through.
+ */
+export function startEdge(port: number, origins: RouterEnv, edgeSecret = EDGE_SECRET): Promise<http.Server> {
+  const target = (rawUrl: string | undefined) => {
+    const url = new URL(rawUrl ?? '/', 'http://edge.local');
+    const routed = route(url.pathname, origins);
+    const destination = destinationUrl(routed.origin, routed.path, url.search);
+    if (!destination) throw new Error('refused');
+    return { routed, destination, toApi: routed.origin === origins.API_ORIGIN };
+  };
+  const forwardHeaders = (request: http.IncomingMessage, host: string, toApi: boolean) => {
+    const headers: http.OutgoingHttpHeaders = {
+      ...request.headers,
+      host,
+      'x-forwarded-for': request.socket.remoteAddress ?? '',
+      'x-forwarded-host': request.headers.host ?? '',
+      'x-forwarded-proto': 'http',
+    };
+    delete headers['x-request-id'];
+    delete headers['x-bedo-edge-secret'];
+    if (toApi) headers['x-bedo-edge-secret'] = edgeSecret;
+    return headers;
+  };
+  const server = http.createServer((request, response) => {
+    let routing: ReturnType<typeof target>;
+    try {
+      routing = target(request.url);
+    } catch {
+      response.writeHead(400).end();
+      return;
+    }
+    const { routed, destination, toApi } = routing;
+    const upstream = http.request(
+      destination,
+      { method: request.method, headers: forwardHeaders(request, destination.host, toApi) },
+      (answer) => {
+        const headers = { ...answer.headers };
+        if (typeof headers.location === 'string') {
+          headers.location = publicLocation(headers.location, routed.origin, SITE_URL, toApi ? '/api' : '');
+        }
+        response.writeHead(answer.statusCode ?? 502, headers);
+        answer.pipe(response);
+      },
+    );
+    upstream.on('error', () => {
+      if (!response.headersSent) response.writeHead(502);
+      response.end();
+    });
+    request.pipe(upstream);
+  });
+  server.on('upgrade', (request: http.IncomingMessage, socket: net.Socket, head: Buffer) => {
+    let routing: ReturnType<typeof target>;
+    try {
+      routing = target(request.url);
+    } catch {
+      socket.destroy();
+      return;
+    }
+    const { destination, toApi } = routing;
+    const upstream = net.connect(Number(destination.port), destination.hostname, () => {
+      const lines = [`${request.method} ${destination.pathname}${destination.search} HTTP/1.1`];
+      for (const [name, value] of Object.entries(forwardHeaders(request, destination.host, toApi))) {
+        for (const item of [value ?? []].flat()) lines.push(`${name}: ${item}`);
+      }
+      upstream.write(`${lines.join('\r\n')}\r\n\r\n`);
+      upstream.write(head);
+      socket.pipe(upstream).pipe(socket);
+    });
+    upstream.on('error', () => socket.destroy());
+    socket.on('error', () => upstream.destroy());
+  });
+  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+}
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
 
@@ -96,8 +188,13 @@ export async function startStack(): Promise<Stack> {
       DATABASE_URL: runtime.toString(),
       REDIS_URL: redisUrl,
       QUEUE_PREFIX: prefix,
-      CORS_ALLOWED_ORIGINS: `${WEB_URL},${ADMIN_URL}`,
-      ADMIN_ORIGINS: ADMIN_URL,
+      // D-25: both apps and the API share one origin; the API sits behind /api and one proxy hop.
+      CORS_ALLOWED_ORIGINS: SITE_URL,
+      ADMIN_ORIGINS: SITE_URL,
+      WEB_ORIGINS: SITE_URL,
+      API_PUBLIC_PATH: '/api',
+      API_TRUST_PROXY_HOPS: '1',
+      EDGE_SECRET,
       ACCESS_TOKEN_SECRET: randomBytes(32).toString('base64'),
       OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
       ADMIN_TOTP_KEY: totpKey.toString('base64'),
@@ -110,8 +207,11 @@ export async function startStack(): Promise<Stack> {
     }),
   ];
 
+  const edge = await startEdge(SITE_PORT, ORIGINS);
   const otpQueue = new Queue<OtpJobData>(QUEUE_NAMES.otp, { connection: new Redis(redisUrl, { maxRetriesPerRequest: null }), prefix });
   const stop = async () => {
+    edge.closeAllConnections();
+    await new Promise((resolve) => edge.close(resolve));
     for (const child of processes) {
       if (child.pid && child.exitCode === null) {
         try {

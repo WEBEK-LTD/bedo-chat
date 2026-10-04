@@ -28,7 +28,8 @@
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "VAPID_PRIVATE_KEY"
+        "VAPID_PRIVATE_KEY",
+        "EDGE_SECRET"
       ]
     },
     "typecheck": {

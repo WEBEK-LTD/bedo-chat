@@ -25,7 +25,8 @@ What Phase 2 contains and how it was verified: [`docs/PHASE-2-REPORT.md`](docs/P
 | `packages/ui` | Design tokens and the Material Symbols icon component |
 | `packages/e2e` | Browser tests of the web and admin apps against the real API, Postgres and Redis (`pnpm e2e`) |
 | `supabase/migrations` | SQL migrations (Supabase file naming), applied by `@bedo/db` |
-| `scripts` | Repository checks: allowed web routes, client-bundle secret guard |
+| `scripts` | Repository checks: allowed web routes, client-bundle secret guard, edge router tests |
+| `deploy/cloudflare` | The Cloudflare Worker that serves everything from `https://bedochat.com` (D-25) |
 | `docs` | Decision log, phase reports and the deployment guide |
 
 ## Prerequisites
@@ -52,7 +53,7 @@ pnpm db:migrate                       # applies supabase/migrations to DATABASE_
 pnpm --filter @bedo/api start         # http://localhost:4000/health/ready
 pnpm --filter @bedo/worker start
 pnpm --filter @bedo/web dev           # http://localhost:3000
-pnpm --filter @bedo/admin dev         # http://localhost:3001
+pnpm --filter @bedo/admin dev         # http://localhost:3001/admin
 ```
 
 Before the first sign-in, fill in the Phase 2 variables (see "Accounts (Phase 2)" below), create the first
@@ -101,7 +102,7 @@ variable names (values are never printed). Templates: `apps/api/.env.example`,
 `apps/worker/.env.example`, `packages/db/.env.example`, `apps/web/.env.example`, `apps/admin/.env.example`.
 
 Server-only variables (`DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY`, `ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`) must never be placed
+`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `EDGE_SECRET`) must never be placed
 in a web or admin app (spec §1: the Waabek key is never exposed). Every server variable must be classified as
 secret or non-secret in `packages/config` — a test fails otherwise.
 
@@ -184,12 +185,15 @@ It prints an authenticator setup link and secret **once**; add it to the admin's
 (Google Authenticator, Microsoft Authenticator, 1Password, ...). Roles: `super_admin` (changes) and
 `moderator` (read-only).
 
-**Web session cookie (P-14).** The web app keeps its refresh token in an httpOnly cookie set by the API.
-Browsers only send it when the web app and the API share one registrable domain, for example
-`chat.academy.example` and `api.academy.example`. Use custom domains for real testing; the default
-`*.netlify.app` address cannot hold the session. The same applies to the admin app. List the Admin Dashboard's origin in
-the API's `ADMIN_ORIGINS` (it must also be in `CORS_ALLOWED_ORIGINS`): admin routes accept only that origin,
-and the user's session cookie is accepted only from the other origins.
+**One public domain (D-25).** In production everything is served from `https://bedochat.com`: the student
+chat at `/` and `/login`, the Admin Dashboard at `/admin` and `/admin/login`, the API at `/api`. Cloudflare
+and a small Worker (`deploy/cloudflare/`) route the paths to the two Netlify sites and the API host, which
+also carries Phase 3's WebSocket connections. Both apps and the API share one origin, so the API's session
+cookies are first-party (P-14) and scoped under `/api`. Set the API's `CORS_ALLOWED_ORIGINS`, `ADMIN_ORIGINS`
+and `WEB_ORIGINS` to `https://bedochat.com`, `API_PUBLIC_PATH=/api`, and an `EDGE_SECRET` shared with the
+Worker (the API then answers only requests that came through it). On one origin the API cannot tell the
+two apps apart, so admins should use a separate browser profile for the dashboard. Setup:
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), sections 5 and 5a.
 
 **Phone numbers leaving the list (D-24).** When an admin approves an account deletion, or a user changes
 their phone number, the old number is removed from the academy phone list so it can no longer sign in or

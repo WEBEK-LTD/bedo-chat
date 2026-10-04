@@ -8,6 +8,8 @@ const securityHeaders = [
 ];
 
 const config: NextConfig = {
+  // D-25: the Admin Dashboard is served at https://bedochat.com/admin (pages and assets under /admin).
+  basePath: '/admin',
   reactStrictMode: true,
   poweredByHeader: false,
   async headers() {

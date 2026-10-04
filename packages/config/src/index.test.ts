@@ -70,6 +70,24 @@ describe('apiEnvSchema', () => {
     expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ADMIN_TOTP_KEY: Buffer.from('too short').toString('base64') })).toThrow(/ADMIN_TOTP_KEY/);
   });
 
+  it('accepts one shared origin for both apps with explicit web origins and an /api prefix (D-25)', () => {
+    const shared = { CORS_ALLOWED_ORIGINS: 'https://bedochat.com', ADMIN_ORIGINS: 'https://bedochat.com', API_PUBLIC_PATH: '/api' };
+    const edge = { EDGE_SECRET: 'e'.repeat(40) };
+    const env = loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, ...edge, WEB_ORIGINS: 'https://bedochat.com', NODE_ENV: 'production' });
+    // Behind the edge in production the edge secret is required, and must be long.
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, WEB_ORIGINS: 'https://bedochat.com', NODE_ENV: 'production' })).toThrow(/EDGE_SECRET/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, EDGE_SECRET: 'short' })).toThrow(/EDGE_SECRET/);
+    expect(env.WEB_ORIGINS).toEqual(['https://bedochat.com']);
+    expect(env.API_PUBLIC_PATH).toBe('/api');
+    // Without WEB_ORIGINS the student app would have no allowed origin at all.
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, ...edge, NODE_ENV: 'production' })).toThrow(/WEB_ORIGINS/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, WEB_ORIGINS: 'https://other.example' })).toThrow(/WEB_ORIGINS/);
+    for (const path of ['api', '/api/', '/API', '/a b']) {
+      expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, API_PUBLIC_PATH: path }), path).toThrow(/API_PUBLIC_PATH/);
+    }
+    expect(loadEnv(apiEnvSchema, validApiEnv).API_PUBLIC_PATH).toBe('');
+  });
+
   it('requires every admin origin to be an allowed origin', () => {
     const origins = { CORS_ALLOWED_ORIGINS: 'https://chat.example.com,https://admin.example.com' };
     expect(loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, ADMIN_ORIGINS: 'https://admin.example.com' }).ADMIN_ORIGINS).toEqual([

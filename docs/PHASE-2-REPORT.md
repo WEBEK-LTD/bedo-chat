@@ -1,5 +1,9 @@
 # Phase 2 report — Accounts and audit foundation
 
+> **Phase 2.2 (2026-10-04).** The owner approved D-25: everything served from `https://bedochat.com` (`/`,
+> `/login`, `/admin`, `/admin/login`, `/api`) through Cloudflare and a routing Worker, with `apps/web` and
+> `apps/admin` kept separate. See "Phase 2.2" at the end.
+
 > **Phase 2.1 (2026-10-04).** The owner approved Phase 2 and decided D-24: a phone number leaves the academy
 > phone list when its account's deletion is approved, and the old number leaves it when a phone-number change
 > succeeds; both stay in history. Phase 2.1 implements exactly that (one new migration granting the removal,
@@ -184,3 +188,71 @@ same account, and identity history holds both numbers; the runtime role can remo
 entries. Test counts after Phase 2.1: `@bedo/db` integration 36, `@bedo/api` integration 59 (two existing
 tests extended); all others unchanged.
 
+## Phase 2.2
+
+**Decision.** D-25, recorded in the blueprint before implementation and in `docs/DECISIONS.md`. Netlify
+cannot carry WebSockets through its proxy, so the owner chose Cloudflare in front of the domain; Cloudflare's
+per-path origin overrides need the Enterprise plan, so the routing is a small Worker.
+
+| Change | Where |
+| --- | --- |
+| Cloudflare Worker: `/api/*` → API (prefix removed, WebSockets passed through), `/admin*` → admin site, everything else → web site; destinations always on the configured origins; client IP from Cloudflare only; edge secret added for the API only; absolute origin redirects kept on `bedochat.com` | `deploy/cloudflare/worker.js`, `worker.d.ts`, `wrangler.toml` (new) |
+| Admin app served under the `/admin` base path | `apps/admin/next.config.ts` (Phase 1 file, one line) |
+| API: session cookies scoped under the public API path (`API_PUBLIC_PATH`, `/api`); CSRF check accepts a same-origin request without `Origin` only with the CSRF header and `Sec-Fetch-Site: same-origin`; `WEB_ORIGINS` names the web app's origin when shared with the admin app; `EDGE_SECRET`: only requests from the Worker are answered (health checks excepted); production refuses to start without a web origin, or without the edge secret behind `/api` | `apps/api/src/security/csrf.ts`, new `security/edge-guard.ts`, `app.ts` (registers it; log redaction), `auth/cookies.ts`, `admin/admin.controller.ts`, `packages/config` |
+| `EDGE_SECRET` passed to builds for the bundle guard, CI placeholder | `turbo.json`, `.github/workflows/ci.yml` (Phase 1 files) |
+| Student service worker no longer focuses Admin Dashboard tabs (same origin) | `apps/web/public/sw.js` |
+| Browser tests run behind a local edge using the Worker's own functions | `packages/e2e/test/stack.ts`, new `single-domain.e2e.test.ts` |
+| Root `lint` also checks `deploy/`; `e2e` builds the apps for `http://localhost:3100/api` | root `package.json` |
+| Docs: D-25, deployment (Cloudflare steps, Worker secret, Netlify without custom domains, API variables), README, env examples | `docs/`, `README.md`, `.env.example` files |
+
+Unchanged: authentication, 2-Step Verification, admin authenticator sign-in, roles, session rules, refresh
+rotation and reuse detection, OTP limits, audit history, D-24, and every permission check. The two-origin
+configuration still works (all earlier tests use it).
+
+**Independent review of Phase 2.2.** The reviewer found:
+- **Critical:** the first version of the Worker could be made to fetch another host. A path like
+  `//evil.example/x` replaced the origin, which would have let an attacker serve their own page on
+  `bedochat.com`. Fixed: destinations are always built on the configured origin, and tests cover `//host`,
+  `/\host` and `/api//host`.
+- **High:** allowing only Cloudflare's IP ranges does not prove a request came from *our* Worker, so the per-IP
+  limits could be bypassed through another account's Worker. Fixed with the edge secret, and the production hop
+  count (2) is now tested.
+- **Medium:** redirect rewriting compared text prefixes. Fixed: it now compares parsed origins.
+- **Medium:** I had overwritten the D-13 row in the decision log. Restored.
+- **High (owner-accepted trade-off, D-25):** student and admin share one origin. Documented, with the admin
+  browser-profile and Content-Security-Policy guidance.
+- **Low:** older browsers without Fetch Metadata are refused for admin reads. Documented.
+
+**New tests.**
+- API integration (`single-domain.integration.test.ts`, 6):
+  - cookies scoped to `/api/v1/auth` and `/api/v1/admin`
+  - student refresh and logout from the shared origin; cross-site, header-less and missing-CSRF-header attempts refused
+  - same-origin admin reads accepted and cross-site reads refused
+  - student credentials refused by every admin route, a student's code cannot start an admin session, and the admin cookie is refused by student routes
+  - requests without the edge secret refused, health checks open
+  - per-IP limits count the visitor behind the Worker and the load balancer
+- Config unit test (1): shared origin with `WEB_ORIGINS`, `API_PUBLIC_PATH` format, edge secret, production refusals.
+- Worker unit tests (6): routing table, other-host paths refused, forwarded headers, client IP and edge secret, WebSocket upgrade, redirect rewriting, missing configuration.
+- Browser tests (4):
+  - `/`, `/login`, `/admin`, `/admin/login` and `/api` each served by the right application
+  - the API host refuses direct calls, and paths that look like other hosts stay on the site
+  - student sign-in, `/api`-only httpOnly cookie, refresh and reload; a signed-in student sent to `/admin/login`, and every admin API call refused (401)
+  - admin sign-in at `/admin/login`, the dashboard kept at `/admin` across reloads, the admin cookie refused by student routes, sign-out audited
+  - a WebSocket connection through `/api/*` passed to the API origin with the prefix removed, both directions
+
+**WebSocket compatibility, honestly stated.** The API has no WebSocket endpoint until Phase 3. What is proven
+here:
+- The Worker forwards upgrade requests on `/api/*` to the API host unchanged, prefix removed (unit test).
+- The same routing passes a real WebSocket connection in both directions (browser-test edge with an echo
+  server).
+
+Cloudflare documents WebSocket support on all plans, including through Workers (messages are not counted as
+requests). The end-to-end path through Cloudflare can only be exercised on the real deployment once Phase 3
+adds the gateway, which must send heartbeats and reconnect because Cloudflare closes idle connections.
+
+**Security trade-off (accepted in D-25).** On one origin the API cannot tell the student app from the Admin
+Dashboard, so the Phase 2 origin separation between them no longer applies. A script-injection bug in the
+student app could act for an admin signed in to the dashboard in the same browser. Admins should use a
+separate browser profile. A strict Content-Security-Policy on both apps (still open from the Phase 2 review)
+is recommended before Phase 3 brings user-generated content. Admin sign-in, roles, audit and every API
+permission check are unchanged.

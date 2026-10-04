@@ -34,7 +34,7 @@ import { API_ENV } from '../config/tokens.js';
 import { AuditService } from '../audit/audit.service.js';
 import { requirePhone } from '../auth/auth.controller.js';
 import { DatabaseService } from '../database/database.service.js';
-import { assertCsrf } from '../security/csrf.js';
+import { assertCsrf, publicCookiePath } from '../security/csrf.js';
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js';
 import { type AdminContext, AdminAuthService } from './admin-auth.service.js';
 import { AdminOperationsService } from './admin-operations.service.js';
@@ -46,7 +46,7 @@ function setAdminCookie(reply: FastifyReply, env: ApiEnv, token: string): void {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: ADMIN_SESSION_COOKIE_PATH,
+    path: publicCookiePath(env, ADMIN_SESSION_COOKIE_PATH),
     maxAge: ADMIN_SESSION_RULES.absoluteHours * 60 * 60,
   });
 }
@@ -131,7 +131,7 @@ export class AdminController {
       httpOnly: true,
       secure: this.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      path: ADMIN_SESSION_COOKIE_PATH,
+      path: publicCookiePath(this.env, ADMIN_SESSION_COOKIE_PATH),
     });
     return { ok: true as const };
   }

@@ -6,21 +6,32 @@ through environment variables.
 
 | Part | Runs on | Defined by |
 | --- | --- | --- |
-| Web app (`apps/web`) | Netlify site | `apps/web/netlify.toml` |
-| Admin Dashboard (`apps/admin`) | A second Netlify site, own domain | `apps/admin/netlify.toml` |
-| API, later also the WebSocket gateway (`apps/api`) | Persistent container hosting (not Netlify functions) | `apps/api/Dockerfile` |
+| Public domain `https://bedochat.com` (D-25) | Cloudflare, with the routing Worker | `deploy/cloudflare/` |
+| Web app (`apps/web`), served at `/` and `/login` | Netlify site (default `.netlify.app` address) | `apps/web/netlify.toml` |
+| Admin Dashboard (`apps/admin`), served at `/admin` and `/admin/login` | A second Netlify site (default `.netlify.app` address) | `apps/admin/netlify.toml` |
+| API, later also the WebSocket gateway (`apps/api`), served at `/api` | Persistent container hosting (not Netlify functions) | `apps/api/Dockerfile` |
 | Worker (`apps/worker`) | Persistent container hosting | `apps/worker/Dockerfile` |
 | Database and files | Supabase Postgres and Supabase Storage | `supabase/migrations` |
 | Queues | Managed Redis | — |
 
 Recommended order: Supabase → migrations → runtime database role → Redis → API → worker → Netlify sites →
-custom domains → set the API's allowed origins to the final URLs → first Super Admin → academy phone list.
+Cloudflare and the routing Worker → first Super Admin → academy phone list.
 
-**One registrable domain (P-14).** The web app keeps its session in an httpOnly cookie set by the API, and
-browsers only send it when the app and the API share one registrable domain. Give the API, the web app and
-the Admin Dashboard custom domains under the same domain, for example `api.academy.example`,
-`chat.academy.example` and `admin.academy.example`. The default `*.netlify.app` addresses cannot hold a
-session.
+**One public domain (D-25).** Everything is served from `https://bedochat.com`:
+
+| Public URL | Served by |
+| --- | --- |
+| `https://bedochat.com/` | Student chat (web app) |
+| `https://bedochat.com/login` | Student sign-in (web app) |
+| `https://bedochat.com/admin` | Admin Dashboard (admin app) |
+| `https://bedochat.com/admin/login` | Admin sign-in (admin app) |
+| `https://bedochat.com/api/...` | API, and in Phase 3 its WebSocket connections |
+
+There are no `chat.`, `admin.` or `api.` subdomains. Cloudflare holds the domain, and a small Worker
+(`deploy/cloudflare/worker.js`) sends each path to its origin: `/api/*` to the API host with `/api` removed
+(WebSockets passed through), `/admin*` to the admin Netlify site, everything else to the web Netlify site.
+Netlify alone cannot do this: its proxy does not carry WebSockets. Because the apps and the API share one
+origin, the session cookies are first-party (P-14 is met) and scoped under `/api`.
 
 ## 1. Supabase
 
@@ -64,9 +75,12 @@ docker build -f apps/api/Dockerfile -t bedo-api .     # from the repository root
 | --- | --- |
 | `NODE_ENV` | `production` (set in the image) |
 | `API_PORT` | `4000` unless the host assigns a port |
-| `API_TRUST_PROXY_HOPS` | Number of proxies in front of the container — usually `1` |
-| `CORS_ALLOWED_ORIGINS` | The two Netlify URLs, comma-separated, e.g. `https://chat.example.com,https://admin.example.com` |
-| `ADMIN_ORIGINS` | The Admin Dashboard's URL only, e.g. `https://admin.example.com` (Phase 2: keeps the two apps from acting for each other) |
+| `API_TRUST_PROXY_HOPS` | `1` for the Cloudflare Worker, plus any proxy or load balancer your container host puts in front of the API (usually `2` in total). It decides which address the per-IP code limits count |
+| `CORS_ALLOWED_ORIGINS` | `https://bedochat.com` |
+| `ADMIN_ORIGINS` | `https://bedochat.com` (the Admin Dashboard's origin) |
+| `WEB_ORIGINS` | `https://bedochat.com` (the web app's origin; required because both apps share it) |
+| `API_PUBLIC_PATH` | `/api` (the path in front of the API; session cookies are scoped under it) |
+| `EDGE_SECRET` | Secret, at least 32 characters (`openssl rand -base64 32`); the same value is set as the Worker's secret (section 5a). The API answers only requests that carry it |
 | `DATABASE_URL` | `bedo_api` login (step 1.4), direct connection or session pooler |
 | `DATABASE_POOL_MAX` | `10` per instance; keep total connections within the Supabase plan |
 | `DATABASE_STATEMENT_TIMEOUT_MS` | `15000` |
@@ -80,7 +94,14 @@ docker build -f apps/api/Dockerfile -t bedo-api .     # from the repository root
 | `VAPID_PUBLIC_KEY` | Public half of the Web Push key pair (see the worker) |
 
 Health checks: liveness `GET /health/live`, readiness `GET /health/ready` (returns 503 while Postgres or Redis
-is unreachable). The image runs as a non-root user and includes its own `HEALTHCHECK`.
+is unreachable); publicly `https://bedochat.com/api/health/ready`. The image runs as a non-root user and includes
+its own `HEALTHCHECK`.
+
+**Only your Worker reaches the API.** Browsers use `https://bedochat.com/api`; the API's own host name is the
+Worker's target, not a public address. With `EDGE_SECRET` set, the API refuses every request that does not
+carry the Worker's secret header (the health checks excepted), so nobody can call it directly and supply their
+own `X-Forwarded-For` to get around the per-IP code limits. Allowing only Cloudflare's IP ranges is not
+enough on its own: any Cloudflare customer's Worker comes from those ranges.
 
 ## 4. Worker container
 
@@ -141,7 +162,8 @@ Two Netlify sites are created from the same repository: one for the web app, one
 | Package directory | `apps/web` | `apps/admin` |
 | Build command | *(empty: taken from netlify.toml)* | *(empty: taken from netlify.toml)* |
 | Publish directory | *(empty: taken from netlify.toml)* | *(empty: taken from netlify.toml)* |
-| Environment variable `NEXT_PUBLIC_API_URL` | `https://<api host>` | `https://<api host>` |
+| Environment variable `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` | `https://bedochat.com/api` |
+| Custom domain | *none* (Cloudflare serves `bedochat.com`) | *none* |
 
 What the two `netlify.toml` files set (values in the files take precedence over the UI):
 
@@ -178,16 +200,47 @@ fresh clone and are not affected. (A one-line `turbo.json` fix is on hold while 
 Never set `DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY` or any other server secret (`ACCESS_TOKEN_SECRET`,
 `OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`) on a Netlify site.
 
-After deploying, add the custom domains (P-14) to both sites and put their final URLs in the API's
-`CORS_ALLOWED_ORIGINS`, and the Admin Dashboard's URL also in `ADMIN_ORIGINS`.
+Do not add `bedochat.com` to either Netlify site: Cloudflare serves it (section 5a). The admin app is built
+under the `/admin` base path, so its site answers at `https://<admin-site>.netlify.app/admin`; opening either
+`.netlify.app` address directly shows the app, but it cannot sign in there (the API accepts only
+`https://bedochat.com`).
+
+## 5a. Cloudflare: one domain for everything (D-25)
+
+1. **Add `bedochat.com` to Cloudflare** and change the domain's nameservers at your registrar to the two
+   Cloudflare gives you.
+2. **Remove any existing `bedochat.com` (apex) record** in Cloudflare → DNS; the Worker's Custom Domain
+   creates its own record and certificate in step 4.
+3. **SSL/TLS**: encryption mode *Full (strict)*; turn on *Always Use HTTPS*. Network → *WebSockets* on (the
+   default).
+4. **Worker**: in `deploy/cloudflare/wrangler.toml` replace the three origins with the web site's and the
+   admin site's `.netlify.app` addresses and the API's host address, then from that folder run
+   `npx wrangler login`, `npx wrangler secret put EDGE_SECRET` (paste the API's `EDGE_SECRET`) and
+   `npx wrangler deploy`. This attaches `bedochat.com` to the Worker as a Custom
+   Domain (Cloudflare's recommended setup); every request to it is answered by the Worker.
+4a. **www**: add a DNS record `CNAME www → bedochat.com`, Proxied, and a Redirect Rule (Rules → Redirect
+   Rules) from `https://www.bedochat.com/*` to `https://bedochat.com/${1}`, status 301, preserving the query.
+5. **Plan**: the Free plan includes 100,000 Worker requests a day; when real use exceeds that, switch on
+   Workers Paid (check Cloudflare's current pricing). A WebSocket connection counts once, not per message.
+6. **Phase 3 note**: Cloudflare closes WebSocket connections that stay silent too long and during API
+   restarts, so the Phase 3 realtime client must send heartbeats and reconnect.
+7. **Browsers**: the Admin Dashboard needs a browser that sends Fetch Metadata headers (Chrome, Edge,
+   Firefox 90+, Safari 16.4+). Older browsers are refused, not let through.
+8. **Admins**: because the student app and the Admin Dashboard share one origin (D-25), sign in to the
+   dashboard in a separate browser profile from any student account.
+9. **Service worker**: the student app's service worker (`/sw.js`, notifications only) has the scope `/`,
+   which also covers `/admin`. It has no fetch handler and caches nothing; keep it that way, since the same
+   origin means it would sit in front of the Admin Dashboard too.
 
 ## 6. Check the deployment
 
-- `GET https://<api host>/health/ready` returns `{"status":"ok", ...}` with both checks `up`.
-- Sign in to the Admin Dashboard with the Super Admin's phone and authenticator app; add your own number to
-  the academy phone list.
-- Sign in to the web app with that number: the WhatsApp code arrives, a new account asks for a name, and
-  the chat interface opens. A reload keeps you signed in (if not, check the shared domain, P-14).
+- `GET https://bedochat.com/api/health/ready` returns `{"status":"ok", ...}` with both checks `up`.
+- Open `https://bedochat.com/admin`: it sends you to `/admin/login`. Sign in with the Super Admin's phone and
+  authenticator app; the dashboard opens at `/admin` and stays after a reload. Add your own number to the
+  academy phone list.
+- Open `https://bedochat.com/`: it sends you to `/login`. Sign in with that number: the WhatsApp code
+  arrives, a new account asks for a name, and the chat interface opens at `/`. A reload keeps you signed in
+  (if not, check `WEB_ORIGINS` and `API_PUBLIC_PATH`).
 - Sign in on a second browser: the first one shows a login alert (and a notification, if turned on).
 - A number not on the list gets the same "code sent" answer, and no WhatsApp message.
 - In Redis, the key `<QUEUE_PREFIX>:worker:heartbeat` is refreshed every 15 seconds.

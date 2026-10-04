@@ -51,6 +51,7 @@ jobs:
       OTP_HMAC_SECRET: ci-placeholder-otp-hmac-secret-not-real
       SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-supabase-service-role-not-real
       VAPID_PRIVATE_KEY: ci-placeholder-vapid-private-not-real
+      EDGE_SECRET: ci-placeholder-edge-secret-not-a-real-value
 
     steps:
       - uses: actions/checkout@v5

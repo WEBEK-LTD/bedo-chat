@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "lint": "turbo run lint && eslint scripts eslint.config.mjs",
+    "lint": "turbo run lint && eslint scripts deploy eslint.config.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && node --test \"scripts/*.test.mjs\"",
     "test:integration": "turbo run test:integration --concurrency=1",
@@ -21,7 +21,7 @@
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:routes && pnpm check:bundles",
     "stack:up": "docker compose up -d --wait",
     "stack:down": "docker compose down",
-    "e2e": "NEXT_PUBLIC_API_URL=http://localhost:4100 turbo run build --filter=@bedo/api --filter=@bedo/web --filter=@bedo/admin && pnpm --filter @bedo/e2e e2e"
+    "e2e": "NEXT_PUBLIC_API_URL=http://localhost:3100/api turbo run build --filter=@bedo/api --filter=@bedo/web --filter=@bedo/admin && pnpm --filter @bedo/e2e e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

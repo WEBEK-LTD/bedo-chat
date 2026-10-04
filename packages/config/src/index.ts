@@ -14,6 +14,7 @@ export const SERVER_ONLY_ENV_NAMES = [
   'ADMIN_TOTP_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'VAPID_PRIVATE_KEY',
+  'EDGE_SECRET',
 ] as const;
 
 /**
@@ -29,6 +30,8 @@ export const NON_SECRET_SERVER_ENV_NAMES = [
   'API_TRUST_PROXY_HOPS',
   'CORS_ALLOWED_ORIGINS',
   'ADMIN_ORIGINS',
+  'WEB_ORIGINS',
+  'API_PUBLIC_PATH',
   'DATABASE_POOL_MAX',
   'DATABASE_STATEMENT_TIMEOUT_MS',
   'HEALTH_CHECK_TIMEOUT_MS',
@@ -123,6 +126,28 @@ export const apiEnvSchema = z.object({
    * for each other.
    */
   ADMIN_ORIGINS: commaSeparatedOrigins,
+  /**
+   * The user web app's origins (also listed in CORS_ALLOWED_ORIGINS); the user's session cookie routes
+   * accept only these. Optional: when empty it is every allowed origin that is not an admin origin. Set it
+   * when both apps share one origin (D-25: everything on https://bedochat.com).
+   */
+  WEB_ORIGINS: commaSeparatedOrigins,
+  /**
+   * Shared secret the edge router (Cloudflare Worker) sends with every request (D-25). When set, the API
+   * refuses requests without it, so nobody can reach the API host around the edge. Required in production
+   * when API_PUBLIC_PATH is set.
+   */
+  EDGE_SECRET: optionalString.pipe(z.string().min(32, 'must be at least 32 characters').optional()),
+  /**
+   * Public path prefix in front of the API (D-25: "/api"; the edge removes it before forwarding). Session
+   * cookies are scoped under it so the browser sends them only to the API. Empty when the API has its own
+   * host name.
+   */
+  API_PUBLIC_PATH: z
+    .string()
+    .trim()
+    .regex(/^(\/[a-z0-9-]+)*$/, 'must be empty or a path like /api')
+    .default(''),
   DATABASE_URL: runtimePostgresUrl,
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
   /** Server-side limit for any single statement; protects the pool from runaway or hung queries. */
@@ -150,6 +175,22 @@ export const apiEnvSchema = z.object({
     if (!env.CORS_ALLOWED_ORIGINS.includes(origin)) {
       ctx.addIssue({ code: 'custom', path: ['ADMIN_ORIGINS'], message: 'every admin origin must also be in CORS_ALLOWED_ORIGINS' });
     }
+  }
+  for (const origin of env.WEB_ORIGINS) {
+    if (!env.CORS_ALLOWED_ORIGINS.includes(origin)) {
+      ctx.addIssue({ code: 'custom', path: ['WEB_ORIGINS'], message: 'every web origin must also be in CORS_ALLOWED_ORIGINS' });
+    }
+  }
+  if (env.NODE_ENV === 'production' && env.API_PUBLIC_PATH && !env.EDGE_SECRET) {
+    ctx.addIssue({ code: 'custom', path: ['EDGE_SECRET'], message: 'is required in production when the API is served behind the edge (API_PUBLIC_PATH)' });
+  }
+  const webOrigins = env.WEB_ORIGINS.length > 0 ? env.WEB_ORIGINS : env.CORS_ALLOWED_ORIGINS.filter((origin) => !env.ADMIN_ORIGINS.includes(origin));
+  if (env.NODE_ENV === 'production' && webOrigins.length === 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['WEB_ORIGINS'],
+      message: "is required in production when the web app shares the Admin Dashboard's origin",
+    });
   }
   if (Boolean(env.SUPABASE_URL) !== Boolean(env.SUPABASE_SERVICE_ROLE_KEY)) {
     ctx.addIssue({

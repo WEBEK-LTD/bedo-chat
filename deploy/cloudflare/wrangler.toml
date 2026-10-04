@@ -1,0 +1,21 @@
+# Cloudflare Worker that serves https://bedochat.com from the three Bedo Chat origins (D-25).
+# Deploy: see docs/DEPLOYMENT.md, "Single domain with Cloudflare". Replace the three origin URLs first.
+name = "bedochat-router"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+# bedochat.com is attached to the Worker as a Custom Domain: Cloudflare creates its DNS record and certificate.
+routes = [
+  { pattern = "bedochat.com", custom_domain = true },
+]
+
+[vars]
+# The student web app's Netlify site (its default address; no custom domain on Netlify).
+WEB_ORIGIN = "https://REPLACE-web-site.netlify.app"
+# The Admin Dashboard's Netlify site.
+ADMIN_ORIGIN = "https://REPLACE-admin-site.netlify.app"
+# The API's own host name at its hosting provider (not a public bedochat.com address).
+API_ORIGIN = "https://REPLACE-api-host.example"
+
+# EDGE_SECRET is a Worker secret, never written here: `npx wrangler secret put EDGE_SECRET` with the same
+# value as the API's EDGE_SECRET (generate it with `openssl rand -base64 32`).

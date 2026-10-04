@@ -6,6 +6,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import type { ApiEnv } from '@bedo/config';
 import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module.js';
+import { registerEdgeGuard } from './security/edge-guard.js';
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,64}$/;
 const BODY_LIMIT_BYTES = 1024 * 1024;
@@ -30,7 +31,7 @@ export function buildFastifyAdapter(env: ApiEnv): FastifyAdapter {
         : {
             level: env.LOG_LEVEL,
             redact: {
-              paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+              paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-bedo-edge-secret"]', 'res.headers["set-cookie"]'],
               censor: '[redacted]',
             },
           },
@@ -51,6 +52,8 @@ export async function configureApp(app: NestFastifyApplication, env: ApiEnv): Pr
   });
 
   const fastify = app.getHttpAdapter().getInstance();
+  // D-25: only requests that came through the edge router reach the routes (when EDGE_SECRET is set).
+  registerEdgeGuard(fastify, env);
   fastify.addHook('onSend', async (request, reply, payload) => {
     void reply.header('x-request-id', String(request.id));
     void reply.header('x-content-type-options', 'nosniff');
