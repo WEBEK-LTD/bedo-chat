@@ -1,4 +1,11 @@
 import type { NextConfig } from 'next';
+import { storageOrigin } from './csp.mjs';
+
+// D-31: the Content-Security-Policy allows profile pictures only from this exact storage origin; a wrong value
+// fails the build here instead of breaking pictures in production.
+if (process.env.NEXT_PUBLIC_STORAGE_ORIGIN) {
+  storageOrigin(process.env.NEXT_PUBLIC_STORAGE_ORIGIN);
+}
 
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },

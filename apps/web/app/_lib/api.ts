@@ -19,8 +19,9 @@ export type SignedOutReason = 'signed_out' | 'account_deleted' | 'account_blocke
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 
-/** Requests that need the signed-in user's access token. */
-const isUserRoute = (path: string) => path === '/v1/me' || path.startsWith('/v1/me/') || path.startsWith('/v1/me?');
+/** Path prefixes of requests that need the signed-in user's access token (Phase 3 added the messaging routes). */
+const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync'];
+const isUserRoute = (path: string) => USER_ROUTES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));
 
 /**
  * The web app's transport for the generated API client (@bedo/api-client). The access token lives only in
@@ -42,6 +43,25 @@ class Session {
 
   clear(): void {
     this.accessToken = null;
+  }
+
+  /**
+   * The access token for the realtime connection's first message (Phase 3). A token that the gateway
+   * refuses is replaced with `fresh` (one refresh), and the session ends if that fails.
+   */
+  async realtimeToken(fresh = false): Promise<string> {
+    if (fresh || !this.accessToken) {
+      try {
+        await this.refresh();
+      } catch (error) {
+        // Only an answer that the session is over ends it; a network failure is retried by the caller.
+        if (error instanceof ApiError && ['UNAUTHENTICATED', 'SESSION_INVALID', 'ACCOUNT_DELETED', 'ACCOUNT_BLOCKED'].includes(error.code)) {
+          this.signedOut(error);
+        }
+        throw error;
+      }
+    }
+    return this.accessToken!;
   }
 
   async send<T>(path: string, init: RequestInit): Promise<T> {
@@ -154,6 +174,14 @@ export function errorMessage(error: unknown): string {
       return 'This is temporarily unavailable. Try again later.';
     case 'CONFLICT':
       return 'This has already been done.';
+    case 'CANNOT_MESSAGE':
+      return "You can't message this user";
+    case 'USER_BLOCKED':
+      return 'Unblock this user to send messages.';
+    case 'LIMIT_REACHED':
+      return 'You have reached the limit for this.';
+    case 'NOT_FOUND':
+      return 'This is no longer available.';
     case 'VALIDATION_FAILED':
       return error.fields?.[0]?.message ? `Please check the details: ${error.fields[0].message}.` : 'Please check the details and try again.';
     default:

@@ -35,8 +35,26 @@ export class UserAuthGuard implements CanActivate {
     if (typeof header !== 'string' || !header.startsWith('Bearer ')) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED');
     }
-    const claims = await this.tokens.verify(header.slice('Bearer '.length).trim());
-    const session = await this.sessions.loadActive(claims.sessionId, claims.userId);
+    request.auth = await this.authenticate(header.slice('Bearer '.length).trim());
+    return true;
+  }
+
+  /**
+   * Checks an access token and its session. Shared by HTTP requests and the realtime gateway (Phase 3), so
+   * both refuse ended sessions and blocked or deleted accounts the same way.
+   */
+  async authenticate(token: string): Promise<AuthContext> {
+    const claims = await this.tokens.verify(token);
+    await this.checkSession(claims.sessionId, claims.userId);
+    return { userId: claims.userId, sessionId: claims.sessionId };
+  }
+
+  /**
+   * Refuses a session that has ended or expired, or whose account is blocked or deleted. The realtime
+   * gateway repeats this on every heartbeat, so a long-lived connection ends with its session.
+   */
+  async checkSession(sessionId: string, userId: string): Promise<void> {
+    const session = await this.sessions.loadActive(sessionId, userId);
     if (!session) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED');
     }
@@ -58,8 +76,6 @@ export class UserAuthGuard implements CanActivate {
     if (session.status === 'deleted') {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'ACCOUNT_DELETED');
     }
-    request.auth = { userId: claims.userId, sessionId: claims.sessionId };
-    return true;
   }
 }
 

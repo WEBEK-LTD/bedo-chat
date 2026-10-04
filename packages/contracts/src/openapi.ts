@@ -5,6 +5,7 @@ import * as auth from './auth.js';
 import { CSRF_HEADER, errorEnvelopeSchema, okResponseSchema } from './common.js';
 import { liveResponseSchema, readyResponseSchema } from './health.js';
 import * as me from './me.js';
+import * as msg from './messaging.js';
 
 // Adds .openapi() to Zod schemas created from now on. Only this module (used by the API build and
 // tests) loads it, so clients importing '@bedo/contracts' get plain Zod schemas without the OpenAPI
@@ -169,6 +170,33 @@ export function buildOpenApiDocument(options: OpenApiDocumentOptions): OpenApiDo
     { method: 'post', path: '/v1/admin/deletion-requests/{id}/approve', operationId: 'adminApproveDeletion', tag: 'Admin', summary: 'Approve and delete the account (Super Admin)', access: 'adminCsrf', params: idParams, body: ['DeletionDecisionBody', admin.deletionDecisionBodySchema], response: ['DeletionRequestDetail', admin.deletionRequestDetailSchema] },
     { method: 'post', path: '/v1/admin/deletion-requests/{id}/reject', operationId: 'adminRejectDeletion', tag: 'Admin', summary: 'Reject the request (Super Admin)', access: 'adminCsrf', params: idParams, body: ['DeletionDecisionBody', admin.deletionDecisionBodySchema], response: ['DeletionRequestDetail', admin.deletionRequestDetailSchema] },
     { method: 'post', path: '/v1/admin/users/two-step-reset', operationId: 'adminResetTwoStep', tag: 'Admin', summary: 'Reset a user\'s 2-Step password after an identity check (Super Admin)', access: 'adminCsrf', body: ['TwoStepResetBody', admin.twoStepResetBodySchema], response: ['TwoStepResetResponse', admin.twoStepResetResponseSchema] },
+    // Phase 3: messaging core (D-29 to D-31)
+    { method: 'get', path: '/v1/users/search', operationId: 'searchUsers', tag: 'Users', summary: 'Find a user to message by name or username (P-25)', access: 'user', query: msg.userSearchQuerySchema, response: ['UserSearchResponse', msg.userSearchResponseSchema] },
+    { method: 'get', path: '/v1/users/{id}', operationId: 'getUser', tag: 'Users', summary: 'Another user as the signed-in user may see them', access: 'user', params: idParams, response: ['Peer', msg.peerSchema] },
+    { method: 'post', path: '/v1/users/{id}/block', operationId: 'blockUser', tag: 'Users', summary: 'Block a user (P-26, P-30)', access: 'user', params: idParams, response: ['OkResponse', okResponseSchema] },
+    { method: 'delete', path: '/v1/users/{id}/block', operationId: 'unblockUser', tag: 'Users', summary: 'Unblock a user', access: 'user', params: idParams, response: ['OkResponse', okResponseSchema] },
+    { method: 'get', path: '/v1/chats', operationId: 'listChats', tag: 'Chats', summary: 'Chat list with unread counts and chat-list state', access: 'user', response: ['ChatsResponse', msg.chatsResponseSchema] },
+    { method: 'post', path: '/v1/chats', operationId: 'openChat', tag: 'Chats', summary: 'Open the private chat with a user (existing or new)', access: 'user', body: ['CreateChatBody', msg.createChatBodySchema], response: ['Chat', msg.chatSchema] },
+    { method: 'get', path: '/v1/chats/{id}', operationId: 'getChat', tag: 'Chats', summary: 'One chat', access: 'user', params: idParams, response: ['Chat', msg.chatSchema] },
+    { method: 'get', path: '/v1/chats/{id}/messages', operationId: 'listMessages', tag: 'Chats', summary: 'Chat history in pages of up to 50 (P-17)', access: 'user', params: idParams, query: msg.messageHistoryQuerySchema, response: ['MessagesResponse', msg.messagesResponseSchema] },
+    { method: 'post', path: '/v1/chats/{id}/messages', operationId: 'sendMessage', tag: 'Chats', summary: 'Send a message (idempotent by client id)', access: 'user', params: idParams, body: ['SendMessageBody', msg.sendMessageBodySchema], response: ['Message', msg.messageSchema] },
+    { method: 'get', path: '/v1/chats/{id}/search', operationId: 'searchChat', tag: 'Chats', summary: 'Search messages in one chat', access: 'user', params: idParams, query: msg.chatSearchQuerySchema, response: ['MessagesResponse', msg.messagesResponseSchema] },
+    { method: 'get', path: '/v1/chats/{id}/pins', operationId: 'listPinnedMessages', tag: 'Chats', summary: 'Pinned messages (P-22)', access: 'user', params: idParams, response: ['MessagesResponse', msg.messagesResponseSchema] },
+    { method: 'post', path: '/v1/chats/{id}/read', operationId: 'markChatRead', tag: 'Chats', summary: 'Mark as read up to a message (P-20)', access: 'user', params: idParams, body: ['ReadChatBody', msg.readChatBodySchema], response: ['Chat', msg.chatSchema] },
+    { method: 'post', path: '/v1/chats/{id}/delivered', operationId: 'markChatDelivered', tag: 'Chats', summary: 'This device received the messages up to a seq', access: 'user', params: idParams, body: ['ReadChatBody', msg.readChatBodySchema], response: ['OkResponse', okResponseSchema] },
+    { method: 'patch', path: '/v1/chats/{id}/state', operationId: 'updateChatState', tag: 'Chats', summary: 'Pin, archive or mark as unread (P-19, P-20)', access: 'user', params: idParams, body: ['ChatStateBody', msg.chatStateBodySchema], response: ['Chat', msg.chatSchema] },
+    { method: 'patch', path: '/v1/messages/{id}', operationId: 'editMessage', tag: 'Messages', summary: 'Edit one\'s own message (O-27)', access: 'user', params: idParams, body: ['EditMessageBody', msg.editMessageBodySchema], response: ['Message', msg.messageSchema] },
+    { method: 'post', path: '/v1/messages/delete', operationId: 'deleteMessages', tag: 'Messages', summary: 'Delete for me or for both sides (P-29)', access: 'user', body: ['DeleteMessagesBody', msg.deleteMessagesBodySchema], response: ['OkResponse', okResponseSchema] },
+    { method: 'post', path: '/v1/messages/forward', operationId: 'forwardMessages', tag: 'Messages', summary: 'Forward up to 100 messages to up to 10 chats (P-23)', access: 'user', body: ['ForwardMessagesBody', msg.forwardMessagesBodySchema], response: ['MessagesResponse', msg.messagesResponseSchema] },
+    { method: 'put', path: '/v1/messages/{id}/pin', operationId: 'pinMessage', tag: 'Messages', summary: 'Pin a message for both participants (P-22)', access: 'user', params: idParams, response: ['Message', msg.messageSchema] },
+    { method: 'delete', path: '/v1/messages/{id}/pin', operationId: 'unpinMessage', tag: 'Messages', summary: 'Unpin a message', access: 'user', params: idParams, response: ['Message', msg.messageSchema] },
+    { method: 'get', path: '/v1/folders', operationId: 'listFolders', tag: 'Folders', summary: 'Chat folders (P-21)', access: 'user', response: ['FoldersResponse', msg.foldersResponseSchema] },
+    { method: 'post', path: '/v1/folders', operationId: 'createFolder', tag: 'Folders', summary: 'Create a folder', access: 'user', body: ['CreateFolderBody', msg.createFolderBodySchema], response: ['FoldersResponse', msg.foldersResponseSchema] },
+    { method: 'patch', path: '/v1/folders/{id}', operationId: 'updateFolder', tag: 'Folders', summary: 'Rename a folder or change its chats', access: 'user', params: idParams, body: ['UpdateFolderBody', msg.updateFolderBodySchema], response: ['FoldersResponse', msg.foldersResponseSchema] },
+    { method: 'delete', path: '/v1/folders/{id}', operationId: 'deleteFolder', tag: 'Folders', summary: 'Delete a folder (its chats stay)', access: 'user', params: idParams, response: ['FoldersResponse', msg.foldersResponseSchema] },
+    { method: 'post', path: '/v1/reports', operationId: 'reportUser', tag: 'Safety', summary: 'Report a user or a message (P-27)', access: 'user', body: ['ReportBody', msg.reportBodySchema], response: ['OkResponse', okResponseSchema] },
+    { method: 'post', path: '/v1/screenshot-events', operationId: 'recordScreenshot', tag: 'Safety', summary: 'Screenshot event from the iOS or Android app (P-28)', access: 'user', body: ['ScreenshotEventBody', msg.screenshotEventBodySchema], response: ['OkResponse', okResponseSchema] },
+    { method: 'get', path: '/v1/sync', operationId: 'sync', tag: 'Sync', summary: 'Updates since a seq (P-17)', access: 'user', query: msg.syncQuerySchema, response: ['SyncResponse', msg.syncResponseSchema] },
   ];
 
   for (const route of routes) {

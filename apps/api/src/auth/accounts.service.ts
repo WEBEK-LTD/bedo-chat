@@ -57,7 +57,14 @@ export class AccountsService {
    * The only way another user's identity leaves the API (D-14). Deleted accounts show as
    * "Deleted account" with nothing else. Privacy rules (P-08) are applied here as each feature arrives.
    */
-  async toPublicUser(user: Pick<UserRow, 'id' | 'status' | 'name' | 'username' | 'bio' | 'photo_key'>): Promise<PublicUser> {
+  /**
+   * `photoVisible: false` (Phase 3) leaves the picture out where the user's photo privacy or a block hides
+   * it from the viewer; the caller decides this through the messaging permission service.
+   */
+  async toPublicUser(
+    user: Pick<UserRow, 'id' | 'status' | 'name' | 'username' | 'bio' | 'photo_key'>,
+    options: { photoVisible?: boolean } = {},
+  ): Promise<PublicUser> {
     if (user.status === 'deleted') {
       return { id: user.id, deleted: true, displayName: DELETED_ACCOUNT_NAME, username: null, bio: null, photoUrl: null };
     }
@@ -67,7 +74,7 @@ export class AccountsService {
       displayName: user.name ?? '',
       username: user.username,
       bio: user.bio,
-      photoUrl: await this.photoUrl(user.photo_key),
+      photoUrl: options.photoVisible === false ? null : await this.photoUrl(user.photo_key),
     };
   }
 

@@ -94,6 +94,21 @@ docker build -f apps/api/Dockerfile -t bedo-api .     # from the repository root
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | From step 1.5 (profile pictures) |
 | `VAPID_PUBLIC_KEY` | Public half of the Web Push key pair (see the worker) |
 
+**Phase 3: realtime (WebSocket).** The same container serves the WebSocket gateway at `/v1/realtime`
+(publicly `wss://bedochat.com/api/v1/realtime`, through the Worker). No new variables: it accepts only
+upgrades that carry the Worker's `EDGE_SECRET` and come from a `WEB_ORIGINS` page, and authenticates with the
+access token in its first message. Requirements for the container host:
+
+- WebSocket upgrades must reach the container (most hosts pass them through; check any load balancer in front).
+- Idle timeout of any proxy in front of the API: more than 60 seconds (the apps send a heartbeat every 25
+  seconds, P-18).
+- Several API instances work together through Redis (pub/sub channel `<QUEUE_PREFIX>:realtime`); Redis must
+  allow `PUBLISH`/`SUBSCRIBE` (managed Redis does by default).
+- On deploys, give the container a stop timeout of at least 10 seconds: open connections are closed with
+  code 1001 and each device's last seen is saved; devices reconnect and catch up through sync on their own.
+- `API_TRUST_PROXY_HOPS` must be right (see above): the gateway allows at most 20 connections that have not
+  signed in yet per client address, and with too few hops every visitor would share the Worker's address.
+
 Health checks: liveness `GET /health/live`, readiness `GET /health/ready` (returns 503 while Postgres or Redis
 is unreachable); publicly `https://bedochat.com/api/health/ready`. The image runs as a non-root user and includes
 its own `HEALTHCHECK`.
@@ -122,6 +137,11 @@ Variables: `NODE_ENV` (set in the image), `REDIS_URL`, `QUEUE_PREFIX` (same as t
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Generate once with `npx web-push generate-vapid-keys`; subject `mailto:<academy address>`. The private key is a secret |
 
 No port. Give it a stop timeout of at least 30 seconds so jobs in progress finish on deploys.
+
+Phase 3: the worker also keeps the monthly message partitions created three months ahead (at start-up and
+every hour) and removes update-log entries and idempotency keys older than 30 days (P-17). Messages and the
+audit history are never removed. Keep at least one worker running: without it, sending would stop once the
+prepared partitions run out (more than three months later).
 
 ## 4a. First Super Admin
 
@@ -201,6 +221,7 @@ own build script would add whatever admin export was built last.
 | Build command | *(empty: taken from netlify.toml)* |
 | Publish directory | *(empty: taken from netlify.toml)* |
 | Environment variable `NEXT_PUBLIC_API_URL` | Nothing to set: `apps/web/netlify.toml` sets `https://bedochat.com/api` for both apps' builds (D-27), and it takes precedence over a UI value |
+| Environment variable `NEXT_PUBLIC_STORAGE_ORIGIN` (Phase 3, D-31) | The API's `SUPABASE_URL`, e.g. `https://<project>.supabase.co` (public, not a secret). The Content-Security-Policy allows profile pictures and their upload from this exact origin only. Required when profile pictures are set up; without it pictures do not load and uploads fail. A wrong value (not an https origin) fails the build. Redeploy after setting it |
 | Custom domain | *none* (Cloudflare serves `bedochat.com`) |
 
 What `apps/web/netlify.toml` (and its identical copy `apps/admin/netlify.toml`) sets (values in the file take
@@ -214,7 +235,7 @@ precedence over the UI):
 | `NODE_VERSION` | `24` |
 | `NEXT_TELEMETRY_DISABLED`, `TURBO_TELEMETRY_DISABLED` | `1` |
 | `[[redirects]]` | none (not needed, see above) |
-| `[[headers]]` | Admin Dashboard security headers for `/admin` and `/admin/*`; long-term caching for `/admin/_next/static/*` |
+| `[[headers]]` | Admin Dashboard security headers, including its Content-Security-Policy (D-31), for `/admin` and `/admin/*`; long-term caching for `/admin/_next/static/*` |
 
 pnpm's version comes from `packageManager` in the root `package.json`. The Next.js runtime
 (`@netlify/plugin-nextjs`) is added by Netlify automatically. Do not add or pin it.
@@ -278,13 +299,23 @@ Netlify site was ever created before D-26, delete it or stop its builds: it is n
    Rules) from `https://www.bedochat.com/*` to `https://bedochat.com/${1}`, status 301, preserving the query.
 5. **Plan**: the Free plan includes 100,000 Worker requests a day; when real use exceeds that, switch on
    Workers Paid (check Cloudflare's current pricing). A WebSocket connection counts once, not per message.
-6. **Phase 3 note**: Cloudflare closes WebSocket connections that stay silent too long and during API
-   restarts, so the Phase 3 realtime client must send heartbeats and reconnect.
+6. **WebSockets (Phase 3)**: the Worker passes `wss://bedochat.com/api/v1/realtime` through to the API with
+   the edge secret (no change to the Worker). Cloudflare closes connections that stay silent too long and
+   during API restarts; the web app sends a heartbeat every 25 seconds and reconnects on its own, and nothing
+   is lost: every change is also fetched by sync after a reconnect.
 7. **Browsers**: the Admin Dashboard needs a browser that sends Fetch Metadata headers (Chrome, Edge,
    Firefox 90+, Safari 16.4+). Older browsers are refused, not let through.
 8. **Admins**: because the student app and the Admin Dashboard share one origin (D-25), sign in to the
    dashboard in a separate browser profile from any student account.
-9. **Service worker**: the student app's service worker (`/sw.js`, notifications only) has the scope `/`,
+9. **Content-Security-Policy (D-31, Phase 3)**: the student app's pages send a strict policy with a fresh
+   nonce per response (`apps/web/proxy.ts`; Netlify runs it as an edge function before the pages), and the
+   Admin Dashboard's pages send the fixed policy in `netlify.toml`. Both allow scripts and styles from
+   `bedochat.com` only and the API and its WebSocket on `bedochat.com`; the student app also allows profile
+   pictures from the one Supabase project in `NEXT_PUBLIC_STORAGE_ORIGIN` (section 5). Do not add Cloudflare features that inject
+   scripts into pages (Rocket Loader, Zaraz, Web Analytics auto-injection, email obfuscation, Bot Fight Mode's
+   JavaScript challenge on page routes): the policy blocks them. The student app's pages are now rendered per
+   request (a nonce cannot be in a page built ahead of time).
+10. **Service worker**: the student app's service worker (`/sw.js`, notifications only) has the scope `/`,
    which also covers `/admin`. It has no fetch handler and caches nothing; keep it that way, since the same
    origin means it would sit in front of the Admin Dashboard too.
 
@@ -300,3 +331,8 @@ Netlify site was ever created before D-26, delete it or stop its builds: it is n
 - Sign in on a second browser: the first one shows a login alert (and a notification, if turned on).
 - A number not on the list gets the same "code sent" answer, and no WhatsApp message.
 - In Redis, the key `<QUEUE_PREFIX>:worker:heartbeat` is refreshed every 15 seconds.
+- Phase 3: sign in on two browsers with two academy numbers, find the other by name and send a message: it
+  appears on the other browser at once (WebSocket through Cloudflare), and the sender's message shows
+  delivered, then seen. In the browser's developer tools, the Network panel shows the connection to
+  `wss://bedochat.com/api/v1/realtime` and the Console shows no Content-Security-Policy errors on `/`,
+  `/login`, `/admin` and `/admin/login`.

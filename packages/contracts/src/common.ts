@@ -21,6 +21,13 @@ export const ERROR_CODES = [
   'ACCOUNT_BLOCKED',
   'USERNAME_TAKEN',
   'CSRF_REJECTED',
+  // Phase 3
+  /** P-26: the same answer for a block by the other user and "Who can message: Nobody". */
+  'CANNOT_MESSAGE',
+  /** P-30: the signed-in user blocked this user and must unblock before sending. */
+  'USER_BLOCKED',
+  /** A fixed maximum was reached (pinned chats, folders). */
+  'LIMIT_REACHED',
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;
@@ -49,3 +56,4 @@ export type OkResponse = z.infer<typeof okResponseSchema>;
 /** Header every state-changing request from a browser must carry (CSRF protection, see README). */
 export const CSRF_HEADER = 'x-bedo-csrf';
 export const CSRF_HEADER_VALUE = '1';
+

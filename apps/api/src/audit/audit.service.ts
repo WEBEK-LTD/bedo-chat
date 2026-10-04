@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { AccountEvent, ActorType, Database, IdentityField } from '@bedo/db';
+import type { AccountEvent, ActorType, Database, IdentityField, MessageRevisionAction } from '@bedo/db';
 import type { Kysely, Transaction } from 'kysely';
 
 export type Executor = Kysely<Database> | Transaction<Database>;
@@ -76,6 +76,68 @@ export class AuditService {
         ip: input.ip ?? null,
         user_agent: input.userAgent ?? null,
         details: input.details ?? {},
+      })
+      .execute();
+  }
+
+  /**
+   * Phase 3: a message edit, "delete for me" or "delete for both sides", with the text as it was. The
+   * database refuses the matching message change at commit unless this row is in the same transaction.
+   */
+  async messageRevision(
+    db: Executor,
+    input: {
+      messageId: string;
+      conversationId: string;
+      senderId: string;
+      action: MessageRevisionAction;
+      previousText: string | null;
+      newText?: string | null;
+      actor: Actor;
+      sessionId?: string | null;
+    },
+  ): Promise<void> {
+    await db
+      .insertInto('audit.message_revisions')
+      .values({
+        message_id: input.messageId,
+        conversation_id: input.conversationId,
+        sender_id: input.senderId,
+        action: input.action,
+        previous_text: input.previousText,
+        new_text: input.newText ?? null,
+        actor_type: input.actor.type,
+        actor_id: input.actor.id,
+        session_id: input.sessionId ?? null,
+      })
+      .execute();
+  }
+
+  /** Phase 3 (P-28): a screenshot reported by the iOS or Android app. */
+  async screenshotEvent(
+    db: Executor,
+    input: {
+      userId: string;
+      sessionId: string;
+      platform: 'ios' | 'android';
+      deviceName: string | null;
+      conversationId: string | null;
+      screen: string;
+      messageIds: string[];
+      occurredAt: string;
+    },
+  ): Promise<void> {
+    await db
+      .insertInto('audit.screenshot_events')
+      .values({
+        user_id: input.userId,
+        session_id: input.sessionId,
+        platform: input.platform,
+        device_name: input.deviceName,
+        conversation_id: input.conversationId,
+        screen: input.screen,
+        message_ids: input.messageIds,
+        occurred_at: input.occurredAt,
       })
       .execute();
   }

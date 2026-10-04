@@ -6,15 +6,20 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { bundleAdmin, checkAdminExport } from './bundle-admin-into-web.mjs';
 import { headersFor, parseSiteRules, pathMatches, readSiteRules, resolveStatic, staticCandidates } from './netlify-site-rules.mjs';
+import { ADMIN_CSP } from '../apps/web/csp.mjs';
 
 const read = (file) => readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 
-/** The Admin Dashboard's security headers, as its own Next.js configuration set them before D-26. */
+/**
+ * The Admin Dashboard's security headers, as its own Next.js configuration set them before D-26, plus its
+ * Content-Security-Policy (D-31, Phase 3).
+ */
 const ADMIN_SECURITY_HEADERS = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Permissions-Policy': 'camera=(), microphone=(), display-capture=(), geolocation=()',
+  'Content-Security-Policy': ADMIN_CSP,
 };
 
 test('the admin app is a static export under /admin, with no server-side configuration left', () => {

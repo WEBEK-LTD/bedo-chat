@@ -19,6 +19,10 @@ export const SYSTEM_JOB_NAMES = {
 /** Scheduled housekeeping (Phase 2): removes data that has no further use, never history. */
 export const MAINTENANCE_JOB_NAMES = {
   pruneRetiredRefreshTokens: 'prune-retired-refresh-tokens',
+  /** Phase 3: keeps monthly message partitions created ahead of time. */
+  ensureMessagePartitions: 'ensure-message-partitions',
+  /** Phase 3 (P-17): removes update-log entries and idempotency keys older than 30 days. */
+  pruneUpdateLog: 'prune-update-log',
 } as const;
 
 export const heartbeatJobDataSchema = z.object({}).strict();

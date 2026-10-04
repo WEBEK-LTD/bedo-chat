@@ -13,7 +13,10 @@ import { WORKER_ENV } from './tokens.js';
 
 const MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
 
-/** Consumers for the feature queues (OTP delivery, push) and the hourly maintenance schedule. */
+/**
+ * Consumers for the feature queues (OTP delivery, push) and the hourly maintenance schedule (refresh-token
+ * bookkeeping; Phase 3: message partitions and update-log pruning).
+ */
 @Injectable()
 export class QueueWorkersService implements OnApplicationBootstrap, OnApplicationShutdown {
   private readonly logger = new Logger(QueueWorkersService.name);
@@ -57,16 +60,30 @@ export class QueueWorkersService implements OnApplicationBootstrap, OnApplicatio
       prefix: this.env.QUEUE_PREFIX,
       defaultJobOptions: { removeOnComplete: 50, removeOnFail: 50 },
     });
-    await this.maintenanceQueue.upsertJobScheduler(
+    for (const name of [
       MAINTENANCE_JOB_NAMES.pruneRetiredRefreshTokens,
-      { every: MAINTENANCE_INTERVAL_MS },
-      { name: MAINTENANCE_JOB_NAMES.pruneRetiredRefreshTokens, data: {} },
-    );
+      MAINTENANCE_JOB_NAMES.ensureMessagePartitions,
+      MAINTENANCE_JOB_NAMES.pruneUpdateLog,
+    ]) {
+      await this.maintenanceQueue.upsertJobScheduler(name, { every: MAINTENANCE_INTERVAL_MS }, { name, data: {} });
+    }
+    // Phase 3: message partitions are checked at start-up as well, not only after the first hour.
+    await this.maintenance.ensureMessagePartitions().catch((error: unknown) => {
+      this.logger.error(`Could not ensure message partitions: ${error instanceof Error ? error.message : String(error)}`);
+    });
     const maintenanceWorker = new Worker(
       QUEUE_NAMES.maintenance,
       async (job) => {
         if (job.name === MAINTENANCE_JOB_NAMES.pruneRetiredRefreshTokens) {
           await this.maintenance.pruneRetiredRefreshTokens();
+          return;
+        }
+        if (job.name === MAINTENANCE_JOB_NAMES.ensureMessagePartitions) {
+          await this.maintenance.ensureMessagePartitions();
+          return;
+        }
+        if (job.name === MAINTENANCE_JOB_NAMES.pruneUpdateLog) {
+          await this.maintenance.pruneUpdateLog();
           return;
         }
         throw new Error(`No processor for job "${job.name}" on queue "${QUEUE_NAMES.maintenance}"`);

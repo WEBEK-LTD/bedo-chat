@@ -201,6 +201,162 @@ export interface SecurityEventsTable {
   occurred_at: CreatedAt;
 }
 
+// Phase 3: messaging core.
+export type ConversationType = 'private';
+export type MessageKind = 'text';
+export type ReportReason = 'spam' | 'harassment' | 'inappropriate_content' | 'other';
+export type MessageRevisionAction = 'edited' | 'deleted_for_me' | 'deleted_for_both';
+type BigIntColumn = ColumnType<string, string | number | bigint, string | number | bigint>;
+
+export interface ConversationsTable {
+  id: Generated<string>;
+  type: ConversationType;
+  private_low: string | null;
+  private_high: string | null;
+  created_by: string;
+  last_seq: ColumnType<string, string | number | undefined, string | number>;
+  last_message_at: Date | null;
+  created_at: CreatedAt;
+}
+
+export interface ConversationMembersTable {
+  conversation_id: string;
+  user_id: string;
+  joined_at: CreatedAt;
+  read_seq: ColumnType<string, string | number | undefined, string | number>;
+  delivered_seq: ColumnType<string, string | number | undefined, string | number>;
+}
+
+export interface MessagesTable {
+  id: Generated<string>;
+  conversation_id: string;
+  seq: BigIntColumn;
+  sender_id: string;
+  client_id: string;
+  kind: Generated<MessageKind>;
+  text: string | null;
+  reply_to_id: string | null;
+  forward_from_user_id: string | null;
+  created_at: CreatedAt;
+  edited_at: Date | null;
+  deleted_at: Date | null;
+  deleted_by: string | null;
+  search_vector: ColumnType<string, never, never>;
+}
+
+export interface MessageRequestsTable {
+  sender_id: string;
+  client_id: string;
+  kind: 'send' | 'forward';
+  conversation_id: string;
+  message_ids: string[];
+  created_at: CreatedAt;
+}
+
+export interface MessageHiddenTable {
+  user_id: string;
+  message_id: string;
+  conversation_id: string;
+  hidden_at: CreatedAt;
+}
+
+export interface MessagePinsTable {
+  conversation_id: string;
+  message_id: string;
+  pinned_by: string;
+  pinned_at: CreatedAt;
+}
+
+export interface UserChatStateTable {
+  user_id: string;
+  conversation_id: string;
+  pinned_at: Date | null;
+  archived_at: Date | null;
+  marked_unread: Generated<boolean>;
+  updated_at: CreatedAt;
+}
+
+export interface ChatFoldersTable {
+  id: Generated<string>;
+  user_id: string;
+  name: string;
+  created_at: CreatedAt;
+  updated_at: CreatedAt;
+}
+
+export interface ChatFolderChatsTable {
+  folder_id: string;
+  conversation_id: string;
+}
+
+export interface BlocksTable {
+  blocker_id: string;
+  blocked_id: string;
+  created_at: CreatedAt;
+}
+
+export interface ReportsTable {
+  id: Generated<string>;
+  reporter_id: string;
+  reported_user_id: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  reason: ReportReason;
+  details: string | null;
+  message_text: string | null;
+  created_at: CreatedAt;
+}
+
+export interface UserSyncStateTable {
+  user_id: string;
+  last_seq: ColumnType<string, string | number | undefined, string | number>;
+  pruned_through_seq: ColumnType<string, string | number | undefined, string | number>;
+}
+
+export interface UpdateLogTable {
+  user_id: string;
+  seq: BigIntColumn;
+  kind: string;
+  conversation_id: string | null;
+  message_id: string | null;
+  data: Json;
+  created_at: CreatedAt;
+}
+
+export interface UserPresenceTable {
+  user_id: string;
+  last_seen_at: Timestamp;
+}
+
+export interface MessageRevisionsTable {
+  id: Generated<string>;
+  message_id: string;
+  conversation_id: string;
+  sender_id: string;
+  action: MessageRevisionAction;
+  previous_text: string | null;
+  new_text: string | null;
+  actor_type: ActorType;
+  actor_id: string | null;
+  session_id: string | null;
+  /** Set by a database trigger to the writing transaction. */
+  tx_id: ColumnType<string, never, never>;
+  occurred_at: CreatedAt;
+}
+
+export interface ScreenshotEventsTable {
+  id: Generated<string>;
+  user_id: string;
+  session_id: string;
+  platform: 'ios' | 'android';
+  device_name: string | null;
+  conversation_id: string | null;
+  screen: string;
+  message_ids: ColumnType<string[], string[] | undefined, never>;
+  occurred_at: ColumnType<Date, Date | string, never>;
+  received_at: CreatedAt;
+}
+
 /**
  * Typed view of the database. Tables are added here by the phase that creates them,
  * always together with their migration in supabase/migrations.
@@ -222,6 +378,22 @@ export interface Database {
   'audit.identity_history': IdentityHistoryTable;
   'audit.account_events': AccountEventsTable;
   'audit.security_events': SecurityEventsTable;
+  'app.conversations': ConversationsTable;
+  'app.conversation_members': ConversationMembersTable;
+  'app.messages': MessagesTable;
+  'app.message_requests': MessageRequestsTable;
+  'app.message_hidden': MessageHiddenTable;
+  'app.message_pins': MessagePinsTable;
+  'app.user_chat_state': UserChatStateTable;
+  'app.chat_folders': ChatFoldersTable;
+  'app.chat_folder_chats': ChatFolderChatsTable;
+  'app.blocks': BlocksTable;
+  'app.reports': ReportsTable;
+  'app.user_sync_state': UserSyncStateTable;
+  'app.update_log': UpdateLogTable;
+  'app.user_presence': UserPresenceTable;
+  'audit.message_revisions': MessageRevisionsTable;
+  'audit.screenshot_events': ScreenshotEventsTable;
 }
 
 export interface CreateDbOptions {

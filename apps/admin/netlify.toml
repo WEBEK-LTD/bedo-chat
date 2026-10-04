@@ -38,6 +38,10 @@
 # The Admin Dashboard's security headers (the same values its own Next.js configuration set before D-26). On
 # Netlify, headers in next.config do not apply to files from the public folder, so they are set here.
 # Camera, microphone, screen capture and location stay off for the admin pages.
+# D-31 (Phase 3): a strict Content-Security-Policy: the admin pages load scripts, styles and data from this site
+# only (their inline scripts are moved into files when they are bundled, scripts/bundle-admin-into-web.mjs) and
+# cannot be framed. It must equal ADMIN_CSP in apps/web/csp.mjs (a test checks). The student web app's pages
+# get their own policy, with a per-request nonce, from apps/web/proxy.ts.
 [[headers]]
   for = "/admin"
   [headers.values]
@@ -45,6 +49,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), display-capture=(), geolocation=()"
+    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
 
 [[headers]]
   for = "/admin/*"
@@ -53,6 +58,7 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), display-capture=(), geolocation=()"
+    Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
 
 # Admin script and style files have content-hashed names, like the web app's own /_next/static files.
 [[headers]]

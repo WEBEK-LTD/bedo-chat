@@ -57,7 +57,10 @@
                   "ACCOUNT_DELETED",
                   "ACCOUNT_BLOCKED",
                   "USERNAME_TAKEN",
-                  "CSRF_REJECTED"
+                  "CSRF_REJECTED",
+                  "CANNOT_MESSAGE",
+                  "USER_BLOCKED",
+                  "LIMIT_REACHED"
                 ]
               },
               "message": {
@@ -1596,6 +1599,1700 @@
         },
         "required": [
           "reset"
+        ]
+      },
+      "UserSearchResponse": {
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "deleted": {
+                  "type": "boolean"
+                },
+                "displayName": {
+                  "type": "string"
+                },
+                "username": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "bio": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "photoUrl": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "phone": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "presence": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "online": {
+                      "type": "boolean"
+                    },
+                    "lastSeenAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "online",
+                    "lastSeenAt"
+                  ]
+                },
+                "blockedByMe": {
+                  "type": "boolean"
+                },
+                "canMessage": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "deleted",
+                "displayName",
+                "username",
+                "bio",
+                "photoUrl",
+                "phone",
+                "presence",
+                "blockedByMe",
+                "canMessage"
+              ]
+            }
+          }
+        },
+        "required": [
+          "users"
+        ]
+      },
+      "Peer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bio": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "photoUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "presence": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "online": {
+                "type": "boolean"
+              },
+              "lastSeenAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "online",
+              "lastSeenAt"
+            ]
+          },
+          "blockedByMe": {
+            "type": "boolean"
+          },
+          "canMessage": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "deleted",
+          "displayName",
+          "username",
+          "bio",
+          "photoUrl",
+          "phone",
+          "presence",
+          "blockedByMe",
+          "canMessage"
+        ]
+      },
+      "ChatsResponse": {
+        "type": "object",
+        "properties": {
+          "chats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "private"
+                  ]
+                },
+                "peer": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "bio": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "photoUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "phone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "presence": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "online": {
+                          "type": "boolean"
+                        },
+                        "lastSeenAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "online",
+                        "lastSeenAt"
+                      ]
+                    },
+                    "blockedByMe": {
+                      "type": "boolean"
+                    },
+                    "canMessage": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "deleted",
+                    "displayName",
+                    "username",
+                    "bio",
+                    "photoUrl",
+                    "phone",
+                    "presence",
+                    "blockedByMe",
+                    "canMessage"
+                  ]
+                },
+                "lastMessage": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "chatId": {
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "senderId": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "text"
+                      ]
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "replyTo": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "senderId": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "senderId",
+                        "text"
+                      ]
+                    },
+                    "forwardedFrom": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "deleted": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "displayName",
+                        "deleted"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "editedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "chatId",
+                    "seq",
+                    "senderId",
+                    "clientId",
+                    "kind",
+                    "text",
+                    "deleted",
+                    "replyTo",
+                    "forwardedFrom",
+                    "createdAt",
+                    "editedAt"
+                  ]
+                },
+                "lastSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "readSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unreadCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "markedUnread": {
+                  "type": "boolean"
+                },
+                "peerReadSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "peerDeliveredSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "pinnedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "folderIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "lastMessageAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "peer",
+                "lastMessage",
+                "lastSeq",
+                "readSeq",
+                "unreadCount",
+                "markedUnread",
+                "peerReadSeq",
+                "peerDeliveredSeq",
+                "pinned",
+                "pinnedAt",
+                "archived",
+                "folderIds",
+                "createdAt",
+                "lastMessageAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "chats"
+        ]
+      },
+      "CreateChatBody": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "userId"
+        ]
+      },
+      "Chat": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "private"
+            ]
+          },
+          "peer": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "boolean"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "username": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "bio": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "photoUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "phone": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "presence": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "online": {
+                    "type": "boolean"
+                  },
+                  "lastSeenAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "online",
+                  "lastSeenAt"
+                ]
+              },
+              "blockedByMe": {
+                "type": "boolean"
+              },
+              "canMessage": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "deleted",
+              "displayName",
+              "username",
+              "bio",
+              "photoUrl",
+              "phone",
+              "presence",
+              "blockedByMe",
+              "canMessage"
+            ]
+          },
+          "lastMessage": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "chatId": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "senderId": {
+                "type": "string"
+              },
+              "clientId": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "deleted": {
+                "type": "boolean"
+              },
+              "replyTo": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "senderId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "senderId",
+                  "text"
+                ]
+              },
+              "forwardedFrom": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "displayName": {
+                    "type": "string"
+                  },
+                  "deleted": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "displayName",
+                  "deleted"
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "editedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "chatId",
+              "seq",
+              "senderId",
+              "clientId",
+              "kind",
+              "text",
+              "deleted",
+              "replyTo",
+              "forwardedFrom",
+              "createdAt",
+              "editedAt"
+            ]
+          },
+          "lastSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "readSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "unreadCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "markedUnread": {
+            "type": "boolean"
+          },
+          "peerReadSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "peerDeliveredSeq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "pinnedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "folderIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "lastMessageAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "peer",
+          "lastMessage",
+          "lastSeq",
+          "readSeq",
+          "unreadCount",
+          "markedUnread",
+          "peerReadSeq",
+          "peerDeliveredSeq",
+          "pinned",
+          "pinnedAt",
+          "archived",
+          "folderIds",
+          "createdAt",
+          "lastMessageAt"
+        ]
+      },
+      "MessagesResponse": {
+        "type": "object",
+        "properties": {
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "chatId": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "senderId": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "deleted": {
+                  "type": "boolean"
+                },
+                "replyTo": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "senderId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "senderId",
+                    "text"
+                  ]
+                },
+                "forwardedFrom": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "displayName",
+                    "deleted"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "editedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "chatId",
+                "seq",
+                "senderId",
+                "clientId",
+                "kind",
+                "text",
+                "deleted",
+                "replyTo",
+                "forwardedFrom",
+                "createdAt",
+                "editedAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "messages"
+        ]
+      },
+      "SendMessageBody": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replyToId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "clientId",
+          "text"
+        ]
+      },
+      "Message": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "senderId": {
+            "type": "string"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "replyTo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "senderId": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "senderId",
+              "text"
+            ]
+          },
+          "forwardedFrom": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "deleted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "displayName",
+              "deleted"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "editedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "chatId",
+          "seq",
+          "senderId",
+          "clientId",
+          "kind",
+          "text",
+          "deleted",
+          "replyTo",
+          "forwardedFrom",
+          "createdAt",
+          "editedAt"
+        ]
+      },
+      "ReadChatBody": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seq"
+        ]
+      },
+      "ChatStateBody": {
+        "type": "object",
+        "properties": {
+          "pinned": {
+            "type": "boolean"
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EditMessageBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "DeleteMessagesBody": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "me",
+              "both"
+            ]
+          }
+        },
+        "required": [
+          "chatId",
+          "messageIds",
+          "scope"
+        ]
+      },
+      "ForwardMessagesBody": {
+        "type": "object",
+        "properties": {
+          "fromChatId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 100
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "chatId": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "clientId": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "required": [
+                "chatId",
+                "clientId"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 10
+          }
+        },
+        "required": [
+          "fromChatId",
+          "messageIds",
+          "targets"
+        ]
+      },
+      "FoldersResponse": {
+        "type": "object",
+        "properties": {
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "chatIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "chatIds"
+              ]
+            }
+          }
+        },
+        "required": [
+          "folders"
+        ]
+      },
+      "CreateFolderBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chatIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200,
+            "default": []
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateFolderBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "chatIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 200
+          }
+        }
+      },
+      "ReportBody": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "messageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "spam",
+              "harassment",
+              "inappropriate_content",
+              "other"
+            ]
+          },
+          "details": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "userId",
+          "reason"
+        ]
+      },
+      "ScreenshotEventBody": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "screen": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,40}$"
+          },
+          "messageIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "maxItems": 100
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "screen",
+          "occurredAt"
+        ]
+      },
+      "SyncResponse": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "seq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "message.new",
+                    "message.edited",
+                    "message.deleted",
+                    "message.hidden",
+                    "message.pinned",
+                    "message.unpinned",
+                    "chat.read",
+                    "chat.delivered",
+                    "chat.state",
+                    "folders",
+                    "block"
+                  ]
+                },
+                "chatId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "messageId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "data": {
+                  "type": "object",
+                  "additionalProperties": {}
+                }
+              },
+              "required": [
+                "seq",
+                "kind",
+                "chatId",
+                "messageId",
+                "data"
+              ]
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "resync": {
+            "type": "boolean"
+          },
+          "chats": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "private"
+                  ]
+                },
+                "peer": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "username": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "bio": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "photoUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "phone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "presence": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "online": {
+                          "type": "boolean"
+                        },
+                        "lastSeenAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "online",
+                        "lastSeenAt"
+                      ]
+                    },
+                    "blockedByMe": {
+                      "type": "boolean"
+                    },
+                    "canMessage": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "deleted",
+                    "displayName",
+                    "username",
+                    "bio",
+                    "photoUrl",
+                    "phone",
+                    "presence",
+                    "blockedByMe",
+                    "canMessage"
+                  ]
+                },
+                "lastMessage": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "chatId": {
+                      "type": "string"
+                    },
+                    "seq": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "senderId": {
+                      "type": "string"
+                    },
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "text"
+                      ]
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    },
+                    "replyTo": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "senderId": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "senderId",
+                        "text"
+                      ]
+                    },
+                    "forwardedFrom": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "deleted": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "displayName",
+                        "deleted"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string"
+                    },
+                    "editedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "chatId",
+                    "seq",
+                    "senderId",
+                    "clientId",
+                    "kind",
+                    "text",
+                    "deleted",
+                    "replyTo",
+                    "forwardedFrom",
+                    "createdAt",
+                    "editedAt"
+                  ]
+                },
+                "lastSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "readSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "unreadCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "markedUnread": {
+                  "type": "boolean"
+                },
+                "peerReadSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "peerDeliveredSeq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "pinned": {
+                  "type": "boolean"
+                },
+                "pinnedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "archived": {
+                  "type": "boolean"
+                },
+                "folderIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "lastMessageAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "peer",
+                "lastMessage",
+                "lastSeq",
+                "readSeq",
+                "unreadCount",
+                "markedUnread",
+                "peerReadSeq",
+                "peerDeliveredSeq",
+                "pinned",
+                "pinnedAt",
+                "archived",
+                "folderIds",
+                "createdAt",
+                "lastMessageAt"
+              ]
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "chatId": {
+                  "type": "string"
+                },
+                "seq": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "senderId": {
+                  "type": "string"
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "text": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "deleted": {
+                  "type": "boolean"
+                },
+                "replyTo": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "senderId": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "senderId",
+                    "text"
+                  ]
+                },
+                "forwardedFrom": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "displayName",
+                    "deleted"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "editedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "chatId",
+                "seq",
+                "senderId",
+                "clientId",
+                "kind",
+                "text",
+                "deleted",
+                "replyTo",
+                "forwardedFrom",
+                "createdAt",
+                "editedAt"
+              ]
+            }
+          },
+          "folders": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "chatIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "chatIds"
+              ]
+            }
+          }
+        },
+        "required": [
+          "seq",
+          "updates",
+          "hasMore",
+          "resync",
+          "chats",
+          "messages",
+          "folders"
         ]
       }
     },
@@ -3699,6 +5396,1562 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TwoStepResetResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/search": {
+      "get": {
+        "operationId": "searchUsers",
+        "tags": [
+          "Users"
+        ],
+        "summary": "Find a user to message by name or username (P-25)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 64
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSearchResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{id}": {
+      "get": {
+        "operationId": "getUser",
+        "tags": [
+          "Users"
+        ],
+        "summary": "Another user as the signed-in user may see them",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Peer"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/{id}/block": {
+      "post": {
+        "operationId": "blockUser",
+        "tags": [
+          "Users"
+        ],
+        "summary": "Block a user (P-26, P-30)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unblockUser",
+        "tags": [
+          "Users"
+        ],
+        "summary": "Unblock a user",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats": {
+      "get": {
+        "operationId": "listChats",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Chat list with unread counts and chat-list state",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "openChat",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Open the private chat with a user (existing or new)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}": {
+      "get": {
+        "operationId": "getChat",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "One chat",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/messages": {
+      "get": {
+        "operationId": "listMessages",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Chat history in pages of up to 50 (P-17)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": false,
+            "name": "before",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "required": false,
+            "name": "after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "sendMessage",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Send a message (idempotent by client id)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/search": {
+      "get": {
+        "operationId": "searchChat",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Search messages in one chat",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true,
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "exclusiveMinimum": 0
+            },
+            "required": false,
+            "name": "before",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/pins": {
+      "get": {
+        "operationId": "listPinnedMessages",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Pinned messages (P-22)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/read": {
+      "post": {
+        "operationId": "markChatRead",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Mark as read up to a message (P-20)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadChatBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/delivered": {
+      "post": {
+        "operationId": "markChatDelivered",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "This device received the messages up to a seq",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReadChatBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chats/{id}/state": {
+      "patch": {
+        "operationId": "updateChatState",
+        "tags": [
+          "Chats"
+        ],
+        "summary": "Pin, archive or mark as unread (P-19, P-20)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatStateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/{id}": {
+      "patch": {
+        "operationId": "editMessage",
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Edit one's own message (O-27)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/delete": {
+      "post": {
+        "operationId": "deleteMessages",
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Delete for me or for both sides (P-29)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteMessagesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/forward": {
+      "post": {
+        "operationId": "forwardMessages",
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Forward up to 100 messages to up to 10 chats (P-23)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForwardMessagesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessagesResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/{id}/pin": {
+      "put": {
+        "operationId": "pinMessage",
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Pin a message for both participants (P-22)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "unpinMessage",
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Unpin a message",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/folders": {
+      "get": {
+        "operationId": "listFolders",
+        "tags": [
+          "Folders"
+        ],
+        "summary": "Chat folders (P-21)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoldersResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createFolder",
+        "tags": [
+          "Folders"
+        ],
+        "summary": "Create a folder",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoldersResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/folders/{id}": {
+      "patch": {
+        "operationId": "updateFolder",
+        "tags": [
+          "Folders"
+        ],
+        "summary": "Rename a folder or change its chats",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoldersResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteFolder",
+        "tags": [
+          "Folders"
+        ],
+        "summary": "Delete a folder (its chats stay)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FoldersResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reports": {
+      "post": {
+        "operationId": "reportUser",
+        "tags": [
+          "Safety"
+        ],
+        "summary": "Report a user or a message (P-27)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/screenshot-events": {
+      "post": {
+        "operationId": "recordScreenshot",
+        "tags": [
+          "Safety"
+        ],
+        "summary": "Screenshot event from the iOS or Android app (P-28)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreenshotEventBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sync": {
+      "get": {
+        "operationId": "sync",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "Updates since a seq (P-17)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "required": false,
+            "name": "since",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResponse"
                 }
               }
             }

@@ -4,6 +4,7 @@ import { logout as apiLogout } from '@bedo/api-client';
 import type { AuthenticatedResponse, Me } from '@bedo/contracts';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError, session, type SignedOutReason } from './api';
+import { clearCache } from './messaging/cache';
 import { unsubscribeThisBrowser } from './push';
 
 type SessionState =
@@ -25,7 +26,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
 
   useEffect(() => {
-    session.onSignedOut((reason) => setState({ status: 'signedOut', reason }));
+    // Phase 3: the local message cache belongs to the session and is erased whenever it ends.
+    session.onSignedOut((reason) => {
+      void clearCache();
+      setState({ status: 'signedOut', reason });
+    });
     let cancelled = false;
     session
       .refresh()
@@ -36,6 +41,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         const code = error instanceof ApiError ? error.code : null;
         const reason = code === 'ACCOUNT_DELETED' ? 'account_deleted' : code === 'ACCOUNT_BLOCKED' ? 'account_blocked' : null;
+        if (error instanceof ApiError && code !== 'NETWORK') void clearCache();
         setState({ status: 'signedOut', reason });
       });
     return () => {
@@ -55,6 +61,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await unsubscribeThisBrowser().catch(() => undefined);
     await apiLogout().catch(() => undefined);
     session.clear();
+    await clearCache();
     setState({ status: 'signedOut', reason: 'signed_out' });
   }, []);
 

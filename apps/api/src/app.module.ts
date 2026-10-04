@@ -12,6 +12,7 @@ import { AuthModule } from './auth/auth.module.js';
 import { AdminModule } from './admin/admin.module.js';
 import { QueuesModule } from './queues/queues.module.js';
 import { StorageModule } from './storage/storage.module.js';
+import { MessagingModule } from './messaging/messaging.module.js';
 
 @Module({})
 export class AppModule {
@@ -19,7 +20,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DatabaseModule, RedisModule, QueuesModule, AuditModule, StorageModule, HealthModule, AuthModule, AdminModule],
+      imports: [DatabaseModule, RedisModule, QueuesModule, AuditModule, StorageModule, HealthModule, AuthModule, AdminModule, MessagingModule],
       providers: [
         { provide: API_ENV, useValue: env },
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

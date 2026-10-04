@@ -22,6 +22,9 @@ export const ErrorEnvelopeErrorCode = {
   ACCOUNT_BLOCKED: 'ACCOUNT_BLOCKED',
   USERNAME_TAKEN: 'USERNAME_TAKEN',
   CSRF_REJECTED: 'CSRF_REJECTED',
+  CANNOT_MESSAGE: 'CANNOT_MESSAGE',
+  USER_BLOCKED: 'USER_BLOCKED',
+  LIMIT_REACHED: 'LIMIT_REACHED',
 } as const;
 
 export type ErrorEnvelopeErrorFieldsItem = {
@@ -850,6 +853,703 @@ export interface TwoStepResetResponse {
   reset: true;
 }
 
+/**
+ * @nullable
+ */
+export type UserSearchResponseUsersItemPresence = {
+  online: boolean;
+  /** @nullable */
+  lastSeenAt: string | null;
+} | null;
+
+export type UserSearchResponseUsersItem = {
+  id: string;
+  deleted: boolean;
+  displayName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  photoUrl: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  presence: UserSearchResponseUsersItemPresence;
+  blockedByMe: boolean;
+  canMessage: boolean;
+};
+
+export interface UserSearchResponse {
+  users: UserSearchResponseUsersItem[];
+}
+
+/**
+ * @nullable
+ */
+export type PeerPresence = {
+  online: boolean;
+  /** @nullable */
+  lastSeenAt: string | null;
+} | null;
+
+export interface Peer {
+  id: string;
+  deleted: boolean;
+  displayName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  photoUrl: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  presence: PeerPresence;
+  blockedByMe: boolean;
+  canMessage: boolean;
+}
+
+export type ChatsResponseChatsItemType = typeof ChatsResponseChatsItemType[keyof typeof ChatsResponseChatsItemType];
+
+
+export const ChatsResponseChatsItemType = {
+  private: 'private',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ChatsResponseChatsItemPeerPresence = {
+  online: boolean;
+  /** @nullable */
+  lastSeenAt: string | null;
+} | null;
+
+export type ChatsResponseChatsItemPeer = {
+  id: string;
+  deleted: boolean;
+  displayName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  photoUrl: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  presence: ChatsResponseChatsItemPeerPresence;
+  blockedByMe: boolean;
+  canMessage: boolean;
+};
+
+export type ChatsResponseChatsItemLastMessageKind = typeof ChatsResponseChatsItemLastMessageKind[keyof typeof ChatsResponseChatsItemLastMessageKind];
+
+
+export const ChatsResponseChatsItemLastMessageKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ChatsResponseChatsItemLastMessageReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ChatsResponseChatsItemLastMessageForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ChatsResponseChatsItemLastMessage = {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: ChatsResponseChatsItemLastMessageKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: ChatsResponseChatsItemLastMessageReplyTo;
+  /** @nullable */
+  forwardedFrom: ChatsResponseChatsItemLastMessageForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+} | null;
+
+export type ChatsResponseChatsItem = {
+  id: string;
+  type: ChatsResponseChatsItemType;
+  peer: ChatsResponseChatsItemPeer;
+  /** @nullable */
+  lastMessage: ChatsResponseChatsItemLastMessage;
+  /** @minimum 0 */
+  lastSeq: number;
+  /** @minimum 0 */
+  readSeq: number;
+  /** @minimum 0 */
+  unreadCount: number;
+  markedUnread: boolean;
+  /** @minimum 0 */
+  peerReadSeq: number;
+  /** @minimum 0 */
+  peerDeliveredSeq: number;
+  pinned: boolean;
+  /** @nullable */
+  pinnedAt: string | null;
+  archived: boolean;
+  folderIds: string[];
+  createdAt: string;
+  /** @nullable */
+  lastMessageAt: string | null;
+};
+
+export interface ChatsResponse {
+  chats: ChatsResponseChatsItem[];
+}
+
+export interface CreateChatBody {
+  userId: string;
+}
+
+export type ChatType = typeof ChatType[keyof typeof ChatType];
+
+
+export const ChatType = {
+  private: 'private',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ChatPeerPresence = {
+  online: boolean;
+  /** @nullable */
+  lastSeenAt: string | null;
+} | null;
+
+export type ChatPeer = {
+  id: string;
+  deleted: boolean;
+  displayName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  photoUrl: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  presence: ChatPeerPresence;
+  blockedByMe: boolean;
+  canMessage: boolean;
+};
+
+export type ChatLastMessageKind = typeof ChatLastMessageKind[keyof typeof ChatLastMessageKind];
+
+
+export const ChatLastMessageKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type ChatLastMessageReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ChatLastMessageForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+/**
+ * @nullable
+ */
+export type ChatLastMessage = {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: ChatLastMessageKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: ChatLastMessageReplyTo;
+  /** @nullable */
+  forwardedFrom: ChatLastMessageForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+} | null;
+
+export interface Chat {
+  id: string;
+  type: ChatType;
+  peer: ChatPeer;
+  /** @nullable */
+  lastMessage: ChatLastMessage;
+  /** @minimum 0 */
+  lastSeq: number;
+  /** @minimum 0 */
+  readSeq: number;
+  /** @minimum 0 */
+  unreadCount: number;
+  markedUnread: boolean;
+  /** @minimum 0 */
+  peerReadSeq: number;
+  /** @minimum 0 */
+  peerDeliveredSeq: number;
+  pinned: boolean;
+  /** @nullable */
+  pinnedAt: string | null;
+  archived: boolean;
+  folderIds: string[];
+  createdAt: string;
+  /** @nullable */
+  lastMessageAt: string | null;
+}
+
+export type MessagesResponseMessagesItemKind = typeof MessagesResponseMessagesItemKind[keyof typeof MessagesResponseMessagesItemKind];
+
+
+export const MessagesResponseMessagesItemKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type MessagesResponseMessagesItemReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type MessagesResponseMessagesItemForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+export type MessagesResponseMessagesItem = {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: MessagesResponseMessagesItemKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: MessagesResponseMessagesItemReplyTo;
+  /** @nullable */
+  forwardedFrom: MessagesResponseMessagesItemForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+};
+
+export interface MessagesResponse {
+  messages: MessagesResponseMessagesItem[];
+}
+
+export interface SendMessageBody {
+  clientId: string;
+  /** @minLength 1 */
+  text: string;
+  replyToId?: string;
+}
+
+export type MessageKind = typeof MessageKind[keyof typeof MessageKind];
+
+
+export const MessageKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type MessageReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type MessageForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+export interface Message {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: MessageKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: MessageReplyTo;
+  /** @nullable */
+  forwardedFrom: MessageForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+}
+
+export interface ReadChatBody {
+  /** @minimum 0 */
+  seq: number;
+}
+
+export interface ChatStateBody {
+  pinned?: boolean;
+  archived?: boolean;
+  unread?: boolean;
+}
+
+export interface EditMessageBody {
+  /** @minLength 1 */
+  text: string;
+}
+
+export type DeleteMessagesBodyScope = typeof DeleteMessagesBodyScope[keyof typeof DeleteMessagesBodyScope];
+
+
+export const DeleteMessagesBodyScope = {
+  me: 'me',
+  both: 'both',
+} as const;
+
+export interface DeleteMessagesBody {
+  chatId: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  messageIds: string[];
+  scope: DeleteMessagesBodyScope;
+}
+
+export type ForwardMessagesBodyTargetsItem = {
+  chatId: string;
+  clientId: string;
+};
+
+export interface ForwardMessagesBody {
+  fromChatId: string;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     */
+  messageIds: string[];
+  /**
+     * @minItems 1
+     * @maxItems 10
+     */
+  targets: ForwardMessagesBodyTargetsItem[];
+}
+
+export type FoldersResponseFoldersItem = {
+  id: string;
+  name: string;
+  chatIds: string[];
+};
+
+export interface FoldersResponse {
+  folders: FoldersResponseFoldersItem[];
+}
+
+export interface CreateFolderBody {
+  /** @minLength 1 */
+  name: string;
+  /** @maxItems 200 */
+  chatIds?: string[];
+}
+
+export interface UpdateFolderBody {
+  /** @minLength 1 */
+  name?: string;
+  /** @maxItems 200 */
+  chatIds?: string[];
+}
+
+export type ReportBodyReason = typeof ReportBodyReason[keyof typeof ReportBodyReason];
+
+
+export const ReportBodyReason = {
+  spam: 'spam',
+  harassment: 'harassment',
+  inappropriate_content: 'inappropriate_content',
+  other: 'other',
+} as const;
+
+export interface ReportBody {
+  userId: string;
+  messageId?: string;
+  reason: ReportBodyReason;
+  /** @minLength 1 */
+  details?: string;
+}
+
+export interface ScreenshotEventBody {
+  chatId?: string;
+  /** @pattern ^[a-z_]{1,40}$ */
+  screen: string;
+  /** @maxItems 100 */
+  messageIds?: string[];
+  occurredAt: string;
+}
+
+export type SyncResponseUpdatesItemKind = typeof SyncResponseUpdatesItemKind[keyof typeof SyncResponseUpdatesItemKind];
+
+
+export const SyncResponseUpdatesItemKind = {
+  messagenew: 'message.new',
+  messageedited: 'message.edited',
+  messagedeleted: 'message.deleted',
+  messagehidden: 'message.hidden',
+  messagepinned: 'message.pinned',
+  messageunpinned: 'message.unpinned',
+  chatread: 'chat.read',
+  chatdelivered: 'chat.delivered',
+  chatstate: 'chat.state',
+  folders: 'folders',
+  block: 'block',
+} as const;
+
+export type SyncResponseUpdatesItemData = {[key: string]: unknown};
+
+export type SyncResponseUpdatesItem = {
+  /** @minimum 0 */
+  seq: number;
+  kind: SyncResponseUpdatesItemKind;
+  /** @nullable */
+  chatId: string | null;
+  /** @nullable */
+  messageId: string | null;
+  data: SyncResponseUpdatesItemData;
+};
+
+export type SyncResponseChatsItemType = typeof SyncResponseChatsItemType[keyof typeof SyncResponseChatsItemType];
+
+
+export const SyncResponseChatsItemType = {
+  private: 'private',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SyncResponseChatsItemPeerPresence = {
+  online: boolean;
+  /** @nullable */
+  lastSeenAt: string | null;
+} | null;
+
+export type SyncResponseChatsItemPeer = {
+  id: string;
+  deleted: boolean;
+  displayName: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  bio: string | null;
+  /** @nullable */
+  photoUrl: string | null;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  presence: SyncResponseChatsItemPeerPresence;
+  blockedByMe: boolean;
+  canMessage: boolean;
+};
+
+export type SyncResponseChatsItemLastMessageKind = typeof SyncResponseChatsItemLastMessageKind[keyof typeof SyncResponseChatsItemLastMessageKind];
+
+
+export const SyncResponseChatsItemLastMessageKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SyncResponseChatsItemLastMessageReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type SyncResponseChatsItemLastMessageForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+/**
+ * @nullable
+ */
+export type SyncResponseChatsItemLastMessage = {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: SyncResponseChatsItemLastMessageKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: SyncResponseChatsItemLastMessageReplyTo;
+  /** @nullable */
+  forwardedFrom: SyncResponseChatsItemLastMessageForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+} | null;
+
+export type SyncResponseChatsItem = {
+  id: string;
+  type: SyncResponseChatsItemType;
+  peer: SyncResponseChatsItemPeer;
+  /** @nullable */
+  lastMessage: SyncResponseChatsItemLastMessage;
+  /** @minimum 0 */
+  lastSeq: number;
+  /** @minimum 0 */
+  readSeq: number;
+  /** @minimum 0 */
+  unreadCount: number;
+  markedUnread: boolean;
+  /** @minimum 0 */
+  peerReadSeq: number;
+  /** @minimum 0 */
+  peerDeliveredSeq: number;
+  pinned: boolean;
+  /** @nullable */
+  pinnedAt: string | null;
+  archived: boolean;
+  folderIds: string[];
+  createdAt: string;
+  /** @nullable */
+  lastMessageAt: string | null;
+};
+
+export type SyncResponseMessagesItemKind = typeof SyncResponseMessagesItemKind[keyof typeof SyncResponseMessagesItemKind];
+
+
+export const SyncResponseMessagesItemKind = {
+  text: 'text',
+} as const;
+
+/**
+ * @nullable
+ */
+export type SyncResponseMessagesItemReplyTo = {
+  id: string;
+  senderId: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+/**
+ * @nullable
+ */
+export type SyncResponseMessagesItemForwardedFrom = {
+  id: string;
+  displayName: string;
+  deleted: boolean;
+} | null;
+
+export type SyncResponseMessagesItem = {
+  id: string;
+  chatId: string;
+  /** @minimum 0 */
+  seq: number;
+  senderId: string;
+  clientId: string;
+  kind: SyncResponseMessagesItemKind;
+  /** @nullable */
+  text: string | null;
+  deleted: boolean;
+  /** @nullable */
+  replyTo: SyncResponseMessagesItemReplyTo;
+  /** @nullable */
+  forwardedFrom: SyncResponseMessagesItemForwardedFrom;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+};
+
+export type SyncResponseFoldersItem = {
+  id: string;
+  name: string;
+  chatIds: string[];
+};
+
+export interface SyncResponse {
+  /** @minimum 0 */
+  seq: number;
+  updates: SyncResponseUpdatesItem[];
+  hasMore: boolean;
+  resync: boolean;
+  chats: SyncResponseChatsItem[];
+  messages: SyncResponseMessagesItem[];
+  /** @nullable */
+  folders: SyncResponseFoldersItem[] | null;
+}
+
 export type AdminListPhonesParams = {
 /**
  * @maxLength 32
@@ -873,6 +1573,51 @@ export const AdminListDeletionRequestsStatus = {
   approved: 'approved',
   rejected: 'rejected',
 } as const;
+
+export type SearchUsersParams = {
+/**
+ * @minLength 3
+ * @maxLength 64
+ */
+q: string;
+};
+
+export type ListMessagesParams = {
+/**
+ * @exclusiveMinimum 0
+ */
+before?: number;
+/**
+ * @minimum 0
+ * @nullable
+ */
+after?: number | null;
+/**
+ * @minimum 1
+ * @maximum 50
+ */
+limit?: number;
+};
+
+export type SearchChatParams = {
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+q: string;
+/**
+ * @exclusiveMinimum 0
+ */
+before?: number;
+};
+
+export type SyncParams = {
+/**
+ * @minimum 0
+ * @nullable
+ */
+since?: number | null;
+};
 
 export const getGetHealthLiveUrl = () => {
 
@@ -2163,5 +2908,835 @@ return apiFetch<TwoStepResetResponse>(getAdminResetTwoStepUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(twoStepResetBody)
+  }
+);}
+
+
+
+export const getSearchUsersUrl = (params: SearchUsersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/users/search?${stringifiedParams}` : `/v1/users/search`
+}
+
+/**
+ * @summary Find a user to message by name or username (P-25)
+ */
+export const searchUsers = async (params: SearchUsersParams, options?: Parameters<typeof apiFetch>[1]): Promise<UserSearchResponse> => {
+
+  return apiFetch<UserSearchResponse>(getSearchUsersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetUserUrl = (id: string,) => {
+
+
+
+
+  return `/v1/users/${id}`
+}
+
+/**
+ * @summary Another user as the signed-in user may see them
+ */
+export const getUser = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<Peer> => {
+
+  return apiFetch<Peer>(getGetUserUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getBlockUserUrl = (id: string,) => {
+
+
+
+
+  return `/v1/users/${id}/block`
+}
+
+/**
+ * @summary Block a user (P-26, P-30)
+ */
+export const blockUser = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+  return apiFetch<OkResponse>(getBlockUserUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export const getUnblockUserUrl = (id: string,) => {
+
+
+
+
+  return `/v1/users/${id}/block`
+}
+
+/**
+ * @summary Unblock a user
+ */
+export const unblockUser = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+  return apiFetch<OkResponse>(getUnblockUserUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export const getListChatsUrl = () => {
+
+
+
+
+  return `/v1/chats`
+}
+
+/**
+ * @summary Chat list with unread counts and chat-list state
+ */
+export const listChats = async ( options?: Parameters<typeof apiFetch>[1]): Promise<ChatsResponse> => {
+
+  return apiFetch<ChatsResponse>(getListChatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getOpenChatUrl = () => {
+
+
+
+
+  return `/v1/chats`
+}
+
+/**
+ * @summary Open the private chat with a user (existing or new)
+ */
+export const openChat = async (createChatBody: CreateChatBody, options?: Parameters<typeof apiFetch>[1]): Promise<Chat> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Chat>(getOpenChatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createChatBody)
+  }
+);}
+
+
+
+export const getGetChatUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}`
+}
+
+/**
+ * @summary One chat
+ */
+export const getChat = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<Chat> => {
+
+  return apiFetch<Chat>(getGetChatUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListMessagesUrl = (id: string,
+    params?: ListMessagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/chats/${id}/messages?${stringifiedParams}` : `/v1/chats/${id}/messages`
+}
+
+/**
+ * @summary Chat history in pages of up to 50 (P-17)
+ */
+export const listMessages = async (id: string,
+    params?: ListMessagesParams, options?: Parameters<typeof apiFetch>[1]): Promise<MessagesResponse> => {
+
+  return apiFetch<MessagesResponse>(getListMessagesUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getSendMessageUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}/messages`
+}
+
+/**
+ * @summary Send a message (idempotent by client id)
+ */
+export const sendMessage = async (id: string,
+    sendMessageBody: SendMessageBody, options?: Parameters<typeof apiFetch>[1]): Promise<Message> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Message>(getSendMessageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sendMessageBody)
+  }
+);}
+
+
+
+export const getSearchChatUrl = (id: string,
+    params: SearchChatParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/chats/${id}/search?${stringifiedParams}` : `/v1/chats/${id}/search`
+}
+
+/**
+ * @summary Search messages in one chat
+ */
+export const searchChat = async (id: string,
+    params: SearchChatParams, options?: Parameters<typeof apiFetch>[1]): Promise<MessagesResponse> => {
+
+  return apiFetch<MessagesResponse>(getSearchChatUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListPinnedMessagesUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}/pins`
+}
+
+/**
+ * @summary Pinned messages (P-22)
+ */
+export const listPinnedMessages = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<MessagesResponse> => {
+
+  return apiFetch<MessagesResponse>(getListPinnedMessagesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getMarkChatReadUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}/read`
+}
+
+/**
+ * @summary Mark as read up to a message (P-20)
+ */
+export const markChatRead = async (id: string,
+    readChatBody: ReadChatBody, options?: Parameters<typeof apiFetch>[1]): Promise<Chat> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Chat>(getMarkChatReadUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readChatBody)
+  }
+);}
+
+
+
+export const getMarkChatDeliveredUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}/delivered`
+}
+
+/**
+ * @summary This device received the messages up to a seq
+ */
+export const markChatDelivered = async (id: string,
+    readChatBody: ReadChatBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getMarkChatDeliveredUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(readChatBody)
+  }
+);}
+
+
+
+export const getUpdateChatStateUrl = (id: string,) => {
+
+
+
+
+  return `/v1/chats/${id}/state`
+}
+
+/**
+ * @summary Pin, archive or mark as unread (P-19, P-20)
+ */
+export const updateChatState = async (id: string,
+    chatStateBody: ChatStateBody, options?: Parameters<typeof apiFetch>[1]): Promise<Chat> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Chat>(getUpdateChatStateUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(chatStateBody)
+  }
+);}
+
+
+
+export const getEditMessageUrl = (id: string,) => {
+
+
+
+
+  return `/v1/messages/${id}`
+}
+
+/**
+ * @summary Edit one's own message (O-27)
+ */
+export const editMessage = async (id: string,
+    editMessageBody: EditMessageBody, options?: Parameters<typeof apiFetch>[1]): Promise<Message> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Message>(getEditMessageUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(editMessageBody)
+  }
+);}
+
+
+
+export const getDeleteMessagesUrl = () => {
+
+
+
+
+  return `/v1/messages/delete`
+}
+
+/**
+ * @summary Delete for me or for both sides (P-29)
+ */
+export const deleteMessages = async (deleteMessagesBody: DeleteMessagesBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getDeleteMessagesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(deleteMessagesBody)
+  }
+);}
+
+
+
+export const getForwardMessagesUrl = () => {
+
+
+
+
+  return `/v1/messages/forward`
+}
+
+/**
+ * @summary Forward up to 100 messages to up to 10 chats (P-23)
+ */
+export const forwardMessages = async (forwardMessagesBody: ForwardMessagesBody, options?: Parameters<typeof apiFetch>[1]): Promise<MessagesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<MessagesResponse>(getForwardMessagesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(forwardMessagesBody)
+  }
+);}
+
+
+
+export const getPinMessageUrl = (id: string,) => {
+
+
+
+
+  return `/v1/messages/${id}/pin`
+}
+
+/**
+ * @summary Pin a message for both participants (P-22)
+ */
+export const pinMessage = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<Message> => {
+
+  return apiFetch<Message>(getPinMessageUrl(id),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+export const getUnpinMessageUrl = (id: string,) => {
+
+
+
+
+  return `/v1/messages/${id}/pin`
+}
+
+/**
+ * @summary Unpin a message
+ */
+export const unpinMessage = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<Message> => {
+
+  return apiFetch<Message>(getUnpinMessageUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export const getListFoldersUrl = () => {
+
+
+
+
+  return `/v1/folders`
+}
+
+/**
+ * @summary Chat folders (P-21)
+ */
+export const listFolders = async ( options?: Parameters<typeof apiFetch>[1]): Promise<FoldersResponse> => {
+
+  return apiFetch<FoldersResponse>(getListFoldersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getCreateFolderUrl = () => {
+
+
+
+
+  return `/v1/folders`
+}
+
+/**
+ * @summary Create a folder
+ */
+export const createFolder = async (createFolderBody: CreateFolderBody, options?: Parameters<typeof apiFetch>[1]): Promise<FoldersResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FoldersResponse>(getCreateFolderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createFolderBody)
+  }
+);}
+
+
+
+export const getUpdateFolderUrl = (id: string,) => {
+
+
+
+
+  return `/v1/folders/${id}`
+}
+
+/**
+ * @summary Rename a folder or change its chats
+ */
+export const updateFolder = async (id: string,
+    updateFolderBody: UpdateFolderBody, options?: Parameters<typeof apiFetch>[1]): Promise<FoldersResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<FoldersResponse>(getUpdateFolderUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateFolderBody)
+  }
+);}
+
+
+
+export const getDeleteFolderUrl = (id: string,) => {
+
+
+
+
+  return `/v1/folders/${id}`
+}
+
+/**
+ * @summary Delete a folder (its chats stay)
+ */
+export const deleteFolder = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<FoldersResponse> => {
+
+  return apiFetch<FoldersResponse>(getDeleteFolderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export const getReportUserUrl = () => {
+
+
+
+
+  return `/v1/reports`
+}
+
+/**
+ * @summary Report a user or a message (P-27)
+ */
+export const reportUser = async (reportBody: ReportBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getReportUserUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reportBody)
+  }
+);}
+
+
+
+export const getRecordScreenshotUrl = () => {
+
+
+
+
+  return `/v1/screenshot-events`
+}
+
+/**
+ * @summary Screenshot event from the iOS or Android app (P-28)
+ */
+export const recordScreenshot = async (screenshotEventBody: ScreenshotEventBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getRecordScreenshotUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(screenshotEventBody)
+  }
+);}
+
+
+
+export const getSyncUrl = (params?: SyncParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/sync?${stringifiedParams}` : `/v1/sync`
+}
+
+/**
+ * @summary Updates since a seq (P-17)
+ */
+export const sync = async (params?: SyncParams, options?: Parameters<typeof apiFetch>[1]): Promise<SyncResponse> => {
+
+  return apiFetch<SyncResponse>(getSyncUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}

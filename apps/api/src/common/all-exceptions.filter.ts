@@ -38,6 +38,9 @@ const SAFE_MESSAGES: Record<ErrorCode, string> = {
   ACCOUNT_BLOCKED: 'This account cannot be used. Contact the academy.',
   USERNAME_TAKEN: 'This username is already taken.',
   CSRF_REJECTED: 'The request was rejected.',
+  CANNOT_MESSAGE: "You can't message this user",
+  USER_BLOCKED: 'Unblock this user to send messages.',
+  LIMIT_REACHED: 'You have reached the limit for this.',
 };
 
 /**

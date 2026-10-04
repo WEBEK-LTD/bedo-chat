@@ -235,4 +235,54 @@ describe.runIf(adminUrl && redisUrl)('worker queues (real Postgres + Redis, runt
     const left = await query<{ token_hash: string }>(ownerUrl, "select token_hash from app.retired_refresh_tokens where token_hash in ('recent', 'ended', 'old')");
     expect(left.rows).toEqual([{ token_hash: 'recent' }]);
   });
+
+  it('keeps message partitions ready for the coming months (Phase 3)', async () => {
+    const months = (await query<{ name: string }>(ownerUrl, "select c.relname as name from pg_inherits i join pg_class c on c.oid = i.inhrelid where i.inhparent = 'app.messages'::regclass order by 1")).rows.map((row) => row.name);
+    const expected = Array.from({ length: 4 }, (_, offset) => {
+      const date = new Date();
+      const month = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + offset, 1));
+      return `messages_${month.getUTCFullYear()}_${String(month.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
+    expect(months).toEqual(expect.arrayContaining(expected));
+    // Idempotent, and run as the runtime role (no DDL privilege of its own).
+    expect(await app.get(MaintenanceProcessor).ensureMessagePartitions()).toBe(0);
+  });
+
+  it('prunes update-log entries and idempotency keys older than 30 days, never messages (P-17)', async () => {
+    const user = await query<{ id: string }>(ownerUrl, "insert into app.users (phone, name) values ('+201000000105', 'Sync') returning id");
+    const other = await query<{ id: string }>(ownerUrl, "insert into app.users (phone, name) values ('+201000000106', 'Peer') returning id");
+    const userId = user.rows[0]!.id;
+    const chat = await query<{ id: string }>(
+      ownerUrl,
+      "insert into app.conversations (type, private_low, private_high, created_by, last_seq) select 'private', least($1::uuid, $2::uuid), greatest($1::uuid, $2::uuid), $1, 1 returning id",
+      [userId, other.rows[0]!.id],
+    );
+    const message = await query<{ id: string }>(
+      ownerUrl,
+      "insert into app.messages (conversation_id, seq, sender_id, client_id, text) values ($1, 1, $2, gen_random_uuid(), 'kept') returning id",
+      [chat.rows[0]!.id, userId],
+    );
+    await query(ownerUrl, 'insert into app.user_sync_state (user_id, last_seq) values ($1, 3)', [userId]);
+    await query(
+      ownerUrl,
+      `insert into app.update_log (user_id, seq, kind, created_at) values
+        ($1, 1, 'folders', now() - interval '40 days'), ($1, 2, 'folders', now() - interval '31 days'), ($1, 3, 'folders', now())`,
+      [userId],
+    );
+    await query(
+      ownerUrl,
+      `insert into app.message_requests (sender_id, client_id, kind, conversation_id, message_ids, created_at) values
+        ($1, gen_random_uuid(), 'send', $2, array[$3::uuid], now() - interval '31 days'),
+        ($1, gen_random_uuid(), 'send', $2, array[$3::uuid], now())`,
+      [userId, chat.rows[0]!.id, message.rows[0]!.id],
+    );
+    const result = await app.get(MaintenanceProcessor).pruneUpdateLog(1);
+    expect(result).toEqual({ updates: 2, requests: 1 });
+    const left = await query<{ seq: string }>(ownerUrl, 'select seq from app.update_log where user_id = $1', [userId]);
+    expect(left.rows).toEqual([{ seq: '3' }]);
+    const state = await query<{ pruned_through_seq: string }>(ownerUrl, 'select pruned_through_seq from app.user_sync_state where user_id = $1', [userId]);
+    expect(state.rows[0]!.pruned_through_seq).toBe('2');
+    expect((await query(ownerUrl, 'select 1 from app.messages where id = $1', [message.rows[0]!.id])).rowCount).toBe(1);
+    expect((await query(ownerUrl, 'select 1 from app.message_requests where sender_id = $1', [userId])).rowCount).toBe(1);
+  });
 });
