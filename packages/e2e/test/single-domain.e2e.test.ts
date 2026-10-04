@@ -3,7 +3,20 @@ import http from 'node:http';
 import type net from 'node:net';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_URL, API_URL, createAdmin, query, SITE_URL, type Stack, startEdge, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
+import {
+  ADMIN_URL,
+  API_URL,
+  createAdmin,
+  NETLIFY_SITE_URL,
+  query,
+  SITE_URL,
+  type Stack,
+  startEdge,
+  startStack,
+  totpNow,
+  waitForCode,
+  WEB_URL,
+} from './stack.js';
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
 const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
@@ -78,6 +91,71 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
     // Look-alike paths belong to the student app, not to the admin app or the API.
     expect((await html('/administrator')).status).toBe(404);
     expect((await html('/apis')).status).toBe(404);
+  });
+
+  it('serves both applications from one Netlify site, with the Admin Dashboard under /admin (D-26)', async () => {
+    const get = async (base: string, path: string) => {
+      const response = await fetch(`${base}${path}`, { redirect: 'manual' });
+      const body = await response.text();
+      return { status: response.status, headers: response.headers, body, title: /<title>([^<]*)<\/title>/.exec(body)?.[1] };
+    };
+    // The same answers through the public domain and from the Netlify site itself: one site, one deploy.
+    for (const base of [SITE_URL, NETLIFY_SITE_URL]) {
+      expect(await get(base, '/'), `${base}/`).toMatchObject({ status: 200, title: 'Bedo Chat' });
+      expect(await get(base, '/login'), `${base}/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Chat' });
+      expect(await get(base, '/admin'), `${base}/admin`).toMatchObject({ status: 200, title: 'Bedo Chat Admin' });
+      expect(await get(base, '/admin/'), `${base}/admin/`).toMatchObject({ status: 200, title: 'Bedo Chat Admin' });
+      expect(await get(base, '/admin/login'), `${base}/admin/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Chat Admin' });
+      const sw = await get(base, '/sw.js');
+      expect(sw.status).toBe(200);
+      expect(sw.body).toContain('Bedo Chat service worker');
+      // Unknown admin paths are not mapped to an admin page (no catch-all).
+      expect((await get(base, '/admin/unknown')).status).toBe(404);
+    }
+
+    // Admin pages keep the Admin Dashboard's own security headers; student pages keep theirs.
+    for (const path of ['/admin', '/admin/login']) {
+      const { headers } = await get(SITE_URL, path);
+      expect(headers.get('x-frame-options'), path).toBe('DENY');
+      expect(headers.get('x-content-type-options'), path).toBe('nosniff');
+      expect(headers.get('referrer-policy'), path).toBe('strict-origin-when-cross-origin');
+      expect(headers.get('permissions-policy'), path).toBe('camera=(), microphone=(), display-capture=(), geolocation=()');
+    }
+    expect((await get(SITE_URL, '/login')).headers.get('permissions-policy')).toBe(
+      'camera=(self), microphone=(self), display-capture=(self), geolocation=()',
+    );
+
+    // Every admin script and style file resolves under /admin/_next/, from the admin build.
+    const adminLogin = await get(SITE_URL, '/admin/login');
+    const assets = [...adminLogin.body.matchAll(/(?:src|href)="(\/[^"]*_next\/static\/[^"]+)"/g)].map((match) => match[1]!);
+    expect(assets.length).toBeGreaterThan(0);
+    for (const asset of new Set(assets)) {
+      expect(asset.startsWith('/admin/_next/static/'), asset).toBe(true);
+      const file = await get(SITE_URL, asset);
+      expect(file.status, asset).toBe(200);
+      expect(file.headers.get('x-frame-options'), asset).toBe('DENY');
+    }
+    // The page data the admin app fetches when it moves to its sign-in page or prefetches it.
+    for (const path of ['/admin/login.txt', '/admin/__next._tree.txt', '/admin/login/__next._tree.txt']) {
+      const data = await get(SITE_URL, path);
+      expect(data.status, path).toBe(200);
+      expect(data.headers.get('x-frame-options'), path).toBe('DENY');
+    }
+  });
+
+  it('opens /admin and /admin/login directly and after a reload', async () => {
+    const { page } = await newContext();
+    for (const path of ['/admin/login', '/admin']) {
+      await page.goto(`${SITE_URL}${path}`);
+      // Without an admin session the dashboard sends the visitor to its sign-in page.
+      await page.waitForURL(`${ADMIN_URL}/login`);
+      await page.getByLabel('Phone number').waitFor();
+      expect(await page.title()).toBe('Sign in · Bedo Chat Admin');
+      await page.reload();
+      await page.getByLabel('Phone number').waitFor();
+      expect(page.url()).toBe(`${ADMIN_URL}/login`);
+      expect(await page.title()).toBe('Sign in · Bedo Chat Admin');
+    }
   });
 
   it('signs a student in on /login, keeps the session in an /api-only cookie, and refreshes it', async () => {

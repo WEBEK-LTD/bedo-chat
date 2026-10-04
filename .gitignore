@@ -3,6 +3,8 @@ dist/
 dist-test/
 .next/
 out/
+# D-26: the Admin Dashboard export copied into the web app at build time
+apps/web/public/admin/
 .turbo/
 .netlify/
 coverage/

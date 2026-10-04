@@ -7,14 +7,14 @@ through environment variables.
 | Part | Runs on | Defined by |
 | --- | --- | --- |
 | Public domain `https://bedochat.com` (D-25) | Cloudflare, with the routing Worker | `deploy/cloudflare/` |
-| Web app (`apps/web`), served at `/` and `/login` | Netlify site (default `.netlify.app` address) | `apps/web/netlify.toml` |
-| Admin Dashboard (`apps/admin`), served at `/admin` and `/admin/login` | A second Netlify site (default `.netlify.app` address) | `apps/admin/netlify.toml` |
+| Web app (`apps/web`), served at `/` and `/login` | One Netlify site, `bedochat.netlify.app` (D-26) | `apps/web/netlify.toml` |
+| Admin Dashboard (`apps/admin`), served at `/admin` and `/admin/login` | The same Netlify site: its static export is part of the web app's deploy (D-26) | `apps/web/netlify.toml`, `apps/admin/next.config.ts` |
 | API, later also the WebSocket gateway (`apps/api`), served at `/api` | Persistent container hosting (not Netlify functions) | `apps/api/Dockerfile` |
 | Worker (`apps/worker`) | Persistent container hosting | `apps/worker/Dockerfile` |
 | Database and files | Supabase Postgres and Supabase Storage | `supabase/migrations` |
 | Queues | Managed Redis | — |
 
-Recommended order: Supabase → migrations → runtime database role → Redis → API → worker → Netlify sites →
+Recommended order: Supabase → migrations → runtime database role → Redis → API → worker → Netlify site →
 Cloudflare and the routing Worker → first Super Admin → academy phone list.
 
 **One public domain (D-25).** Everything is served from `https://bedochat.com`:
@@ -29,7 +29,8 @@ Cloudflare and the routing Worker → first Super Admin → academy phone list.
 
 There are no `chat.`, `admin.` or `api.` subdomains. Cloudflare holds the domain, and a small Worker
 (`deploy/cloudflare/worker.js`) sends each path to its origin: `/api/*` to the API host with `/api` removed
-(WebSockets passed through), `/admin*` to the admin Netlify site, everything else to the web Netlify site.
+(WebSockets passed through), `/admin*` to the admin origin, everything else to the web origin. Since D-26 both
+of those are the same Netlify site, which serves the student app and the Admin Dashboard.
 Netlify alone cannot do this: its proxy does not carry WebSockets. Because the apps and the API share one
 origin, the session cookies are first-party (P-14 is met) and scoped under `/api`.
 
@@ -136,74 +137,124 @@ docker run --rm -e DATABASE_URL='postgresql://postgres:<password>@<host>:5432/po
 The command prints an authenticator setup link and secret once. Add it to the admin's authenticator app
 right away; it cannot be shown again. Use `--role moderator` for read-only admins.
 
-## 5. Netlify sites
+## 5. Netlify site (one site for both apps, D-26)
 
-Two Netlify sites are created from the same repository: one for the web app, one for the Admin Dashboard.
+Bedo Chat uses **one** Netlify site, `bedochat` (`https://bedochat.netlify.app`). It serves the student web app
+and, under `/admin`, the Admin Dashboard. Do not create a second site.
+
+| Path on the site | Served by |
+| --- | --- |
+| `/`, `/login` | Student web app (`apps/web`, Next.js on Netlify's Next.js runtime) |
+| `/sw.js` | Student web app (its notifications service worker) |
+| `/admin`, `/admin/login` | Admin Dashboard (`apps/admin`), static files |
+| `/admin/_next/...` | Admin Dashboard scripts, styles and page data |
+
+`apps/web` and `apps/admin` stay separate applications. They are combined only at build time:
+
+1. Turborepo builds the Admin Dashboard first (`turbo.json`: `@bedo/web#build` depends on `@bedo/admin#build`).
+   The admin app is a static export (`output: 'export'` in `apps/admin/next.config.ts`) under its `/admin`
+   base path, written to `apps/admin/out`.
+2. The web app's build (`apps/web/package.json`) starts with `scripts/bundle-admin-into-web.mjs`, which checks
+   that the export is complete and from the latest admin build, then replaces `apps/web/public/admin` with it.
+   That folder is generated, never committed (`.gitignore`).
+3. `next build` builds the web app. Netlify's Next.js runtime publishes the web app's `public/` folder as
+   static files, so the Admin Dashboard goes out in the same deploy.
+4. No routing rules are needed. Netlify answers a request with a matching static file before it runs the
+   Next.js server function, and its static file matching finds `admin/index.html` for `/admin` and
+   `admin/login.html` for `/admin/login` (with or without a trailing slash). Everything else goes to the web
+   app's Next.js server, so other `/admin/...` paths answer 404 (no catch-all).
+5. `apps/web/netlify.toml` sets the Admin Dashboard's security headers for `/admin` and everything under it
+   (`X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, and a `Permissions-Policy` that turns off camera,
+   microphone, screen capture and location). On Netlify, headers in `next.config` do not apply to files from
+   `public/`, so they live in `netlify.toml`.
+
+Both builds always run in full (`"cache": false` in `turbo.json`): a build replayed from Turborepo's cache adds
+files but never removes old ones, which could leave files from an earlier build in the deploy. Always build
+through Turborepo (`pnpm turbo run build --filter=@bedo/web`, as Netlify does); running only the web app's
+own build script would add whatever admin export was built last.
 
 ### How Netlify reads this monorepo
 
-- Each site's settings live in its own `netlify.toml`: `apps/web/netlify.toml` and `apps/admin/netlify.toml`.
-- Netlify finds that file through the site's **Package directory**. Netlify only allows the package
-  directory to be set in its UI; there is no `netlify.toml` property for it. It is the one setting that has to
-  be entered by hand, once per site.
+- The site's settings live in `apps/web/netlify.toml`. Netlify finds that file through the site's
+  **Package directory** (`apps/web`). Netlify only allows the package directory to be set in its UI; there is
+  no `netlify.toml` property for it.
 - The **Base directory** stays empty (repository root). Netlify installs dependencies and runs the build
   command there, so pnpm sees the whole workspace.
 - Every path inside `netlify.toml`, including `publish`, is resolved from the base directory (the repository
-  root), not from the app's folder. That is why `publish` names the app folder (`apps/admin/.next`).
+  root), not from the app's folder. That is why `publish` names the app folder (`apps/web/.next`).
   Phase 1.1 used `publish = ".next"`, which Netlify resolved to `<repo>/.next`, so the Next.js plugin
   failed with "publish directory was not found" after a successful build. Fixed in Phase 1.2;
-  `scripts/checks.test.mjs` now fails if either file has the wrong paths.
+  `scripts/checks.test.mjs` fails if the paths are wrong.
+- `apps/admin/netlify.toml` is **not** the production configuration. It is kept as the Phase 1 record of the
+  admin app's original site settings. Netlify reads it only for a site whose package directory is
+  `apps/admin`, or for a command run with `--filter @bedo/admin`; never deploy that way, because it would
+  replace the whole site with the Admin Dashboard alone (that is what happened before D-26).
 
 ### Exact site settings
 
-| Netlify setting (site configuration → continuous deployment → Build settings) | Web app site | Admin Dashboard site |
-| --- | --- | --- |
-| Base directory | *(empty)* | *(empty)* |
-| Package directory | `apps/web` | `apps/admin` |
-| Build command | *(empty: taken from netlify.toml)* | *(empty: taken from netlify.toml)* |
-| Publish directory | *(empty: taken from netlify.toml)* | *(empty: taken from netlify.toml)* |
-| Environment variable `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` | `https://bedochat.com/api` |
-| Custom domain | *none* (Cloudflare serves `bedochat.com`) | *none* |
+| Netlify setting (site configuration → continuous deployment → Build settings) | `bedochat` |
+| --- | --- |
+| Base directory | *(empty)* |
+| Package directory | `apps/web` |
+| Build command | *(empty: taken from netlify.toml)* |
+| Publish directory | *(empty: taken from netlify.toml)* |
+| Environment variable `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` (used by both apps' builds) |
+| Custom domain | *none* (Cloudflare serves `bedochat.com`) |
 
-What the two `netlify.toml` files set (values in the files take precedence over the UI):
+What `apps/web/netlify.toml` sets (values in the file take precedence over the UI):
 
-| | `apps/web/netlify.toml` | `apps/admin/netlify.toml` |
-| --- | --- | --- |
-| `command` | `pnpm turbo run build --filter=@bedo/web` | `pnpm turbo run build --filter=@bedo/admin` |
-| `publish` | `apps/web/.next` | `apps/admin/.next` |
-| `NODE_VERSION` | `24` | `24` |
-| `NEXT_TELEMETRY_DISABLED`, `TURBO_TELEMETRY_DISABLED` | `1` | `1` |
+| Setting | Value |
+| --- | --- |
+| `command` | `pnpm turbo run build --filter=@bedo/web` (builds the Admin Dashboard export first, then the web app) |
+| `publish` | `apps/web/.next` |
+| `NODE_VERSION` | `24` |
+| `NEXT_TELEMETRY_DISABLED`, `TURBO_TELEMETRY_DISABLED` | `1` |
+| `[[redirects]]` | none (not needed, see above) |
+| `[[headers]]` | Admin Dashboard security headers for `/admin` and `/admin/*`; long-term caching for `/admin/_next/static/*` |
 
 pnpm's version comes from `packageManager` in the root `package.json`. The Next.js runtime
 (`@netlify/plugin-nextjs`) is added by Netlify automatically. Do not add or pin it.
 
 ### Deploying
 
-Netlify builds from a Git repository connected to the site. Because Bedo Chat is delivered as a ZIP (D-11),
-either push the unzipped folder to a private repository you control and connect both sites to it, or deploy
-from your machine with the Netlify CLI, run from the repository root:
+One build and one deploy carry both applications. Netlify builds from a Git repository connected to the site.
+Because Bedo Chat is delivered as a ZIP (D-11), either push the unzipped folder to a private repository you
+control and connect the `bedochat` site to it, or deploy from your machine with the Netlify CLI, run from the
+repository root:
 
 ```bash
-netlify deploy --build --prod --filter @bedo/web      # web app site
-netlify deploy --build --prod --filter @bedo/admin    # Admin Dashboard site
+netlify deploy --build --prod --filter @bedo/web --site bedochat
 ```
 
-`--filter` tells the CLI which package directory to use, the same as the UI setting.
+`--filter @bedo/web` selects the package directory (`apps/web`); `--site bedochat` names the site, so the
+deploy cannot go to a different linked site. There is no separate admin deploy.
 
 **Local deploys after a local build:** if you ran `pnpm build` in the same folder first, run the deploy as
-`TURBO_FORCE=true netlify deploy --build --prod --filter @bedo/web` (and the same for `@bedo/admin`).
+`TURBO_FORCE=true netlify deploy --build --prod --filter @bedo/web --site bedochat`.
 Netlify's Next.js runtime builds in "standalone" mode, which Turborepo's cache does not tell apart from a
-plain local build; without `TURBO_FORCE=true` the cached local build is reused and the deploy fails with
-"publish directory does not contain expected Next.js build output". Builds on Netlify itself start from a
-fresh clone and are not affected. (A one-line `turbo.json` fix is on hold while Phase 1 is frozen, R-02.)
+plain local build; without `TURBO_FORCE=true` a cached local build could be reused and the deploy fails with
+"publish directory does not contain expected Next.js build output". Since D-26 the web and admin builds are
+never taken from the cache, but `TURBO_FORCE=true` is still the safe way to run it. Builds on Netlify itself
+start from a fresh clone and are not affected.
+
+**After deploying, check the site itself** before anything else:
+
+| URL | Expected |
+| --- | --- |
+| `https://bedochat.netlify.app/` | 200, title "Bedo Chat" (redirects to `/login` in the browser when signed out) |
+| `https://bedochat.netlify.app/login` | 200, title "Sign in · Bedo Chat" |
+| `https://bedochat.netlify.app/sw.js` | 200, the student app's service worker |
+| `https://bedochat.netlify.app/admin` | 200, title "Bedo Chat Admin" (or a redirect to `/admin/` first, if Netlify's Pretty URLs adds the slash) |
+| `https://bedochat.netlify.app/admin/login` | 200, title "Sign in · Bedo Chat Admin" |
+
+Signing in only works on `https://bedochat.com`: the API accepts only that origin.
 
 Never set `DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY` or any other server secret (`ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`) on a Netlify site.
+`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `EDGE_SECRET`) on the
+Netlify site.
 
-Do not add `bedochat.com` to either Netlify site: Cloudflare serves it (section 5a). The admin app is built
-under the `/admin` base path, so its site answers at `https://<admin-site>.netlify.app/admin`; opening either
-`.netlify.app` address directly shows the app, but it cannot sign in there (the API accepts only
-`https://bedochat.com`).
+Do not add `bedochat.com` to the Netlify site: Cloudflare serves it (section 5a). If a separate admin-only
+Netlify site was ever created before D-26, delete it or stop its builds: it is no longer used.
 
 ## 5a. Cloudflare: one domain for everything (D-25)
 
@@ -213,8 +264,9 @@ under the `/admin` base path, so its site answers at `https://<admin-site>.netli
    creates its own record and certificate in step 4.
 3. **SSL/TLS**: encryption mode *Full (strict)*; turn on *Always Use HTTPS*. Network → *WebSockets* on (the
    default).
-4. **Worker**: in `deploy/cloudflare/wrangler.toml` replace the three origins with the web site's and the
-   admin site's `.netlify.app` addresses and the API's host address, then from that folder run
+4. **Worker**: in `deploy/cloudflare/wrangler.toml` replace the three origins: `WEB_ORIGIN` and `ADMIN_ORIGIN`
+   both with `https://bedochat.netlify.app` (the one Netlify site, D-26), and `API_ORIGIN` with the API's host
+   address. Then from that folder run
    `npx wrangler login`, `npx wrangler secret put EDGE_SECRET` (paste the API's `EDGE_SECRET`) and
    `npx wrangler deploy`. This attaches `bedochat.com` to the Worker as a Custom
    Domain (Cloudflare's recommended setup); every request to it is answered by the Worker.

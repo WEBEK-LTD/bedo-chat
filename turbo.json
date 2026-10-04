@@ -32,6 +32,47 @@
         "EDGE_SECRET"
       ]
     },
+    "@bedo/admin#build": {
+      "dependsOn": [
+        "^build"
+      ],
+      "env": [
+        "NEXT_PUBLIC_*"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "WAABEK_API_KEY",
+        "ACCESS_TOKEN_SECRET",
+        "OTP_HMAC_SECRET",
+        "ADMIN_TOTP_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "VAPID_PRIVATE_KEY",
+        "EDGE_SECRET"
+      ],
+      "cache": false
+    },
+    "@bedo/web#build": {
+      "dependsOn": [
+        "^build",
+        "@bedo/admin#build"
+      ],
+      "env": [
+        "NEXT_PUBLIC_*"
+      ],
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "REDIS_URL",
+        "WAABEK_API_KEY",
+        "ACCESS_TOKEN_SECRET",
+        "OTP_HMAC_SECRET",
+        "ADMIN_TOTP_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "VAPID_PRIVATE_KEY",
+        "EDGE_SECRET"
+      ],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": [
         "^build"

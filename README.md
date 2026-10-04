@@ -63,7 +63,8 @@ Super Admin, sign in to the admin app and add the students' numbers to the acade
 
 ## Deployment
 
-Web app and Admin Dashboard deploy to Netlify (`apps/*/netlify.toml`); the API and worker run as containers
+Web app and Admin Dashboard deploy together as one Netlify site (D-26, `apps/web/netlify.toml`: the admin
+app's static export is included under `/admin`); the API and worker run as containers
 on persistent hosting (`apps/api/Dockerfile`, `apps/worker/Dockerfile`); data lives in Supabase and queues
 in managed Redis. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
@@ -187,7 +188,8 @@ It prints an authenticator setup link and secret **once**; add it to the admin's
 
 **One public domain (D-25).** In production everything is served from `https://bedochat.com`: the student
 chat at `/` and `/login`, the Admin Dashboard at `/admin` and `/admin/login`, the API at `/api`. Cloudflare
-and a small Worker (`deploy/cloudflare/`) route the paths to the two Netlify sites and the API host, which
+and a small Worker (`deploy/cloudflare/`) route the paths to the one Netlify site (D-26: student app, with the
+Admin Dashboard under `/admin`) and the API host, which
 also carries Phase 3's WebSocket connections. Both apps and the API share one origin, so the API's session
 cookies are first-party (P-14) and scoped under `/api`. Set the API's `CORS_ALLOWED_ORIGINS`, `ADMIN_ORIGINS`
 and `WEB_ORIGINS` to `https://bedochat.com`, `API_PUBLIC_PATH=/api`, and an `EDGE_SECRET` shared with the

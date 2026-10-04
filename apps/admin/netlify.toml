@@ -1,3 +1,10 @@
+# NOT the production Netlify configuration (D-26). Bedo Chat has ONE Netlify site, configured by
+# apps/web/netlify.toml (package directory apps/web); that site's build includes the Admin Dashboard under /admin.
+# Netlify reads this file only for a site whose package directory is apps/admin, or for a CLI command run with
+# `--filter @bedo/admin`. Never deploy that way: it would replace the whole site with the Admin Dashboard alone.
+# Kept, unchanged below, as the Phase 1 record of the admin app's original site settings (scripts/checks.test.mjs
+# checks its paths); it is not used in development, tests of the running apps, or deployment.
+#
 # Netlify site: Bedo Chat admin app (D-15). Exact site settings are in docs/DEPLOYMENT.md.
 #
 # Monorepo rules (Netlify documentation, "Monorepos" and "File-based configuration"):

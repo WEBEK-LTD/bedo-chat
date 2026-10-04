@@ -78,7 +78,8 @@ export function scan(directories, needles) {
 /** Directories whose files are sent to browsers: static chunks, prerendered pages and public assets. */
 export function clientOutputDirs(appRoot) {
   const nextDir = path.join(appRoot, '.next');
-  return [path.join(nextDir, 'static'), path.join(nextDir, 'server', 'app'), path.join(appRoot, 'public')].filter(
+  // out/ is a static export (the Admin Dashboard, D-26); the web app's public/ includes its copy under admin/.
+  return [path.join(nextDir, 'static'), path.join(nextDir, 'server', 'app'), path.join(appRoot, 'public'), path.join(appRoot, 'out')].filter(
     (dir) => existsSync(dir) && statSync(dir).isDirectory(),
   );
 }

@@ -8,6 +8,9 @@ export default tseslint.config(
       '**/dist/**',
       '**/dist-test/**',
       '**/.next/**',
+      // D-26: the Admin Dashboard's static export and its copy inside the web app are build output.
+      '**/out/**',
+      'apps/web/public/admin/**',
       '**/.turbo/**',
       '**/coverage/**',
       '**/next-env.d.ts',

@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
-    "build": "next build",
+    "build": "node ../../scripts/bundle-admin-into-web.mjs && next build",
     "start": "next start --port 3000",
     "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint ."

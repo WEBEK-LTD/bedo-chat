@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { createReadStream } from 'node:fs';
 import { createCipheriv, createHmac, randomBytes } from 'node:crypto';
 import http from 'node:http';
 import net from 'node:net';
@@ -10,11 +11,13 @@ import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
 import pg from 'pg';
 import { destinationUrl, publicLocation, route, type RouterEnv } from '../../../deploy/cloudflare/worker.js';
+import { headersFor, readSiteRules, resolveStatic } from '../../../scripts/netlify-site-rules.mjs';
 
 /**
  * A complete local stack for browser tests: a fresh migrated database, the built API (connecting as the
- * least-privilege runtime role), the built web and admin apps served by `next start`, and in front of them
- * one local "site" that routes paths exactly like the production Cloudflare Worker (D-25):
+ * least-privilege runtime role), the one Netlify site (D-26: the built web app, which includes the Admin
+ * Dashboard's static export under /admin, served by `next start` behind the site's own netlify.toml rules),
+ * and in front of them one local "site" that routes paths exactly like the production Cloudflare Worker (D-25):
  *   http://localhost:3100/        student web app      http://localhost:3100/admin  Admin Dashboard
  *   http://localhost:3100/api/... API (prefix removed, WebSocket upgrades passed through)
  *
@@ -22,8 +25,12 @@ import { destinationUrl, publicLocation, route, type RouterEnv } from '../../../
  * read from the OTP job queue, exactly what the worker would send through Waabek; no WhatsApp is sent.
  */
 export const SITE_PORT = 3100;
-const WEB_PORT = 3200;
-const ADMIN_PORT = 3201;
+/** The one Netlify site (D-26): web app and Admin Dashboard. */
+const NETLIFY_SITE_PORT = 3200;
+/** `next start` for the built web app, behind the Netlify site's rules. */
+const NEXT_PORT = 3202;
+/** The one Netlify site's own address (the production equivalent is https://bedochat.netlify.app). */
+export const NETLIFY_SITE_URL = `http://127.0.0.1:${NETLIFY_SITE_PORT}`;
 const API_PORT = 4100;
 export const SITE_URL = `http://localhost:${SITE_PORT}`;
 export const WEB_URL = SITE_URL;
@@ -32,8 +39,9 @@ export const API_URL = `${SITE_URL}/api`;
 /** Shared with the API like the production Worker's EDGE_SECRET. */
 const EDGE_SECRET = randomBytes(32).toString('base64');
 const ORIGINS: RouterEnv = {
-  WEB_ORIGIN: `http://127.0.0.1:${WEB_PORT}`,
-  ADMIN_ORIGIN: `http://127.0.0.1:${ADMIN_PORT}`,
+  // D-26: both point at the same Netlify site.
+  WEB_ORIGIN: `http://127.0.0.1:${NETLIFY_SITE_PORT}`,
+  ADMIN_ORIGIN: `http://127.0.0.1:${NETLIFY_SITE_PORT}`,
   API_ORIGIN: `http://127.0.0.1:${API_PORT}`,
 };
 
@@ -115,6 +123,55 @@ export function startEdge(port: number, origins: RouterEnv, edgeSecret = EDGE_SE
 }
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
+
+const CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.json': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+/**
+ * Local stand-in for the one Netlify site (D-26), in Netlify's order. The web app's public/ folder (which holds
+ * the Admin Dashboard export under admin/) is what Netlify publishes as static files: a GET or HEAD that
+ * Netlify's static file matching resolves to one of those files is answered with that file and the site's
+ * [[headers]] for the path (apps/web/netlify.toml). Everything else goes to the Next.js server (`next start`),
+ * as on Netlify, where the server function (path /*, preferStatic) comes before redirect rules.
+ */
+export function startNetlifySite(port: number, nextOrigin: string): Promise<http.Server> {
+  const rules = readSiteRules();
+  const publicDir = path.join(repoRoot, 'apps/web/public');
+  const server = http.createServer((request, response) => {
+    const url = new URL(request.url ?? '/', 'http://site.local');
+    const file = request.method === 'GET' || request.method === 'HEAD' ? resolveStatic(publicDir, url.pathname) : null;
+    if (file) {
+      response.writeHead(200, {
+        'content-type': CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream',
+        ...headersFor(rules, url.pathname),
+      });
+      if (request.method === 'HEAD') response.end();
+      else createReadStream(file).pipe(response);
+      return;
+    }
+    const destination = new URL(`${url.pathname}${url.search}`, nextOrigin);
+    const upstream = http.request(destination, { method: request.method, headers: { ...request.headers, host: destination.host } }, (answer) => {
+      response.writeHead(answer.statusCode ?? 502, answer.headers);
+      answer.pipe(response);
+    });
+    upstream.on('error', () => {
+      if (!response.headersSent) response.writeHead(502);
+      response.end();
+    });
+    request.pipe(upstream);
+  });
+  return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+}
+
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(url: string, sql: string, params: unknown[] = []) {
   const client = new pg.Client({ connectionString: url });
@@ -199,19 +256,19 @@ export async function startStack(): Promise<Stack> {
       OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
       ADMIN_TOTP_KEY: totpKey.toString('base64'),
     }),
-    start('node', ['node_modules/next/dist/bin/next', 'start', '-p', String(WEB_PORT), '-H', '127.0.0.1'], path.join(repoRoot, 'apps/web'), {
-      NODE_ENV: 'production',
-    }),
-    start('node', ['node_modules/next/dist/bin/next', 'start', '-p', String(ADMIN_PORT), '-H', '127.0.0.1'], path.join(repoRoot, 'apps/admin'), {
+    start('node', ['node_modules/next/dist/bin/next', 'start', '-p', String(NEXT_PORT), '-H', '127.0.0.1'], path.join(repoRoot, 'apps/web'), {
       NODE_ENV: 'production',
     }),
   ];
 
+  const site = await startNetlifySite(NETLIFY_SITE_PORT, `http://127.0.0.1:${NEXT_PORT}`);
   const edge = await startEdge(SITE_PORT, ORIGINS);
   const otpQueue = new Queue<OtpJobData>(QUEUE_NAMES.otp, { connection: new Redis(redisUrl, { maxRetriesPerRequest: null }), prefix });
   const stop = async () => {
     edge.closeAllConnections();
     await new Promise((resolve) => edge.close(resolve));
+    site.closeAllConnections();
+    await new Promise((resolve) => site.close(resolve));
     for (const child of processes) {
       if (child.pid && child.exitCode === null) {
         try {

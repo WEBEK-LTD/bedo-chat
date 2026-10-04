@@ -256,3 +256,109 @@ student app could act for an admin signed in to the dashboard in the same browse
 separate browser profile. A strict Content-Security-Policy on both apps (still open from the Phase 2 review)
 is recommended before Phase 3 brings user-generated content. Admin sign-in, roles, audit and every API
 permission check are unchanged.
+
+## Phase 2.3
+
+**Decision.** D-26 "One Netlify Site for Student Web + Admin", recorded in the blueprint and in
+`docs/DECISIONS.md` before implementation. **Cause:** a deploy publishes one Next.js app per Netlify site, so
+deploying the admin app to `bedochat` replaced the student app. **Fix:** the admin app becomes a static export
+that ships inside the student app's deploy. Build and deployment configuration only.
+
+| Change | Where |
+| --- | --- |
+| Admin app built as a static export under `/admin` (`output: 'export'`); its security headers move to the site config, because static files get none from Next.js | `apps/admin/next.config.ts` (Phase 1 file) |
+| Web build first adds the admin export to `public/admin`, after checking it is complete and from the latest admin build | new `scripts/bundle-admin-into-web.mjs`; `apps/web/package.json` (Phase 1 file, build script) |
+| Admin build always runs before the web build; neither is replayed from Turborepo's cache | `turbo.json` |
+| Admin security headers for `/admin` and `/admin/*`, and caching for `/admin/_next/static/*`. No routing rules (see below) and no catch-all | `apps/web/netlify.toml` (Phase 1 file) |
+| Generated copy never committed or linted; bundle check also scans static exports | `.gitignore`, `eslint.config.mjs`, `scripts/check-client-bundles.mjs` |
+| Browser tests run against one Netlify-site stand-in that applies the real `netlify.toml` rules | `packages/e2e/test/stack.ts`, new `scripts/netlify-site-rules.mjs` |
+| Documentation: one site, one deploy command with `--site bedochat`, checks for the site itself | `docs/DEPLOYMENT.md`, `README.md` |
+| Marked as not the production configuration; values unchanged | `apps/admin/netlify.toml` |
+
+**Unchanged:**
+- Application pages, components and behaviour of both apps.
+- Authentication, permissions, security logic, API, audit.
+- The Cloudflare Worker and its configuration (`deploy/` has no changes).
+- Phase 3 has not started.
+
+**How Netlify serves the admin pages (checked in Netlify's own code, `netlify-cli` 27.10.2).**
+- Netlify's Next.js runtime (v5.16.1) copies the web app's `public/` folder, including `admin/`, to the CDN.
+  Its server function has the path `/*` and `preferStatic: true`.
+- For each request, Netlify first looks for a matching static file. Only if there is none does it run the
+  Next.js server function. Redirect rules come after both, so on this site they are never reached.
+- Netlify's static file matching tries `<path>.html` and `<path>/index.html`. So `/admin` and `/admin/` find
+  `admin/index.html`, and `/admin/login` and `/admin/login/` find `admin/login.html`. No routing rule is
+  needed.
+- My first version added two rewrite rules for this. The independent review showed they could never run, so
+  they were removed. The browser-test stand-in now follows Netlify's real order: static file with the site's
+  headers first, then the Next.js server.
+- Netlify documents that "Rewrites in Next.js configuration can't point to static files in the public
+  directory", and headers in `next.config` don't reach those files either. That's why the admin security
+  headers are in `netlify.toml`.
+
+**`apps/admin/netlify.toml` (owner constraint C): kept.**
+- **What reads it:** Netlify, only for a site whose package directory is `apps/admin` or a CLI command with
+  `--filter @bedo/admin`; and the Phase 1.2 test that checks its paths.
+- **What doesn't:** local development and the browser tests.
+- **Why it stays:** removing it is not necessary for D-26. It now says at the top that it is not the
+  production configuration and must never be used to deploy.
+
+**Turbo cache.** A replayed Turborepo cache adds files but never removes old ones. In a test, a replay left a
+second admin build and an old script file in the output. Both builds are therefore never cached. Each build
+clears its own output, and the bundle step replaces `public/admin`. Verified: after two builds with
+different settings, the output holds exactly one admin build and no leftover files.
+
+**New and changed tests.**
+- **Root tests** (`scripts/one-netlify-site.test.mjs`, 9 new; 24 in total):
+  - the admin app is a static export with no server-side configuration
+  - the site needs no routing rules (none are present, so there is no catch-all)
+  - Netlify's static file matching serves `/admin`, `/admin/`, `/admin/login`, `/admin/login/`, admin assets and
+    page data from the export, and sends `/`, `/login` and unknown paths to Next.js
+  - the admin security headers are identical to the pre-D-26 values; student paths are unaffected
+  - one build command and one publish directory, with no secrets
+  - the Turborepo order, and no caching
+  - the bundle step replaces old files and refuses a missing, incomplete or out-of-date export
+  - the rules reader
+- **Browser tests** (2 new; 16 in total), through the public domain and directly on the Netlify-site stand-in:
+  - `/`, `/login`, `/sw.js`, `/admin`, `/admin/`, `/admin/login` each served by the right app
+  - every admin asset loads under `/admin/_next/static/`
+  - admin pages carry the admin security headers, while student pages keep their own
+  - unknown `/admin/...` paths answer 404
+  - `/admin` and `/admin/login` work on direct navigation and after a reload
+  - all 14 earlier browser tests (student and admin sign-in, sessions, audit, WebSocket) pass on the
+    combined site
+- **Real Netlify build** of the one site from a fresh unpack, `netlify build --offline --filter @bedo/web`,
+  checked by the verification run:
+  - the CDN files contain the student app and `/admin` with its pages and assets, from exactly one admin
+    build
+  - Netlify's static matching resolves every admin URL to the right file
+  - the server function lets static files answer first
+  - the deploy config has no `/admin` routing rules and does have the admin headers
+  - no server secret appears in any deployed file or in the deploy config, even with sentinel values set
+  - no admin-only site build exists
+
+**Independent review of Phase 2.3.** No Critical or High findings.
+- **Medium (fixed):** the two rewrite rules could never run, and the test stand-in modelled the wrong order.
+  Both corrected, as described above.
+- **Low (documented):** Netlify's Pretty URLs may answer `/admin` with a redirect to `/admin/`, which then
+  serves the dashboard. Behind Cloudflare the redirect stays on `bedochat.com`. It's in the deploy checklist.
+- **Low (documented):** a separate admin-only Netlify site, if one was ever created, would keep building. The
+  deployment guide now says to delete it or stop its builds.
+- **Low (documented):** running only the web app's own build script, outside Turborepo, would add whatever
+  admin export was built last. The guide says to build through Turborepo, as Netlify does.
+- **Low (unchanged by choice):**
+  - The two builds receive the same environment variables as every other build (the existing Phase 1/2
+    rules). Admin code reads only `NEXT_PUBLIC_API_URL`, and the bundle check plus the deploy check prove
+    no secret reaches the deploy.
+  - Running the bundle check inside the Netlify build command is a possible later hardening. It would change
+    the production build command, so it is not made here.
+
+**Behaviour notes.**
+- Moving from the dashboard's sign-in page to `/admin` inside the app loads the page fully instead of
+  switching in place. Next.js asks for `/admin.txt`, which a static export does not create. It works, only a
+  little slower. Adding that one file would be a small later improvement; it is not included because it is
+  not required.
+- Unknown paths under `/admin/` now show the student app's 404 page instead of the admin app's. Both are
+  404s; per the owner's instruction, no catch-all was added.
+- `pnpm --filter @bedo/admin start` no longer works, because a static export has no server; Next.js says so
+  when it is run. `pnpm --filter @bedo/admin dev` (development) works as before.
