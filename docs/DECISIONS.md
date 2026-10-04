@@ -29,7 +29,10 @@ source of truth; if the two ever differ, the blueprint wins and this file is cor
 | D-20 (O-32) | Admin screens in Phase 2 | Admin sign-in plus the academy phone list, deletion requests and 2-Step reset screens are built in Phase 2; the rest of the dashboard in Phase 10 | 2026-10-04 |
 | D-21 (O-31) | Push for login alerts in Phase 2 | Push pipeline built in Phase 2 with Web Push delivery to web sessions; APNs and FCM join the same pipeline in Phase 12; Phase 7 adds message notifications on top | 2026-10-04 |
 | D-22 | OTP delivery in development and testing | Phase 2 testing uses the real Waabek OTP flow with the owner's real API key, supplied only through the server-side `WAABEK_API_KEY` variable: never committed, never in any ZIP, never in frontend or client bundles, never logged. A development-only code sender is an optional fallback for local automated tests only, can never be enabled in production, and does not replace the Waabek integration | 2026-10-04 |
+| D-23 | Phase 2 parameters (P-01 to P-15) | Access token 10 minutes; refresh token rotates on every use, session ends after 30 days unused; a new account enters a name before the chat interface; name 1–64 characters; username optional, 5–32 letters/digits/underscore starting with a letter, unique ignoring case; bio up to 140; profile picture JPEG/PNG/WebP up to 5 MB, past pictures kept in history; privacy Everyone/Nobody per setting (phone number Nobody, others Everyone by default), enforced as each feature arrives; 2-Step password 8–128 characters, hint up to 64 without the password, 5 wrong passwords end the sign-in attempt; account keeps working while deletion is requested, request cannot be withdrawn, rejection returns it to active; phone list: add one number with a note or import CSV, duplicates skipped and reported, no removal in Phase 2; Super Admin changes, Moderator reads; admin sign-in phone code + authenticator app, session 12 hours or 30 minutes idle; web cookie needs one registrable domain for app and API; profile pictures in a private Supabase Storage bucket through the official Storage client with `SUPABASE_SERVICE_ROLE_KEY` | 2026-10-04 |
+| D-24 | Phone numbers leaving the academy list | When an account deletion is approved, the account's phone number is removed from the active academy phone list, so it cannot create or reactivate an account. When a phone-number change succeeds, the old number is removed from the list and the new number becomes the account's login number. In both cases the number stays permanently in identity and audit history, the removed list entry is recorded in the admin audit log, and no historical record is changed or deleted. This adds these two removals to D-23 / P-11, which otherwise still has no manual removal in Phase 2 | 2026-10-04 |
 | R-01 | Standing rules | No feature outside the approved specification. No AI features, AI branding, AI artwork, AI-generated icons or illustrations. Google Material Symbols only. User app limited to Login → Chat Interface. Admin Dashboard separate. Phase work starts only after its decisions are recorded | 2026-10-04 |
+| R-02 | Phase 1 frozen | Phase 1.2 is approved and complete after a successful real Netlify deployment. No further Phase 1 changes or refactoring; later phases only extend it where their work requires, and every such extension is listed in that phase's report | 2026-10-04 |
 
 ## Phase 1 implementation choices
 
@@ -47,14 +50,41 @@ These are technical choices inside the approved stack. None changes requested be
 | Queue keys | `QUEUE_PREFIX` (default `bedo`) on every BullMQ queue | Environments can share one Redis without touching each other's queues |
 | Typed API client (orval) | Starts in Phase 2 | Phase 1 has no callable product endpoints yet |
 
+## Phase 2 implementation choices
+
+Technical choices inside the approved decisions. None changes requested behaviour.
+
+| Area | Choice | Why |
+| --- | --- | --- |
+| Access tokens | HS256 JWT (jose), issuer `bedo-api`, audience `bedo-app`, 10 minutes; the session row is checked on every request | Ending a session, a deletion or a block takes effect immediately, not when the token expires |
+| Refresh tokens | 256-bit random, stored only as SHA-256; rotate on every use; every rotated-out token is remembered for its session, and presenting any of them again ends the session (`refresh_reuse`), except the most recent one within 20 seconds of its rotation, which only gets a new access token | Reuse detection that a thief cannot dodge by rotating twice, without signing out a second browser tab that refreshed at the same moment. An hourly worker job removes token hashes of ended sessions and those older than the 30-day idle limit |
+| CSRF and app separation | Cookie-authenticated requests need an allowed `Origin` and the header `x-bedo-csrf: 1`. Admin routes (reads included) accept only `ADMIN_ORIGINS` (required in production); the user's session cookie routes accept only the other allowed origins. Cookies are `HttpOnly`, `SameSite=Strict`, `Secure` in production, scoped to `/v1/auth` (user) and `/v1/admin` (admin) | A cross-site page can neither send the header nor read the cookie, and a fault in one app cannot be used to act through the other |
+| One-time codes | 6 digits from a cryptographic generator; stored as HMAC-SHA256 (`OTP_HMAC_SECRET`); limits enforced atomically in Redis (Lua): 60-second resend, 5 codes per phone and 20 per IP per hour (one per-IP budget shared by sign-in, phone change and admin codes; IPv6 counted per /64); 5 wrong codes lock the challenge | Exact limits from the specification, safe with several API instances, and not widened by rotating IPv6 addresses |
+| Neutral answers | Every allowed code request creates a challenge with the same lifetime and attempt counter, whether or not the number may sign in; for a number that may not, it holds the hash of a random code that is never sent and is marked undelivered, so it can only fail. An account is created, or a phone number changed, only after a second check that the number is on the list. Same answer, same limits, same lock-out, no code | The answers never reveal which numbers can sign in (D-06) |
+| Passwords | Argon2id (`@node-rs/argon2`), 19 MiB memory, 2 iterations, 1 lane (OWASP minimum); each attempt is counted before the password is checked (5 per sign-in; 5 per hour inside a session), so parallel requests cannot exceed the limit | Approved algorithm; the limits hold under concurrency and cap the hashing work an attacker can cause |
+| Admin authenticator | RFC 6238 TOTP (SHA-1, 30 s, 6 digits, ±1 step), each step usable once; at most 5 codes per sign-in attempt, counted before checking; secrets encrypted with AES-256-GCM (`ADMIN_TOTP_KEY`) | Works with every common authenticator app; cannot be guessed in parallel; a database copy alone does not reveal the secrets |
+| Push endpoints | Only browser push services (FCM, Mozilla, Windows, Apple) are accepted, and the worker contacts nothing else; a browser's subscription never moves away from another user's live session | The worker cannot be pointed at internal addresses; one user cannot silence another's alerts |
+| Login alerts | The device in an alert is named from the browser signature in fixed words (e.g. "Chrome on Windows"), not from the name the client sent | A sign-in cannot write its own message into the account owner's alert |
+| Phone-change codes | Tied to the account that asked for them; a number taken in the meantime returns a conflict | One account cannot complete another's change |
+| Refused admin actions | A Moderator's refused attempt at a Super Admin action is recorded in the admin history | D-17: the history shows attempts, not only successes |
+| Audit storage | `audit` schema with identity, account and security history; admin actions and admin views in `app.audit_log`; the runtime role may only insert and read, and triggers reject updates, deletes and truncation for everyone | D-17: history that the application cannot change |
+| Deletion | On approval the account keeps its id but loses phone, name, username, bio and picture; the old values are written to the history first, sessions end and a final push goes to the user's browsers | Other users see "Deleted account" and all history remains (D-14) |
+| Other users' view | One API function, `toPublicUser`, builds every view of another user; deleted accounts are shown as "Deleted account" with nothing else | Later phases (chats, groups, calls) cannot show a deleted identity by mistake |
+| Profile pictures | Browser uploads straight to the private bucket with a one-time signed URL; the API then checks the real file type from its first bytes and the size before accepting it | No storage credentials in the browser; the declared type is not trusted |
+| Typed API client | `@bedo/api-client`, generated by orval from the OpenAPI document; each app supplies the transport (tokens, cookies, CSRF header). A test fails if the generated file is out of date | The client cannot drift from the API's contracts |
+| Phone numbers | Normalised to E.164 with libphonenumber-js (full metadata) | One stored form per number for the academy list and accounts |
+| Browser tests | `packages/e2e`: real Chromium against the built API, web and admin apps, Postgres and Redis | Proves the complete flows in a browser, not only the API |
+| `esbuild` install script | Reviewed and not run (`allowBuilds: esbuild: false`); it comes with the API-client generator, a development tool | Same policy as `msgpackr-extract`: the binary ships as an optional package |
+
 ## Security exceptions (temporary)
 
 | Package | Exception | Reason | Remove after |
 | --- | --- | --- | --- |
 | `next`, `@next/*` | Exempt from the 14-day release-age rule; pinned exactly to 16.3.6 | 16.2.0–16.3.5 have a critical advisory (remote code execution in `next/og` ImageResponse). 16.3.6 is the first patched release, published 2026-09-22 | 2026-10-06 — then remove the exemption and return to a caret range |
 | `fastify` | Override to `^5.12.5` | `@nestjs/platform-fastify` 12.0.3 pins 5.12.4, which has a moderate denial-of-service advisory | When the Nest adapter depends on ≥ 5.12.5 |
+| `undici` | Override to `^7.29.1` | Several 7.x advisories before 7.29.1; reached only through the development-time API-client generator (orval). 7.29.1 is older than 14 days | When orval's dependencies require ≥ 7.29.1 |
 
 ## Open decisions
 
-21 decisions remain open in the blueprint; none blocks Phase 2. The next ones are needed for Phase 3:
+21 decisions remain open in the blueprint; none blocked Phase 2. The next ones are needed for Phase 3:
 O-23 (brand), O-27 (edit and delete time limits) and O-28 (platform build order).

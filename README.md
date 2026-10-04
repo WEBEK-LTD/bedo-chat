@@ -4,21 +4,26 @@ Private messaging platform for the academy. Users get exactly **Login → Chat I
 administrators get a separate **Admin Dashboard**. The full requirements, architecture, decision log and
 phase plan live in the *Bedo Chat — Phase 0 Blueprint*; `docs/DECISIONS.md` mirrors the approved decisions.
 
-**Current state: Phase 1 (Foundation).** The repository contains the verified skeleton every later phase
-plugs into. No messaging feature exists yet; the two user screens and the admin screen are layout shells.
+**Current state: Phase 2 (Accounts and audit foundation).** Students sign in with a WhatsApp code
+(academy phone list only), manage their profile, privacy, devices, 2-Step Verification, notifications and
+account deletion requests inside the chat interface. Admins sign in with a phone code and an authenticator
+app and manage the academy phone list, deletion requests and 2-Step resets. Every identity, account,
+security and admin action is kept in an append-only history. Messaging starts in Phase 3.
+What Phase 2 contains and how it was verified: [`docs/PHASE-2-REPORT.md`](docs/PHASE-2-REPORT.md).
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
 | `apps/api` | NestJS 12 HTTP API on Fastify 5: configuration, health checks, error envelope, response contracts, OpenAPI document |
-| `apps/worker` | NestJS background worker with BullMQ queues (system queue + heartbeat job in Phase 1) |
+| `apps/worker` | NestJS background worker with BullMQ queues: heartbeat, verification codes (Waabek WhatsApp), Web Push |
 | `apps/web` | Next.js 16 user app with exactly two routes: `/login` and `/` (chat interface) |
 | `apps/admin` | Next.js 16 admin dashboard, separate app and domain |
 | `packages/config` | Zod-validated environment variables for every service; list of server-only variables |
 | `packages/contracts` | Zod schemas shared by API, worker and clients; builds the OpenAPI 3.1 document |
 | `packages/db` | Kysely database access and the checksummed SQL migration runner |
 | `packages/ui` | Design tokens and the Material Symbols icon component |
+| `packages/e2e` | Browser tests of the web and admin apps against the real API, Postgres and Redis (`pnpm e2e`) |
 | `supabase/migrations` | SQL migrations (Supabase file naming), applied by `@bedo/db` |
 | `scripts` | Repository checks: allowed web routes, client-bundle secret guard |
 | `docs` | Decision log, phase reports and the deployment guide |
@@ -50,6 +55,9 @@ pnpm --filter @bedo/web dev           # http://localhost:3000
 pnpm --filter @bedo/admin dev         # http://localhost:3001
 ```
 
+Before the first sign-in, fill in the Phase 2 variables (see "Accounts (Phase 2)" below), create the first
+Super Admin, sign in to the admin app and add the students' numbers to the academy phone list.
+
 `pnpm stack:down` stops the containers (data is kept in Docker volumes).
 
 ## Deployment
@@ -71,6 +79,9 @@ in managed Redis. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYM
 | `pnpm check:routes` | Fails if the web app has any route other than `/` and `/login` (spec §23): checks page, route and metadata files, forbids `pages/` and `src/` route folders, and checks the last build's route manifest |
 | `pnpm check:bundles` | After `pnpm build`: fails if server-only variable names or values appear in any file served to browsers (see below) |
 | `pnpm verify` | lint + typecheck + test + build + both checks |
+| `pnpm e2e` | Builds API, web and admin for a local API on port 4100 and runs the browser tests (needs `TEST_DATABASE_URL`, `REDIS_URL` and Chromium; set `E2E_CHROMIUM` to its path if it is not `/opt/pw-browsers/chromium`) |
+| `pnpm --filter @bedo/api admin:create` | Creates an admin account (see below) |
+| `pnpm --filter @bedo/worker test:live` | Sends one real WhatsApp code through Waabek (opt-in, see below) |
 
 Integration tests need a Postgres role that may create databases and roles (the Docker Compose
 `postgres` user can) and a Redis instance. The database tests create and drop their own temporary
@@ -89,8 +100,9 @@ Every service validates its environment at start-up and refuses to start with a 
 variable names (values are never printed). Templates: `apps/api/.env.example`,
 `apps/worker/.env.example`, `packages/db/.env.example`, `apps/web/.env.example`, `apps/admin/.env.example`.
 
-Server-only variables (`DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY`) must never be placed in a web or
-admin app (spec §1: the Waabek key is never exposed). Every server variable must be classified as
+Server-only variables (`DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY`, `ACCESS_TOKEN_SECRET`,
+`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`) must never be placed
+in a web or admin app (spec §1: the Waabek key is never exposed). Every server variable must be classified as
 secret or non-secret in `packages/config` — a test fails otherwise.
 
 `pnpm check:bundles` scans every file the web and admin apps serve to browsers (`.next/static`,
@@ -141,6 +153,53 @@ Because the application never connects as the owner, it cannot disable triggers 
 append-only audit log cannot be bypassed from application code. There are no default privileges: every
 migration that adds a table also grants `bedo_runtime` exactly what that table needs. Locally, the
 Docker Compose superuser may be used for convenience.
+
+## Accounts (Phase 2)
+
+**Secrets.** The API needs `ACCESS_TOKEN_SECRET`, `OTP_HMAC_SECRET` and `ADMIN_TOTP_KEY`; the worker needs
+`WAABEK_API_KEY`. Generate each with `openssl rand -base64 32` and keep them only in the host's secret
+settings or in local `.env` files (ignored by git). Profile pictures need `SUPABASE_URL` and
+`SUPABASE_SERVICE_ROLE_KEY`; notifications need a VAPID key pair (`npx web-push generate-vapid-keys`): the
+public key goes to both API and worker, the private key and `VAPID_SUBJECT` to the worker only.
+
+**Verification codes** always go through Waabek in development, testing and production (D-22). The worker
+refuses to start without `WAABEK_API_KEY`. The test code sender (`OTP_DELIVERY=test-capture`) exists only
+for automated tests: configuration rejects it unless `NODE_ENV=test`. To check the key and the WhatsApp
+delivery alone, send one real code to a test phone:
+
+```bash
+WAABEK_API_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/worker test:live
+```
+
+**First admin.** Admin accounts are created from the command line until admin management arrives in Phase 10
+(P-12). Run it with the table-owner `DATABASE_URL` (as for migrations) and the API's `ADMIN_TOTP_KEY`:
+
+```bash
+pnpm --filter @bedo/api build
+DATABASE_URL=<owner connection> ADMIN_TOTP_KEY=<same as API> \
+  pnpm --filter @bedo/api admin:create --phone +2010XXXXXXXX --name "Academy Admin" --role super_admin
+```
+
+It prints an authenticator setup link and secret **once**; add it to the admin's authenticator app
+(Google Authenticator, Microsoft Authenticator, 1Password, ...). Roles: `super_admin` (changes) and
+`moderator` (read-only).
+
+**Web session cookie (P-14).** The web app keeps its refresh token in an httpOnly cookie set by the API.
+Browsers only send it when the web app and the API share one registrable domain, for example
+`chat.academy.example` and `api.academy.example`. Use custom domains for real testing; the default
+`*.netlify.app` address cannot hold the session. The same applies to the admin app. List the Admin Dashboard's origin in
+the API's `ADMIN_ORIGINS` (it must also be in `CORS_ALLOWED_ORIGINS`): admin routes accept only that origin,
+and the user's session cookie is accepted only from the other origins.
+
+**Phone numbers leaving the list (D-24).** When an admin approves an account deletion, or a user changes
+their phone number, the old number is removed from the academy phone list so it can no longer sign in or
+create an account. The number stays in identity history, and the removed list entry is recorded in the admin
+audit log.
+
+**History.** Identity changes (`audit.identity_history`), account events (`audit.account_events`), security
+events (`audit.security_events`) and admin actions, including what admins viewed (`app.audit_log`), can be
+inserted and read by the application but never changed or deleted: the runtime role has no such privilege,
+and triggers reject it even for the table owner.
 
 ## Dependency policy
 

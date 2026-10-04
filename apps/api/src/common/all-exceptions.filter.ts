@@ -1,6 +1,7 @@
 import { type ArgumentsHost, Catch, type ExceptionFilter, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ErrorCode, ErrorEnvelope } from '@bedo/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
+import { AppError } from './app-error.js';
 import { RequestValidationException } from './zod-validation.pipe.js';
 
 const CODE_BY_STATUS: Partial<Record<number, ErrorCode>> = {
@@ -27,6 +28,16 @@ const SAFE_MESSAGES: Record<ErrorCode, string> = {
   RATE_LIMITED: 'Too many requests. Try again later.',
   SERVICE_UNAVAILABLE: 'The service is temporarily unavailable.',
   INTERNAL: 'Something went wrong.',
+  OTP_INVALID: 'The code is incorrect or has expired.',
+  OTP_LOCKED: 'Too many incorrect codes. Request a new code.',
+  TWO_STEP_INVALID: 'The password is incorrect.',
+  TWO_STEP_REQUIRED: 'Your 2-Step Verification password is required.',
+  TOTP_INVALID: 'The authenticator code is incorrect.',
+  SESSION_INVALID: 'Your session has ended. Sign in again.',
+  ACCOUNT_DELETED: 'This account has been deleted.',
+  ACCOUNT_BLOCKED: 'This account cannot be used. Contact the academy.',
+  USERNAME_TAKEN: 'This username is already taken.',
+  CSRF_REJECTED: 'The request was rejected.',
 };
 
 /**
@@ -52,7 +63,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
     } else if (isFastifyClientError(exception)) {
       status = exception.statusCode;
     }
-    const code: ErrorCode = CODE_BY_STATUS[status] ?? (status >= 500 ? 'INTERNAL' : 'VALIDATION_FAILED');
+    const code: ErrorCode =
+      exception instanceof AppError
+        ? exception.code
+        : (CODE_BY_STATUS[status] ?? (status >= 500 ? 'INTERNAL' : 'VALIDATION_FAILED'));
 
     if (status >= 500) {
       this.logger.error(
@@ -67,8 +81,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         message: SAFE_MESSAGES[code],
         requestId: String(request.id),
         ...(exception instanceof RequestValidationException ? { fields: exception.fields } : {}),
+        ...(exception instanceof AppError && exception.retryAfterSeconds
+          ? { retryAfterSeconds: exception.retryAfterSeconds }
+          : {}),
       },
     };
+    if (exception instanceof AppError && exception.retryAfterSeconds) {
+      void reply.header('retry-after', String(exception.retryAfterSeconds));
+    }
     void reply.status(status).send(body);
   }
 }

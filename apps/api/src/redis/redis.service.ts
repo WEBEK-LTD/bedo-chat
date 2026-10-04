@@ -7,8 +7,11 @@ import { API_ENV } from '../config/tokens.js';
 export class RedisService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(RedisService.name);
   readonly client: Redis;
+  /** Key prefix shared with the worker (QUEUE_PREFIX), so environments sharing one Redis stay apart. */
+  readonly prefix: string;
 
   constructor(@Inject(API_ENV) env: ApiEnv) {
+    this.prefix = env.QUEUE_PREFIX;
     this.client = new Redis(env.REDIS_URL, {
       lazyConnect: true,
       // Fail fast instead of queueing commands while Redis is unreachable;

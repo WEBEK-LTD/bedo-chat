@@ -20,7 +20,8 @@
     "check:routes": "node scripts/check-web-routes.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:routes && pnpm check:bundles",
     "stack:up": "docker compose up -d --wait",
-    "stack:down": "docker compose down"
+    "stack:down": "docker compose down",
+    "e2e": "NEXT_PUBLIC_API_URL=http://localhost:4100 turbo run build --filter=@bedo/api --filter=@bedo/web --filter=@bedo/admin && pnpm --filter @bedo/e2e e2e"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.0",

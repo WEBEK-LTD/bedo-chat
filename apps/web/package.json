@@ -2,7 +2,7 @@
   "name": "@bedo/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Bedo Chat user web app: Login and the Chat Interface only (spec \u00a723)",
+  "description": "Bedo Chat user web app: Login and the Chat Interface only (spec §23)",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
@@ -12,6 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@bedo/api-client": "workspace:*",
+    "@bedo/contracts": "workspace:*",
     "@bedo/ui": "workspace:*",
     "next": "16.3.6",
     "react": "^19.0.0",

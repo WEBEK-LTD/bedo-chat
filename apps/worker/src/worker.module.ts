@@ -4,6 +4,13 @@ import { Redis } from 'ioredis';
 import { HeartbeatProcessor, WORKER_REDIS } from './system/heartbeat.processor.js';
 import { SystemQueueService } from './system/system-queue.service.js';
 import { WORKER_ENV } from './tokens.js';
+import { createWorkerDb, WORKER_DB } from './database.js';
+import { MaintenanceProcessor } from './maintenance/maintenance.processor.js';
+import { OtpProcessor } from './otp/otp.processor.js';
+import { WaabekClient } from './otp/waabek.client.js';
+import { createWebPushSender, PUSH_SENDER, PushProcessor } from './push/push.processor.js';
+import { QueueWorkersService } from './queue-workers.service.js';
+import type { DbHandle } from '@bedo/db';
 
 @Module({})
 export class WorkerModule {
@@ -24,6 +31,17 @@ export class WorkerModule {
         },
         HeartbeatProcessor,
         SystemQueueService,
+        {
+          provide: WORKER_DB,
+          // Closed by QueueWorkersService after the consumers stop, so in-flight jobs keep their connection.
+          useFactory: (): DbHandle => createWorkerDb(env),
+        },
+        { provide: PUSH_SENDER, useFactory: () => createWebPushSender(env) },
+        WaabekClient,
+        OtpProcessor,
+        PushProcessor,
+        MaintenanceProcessor,
+        QueueWorkersService,
       ],
     };
   }

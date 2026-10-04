@@ -5,6 +5,6 @@ export default defineConfig({
   oxc: { decorator: { legacy: true, emitDecoratorMetadata: true } },
   test: {
     include: ['test/**/*.test.ts'],
-    exclude: ['test/**/*.integration.test.ts'],
+    exclude: ['test/**/*.integration.test.ts', 'test/**/*.live.test.ts'],
   },
 });

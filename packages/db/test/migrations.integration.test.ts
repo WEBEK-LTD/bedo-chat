@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +48,8 @@ describe('migrations against a real Postgres', () => {
       database.url,
       "select table_schema || '.' || table_name as name from information_schema.tables where table_schema in ('app', 'app_meta') order by 1",
     );
-    expect(tables.rows.map((row) => row.name)).toEqual(['app.audit_log', 'app_meta.schema_migrations']);
+    // Later phases add more tables; the baseline's own tables must always be present.
+    expect(tables.rows.map((row) => row.name)).toEqual(expect.arrayContaining(['app.audit_log', 'app_meta.schema_migrations']));
 
     const extensions = await query<{ extname: string }>(database.url, 'select extname from pg_extension');
     expect(extensions.rows.map((row) => row.extname)).toEqual(expect.arrayContaining(['citext', 'pg_trgm', 'pgcrypto']));
@@ -120,7 +121,10 @@ describe('migrations against a real Postgres', () => {
   it('refuses a new migration that is older than the newest applied one', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'bedo-order-'));
     try {
-      await copyFile(path.join(defaultMigrationsDir(), BASELINE), path.join(dir, BASELINE));
+      // Every applied migration must be present, otherwise the runner reports it missing first.
+      for (const file of await readdir(defaultMigrationsDir())) {
+        await copyFile(path.join(defaultMigrationsDir(), file), path.join(dir, file));
+      }
       await writeFile(path.join(dir, '20200101000000_too_old.sql'), 'select 1;');
       await expect(runMigrations({ connectionString: database.url, migrationsDir: dir })).rejects.toThrow(
         /older than the newest applied migration/,

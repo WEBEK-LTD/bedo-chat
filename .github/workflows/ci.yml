@@ -47,6 +47,10 @@ jobs:
       # Placeholder present during the build as well, so the bundle guard proves that a server-only
       # value available at build time still never reaches browser files.
       WAABEK_API_KEY: ci-placeholder-not-a-real-key
+      ACCESS_TOKEN_SECRET: ci-placeholder-access-token-secret-not-real
+      OTP_HMAC_SECRET: ci-placeholder-otp-hmac-secret-not-real
+      SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-supabase-service-role-not-real
+      VAPID_PRIVATE_KEY: ci-placeholder-vapid-private-not-real
 
     steps:
       - uses: actions/checkout@v5

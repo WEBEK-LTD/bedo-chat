@@ -14,7 +14,11 @@ export function testEnv(overrides: Record<string, string> = {}): ApiEnv {
     DATABASE_URL: 'postgresql://unused:unused@127.0.0.1:1/unused',
     REDIS_URL: 'redis://127.0.0.1:1',
     HEALTH_CHECK_TIMEOUT_MS: '200',
-    CORS_ALLOWED_ORIGINS: 'https://chat.example.test',
+    CORS_ALLOWED_ORIGINS: 'https://chat.example.test,https://admin.example.test',
+    ADMIN_ORIGINS: 'https://admin.example.test',
+    ACCESS_TOKEN_SECRET: 'test-access-token-secret-0123456789abcdef',
+    OTP_HMAC_SECRET: 'test-otp-hmac-secret-0123456789abcdef-xyz',
+    ADMIN_TOTP_KEY: Buffer.alloc(32, 9).toString('base64'),
     ...overrides,
   });
 }
@@ -33,7 +37,14 @@ export const hanging: FakeDependency = { ping: () => new Promise<void>(() => und
 
 /** Builds the real application with Postgres and Redis replaced by fakes. */
 export async function buildTestApp(
-  options: { env?: ApiEnv; database?: FakeDependency; redis?: FakeDependency; extraControllers?: Array<new (...args: never[]) => unknown> } = {},
+  options: {
+    env?: ApiEnv;
+    database?: FakeDependency;
+    redis?: FakeDependency;
+    extraControllers?: Array<new (...args: never[]) => unknown>;
+    /** Sees every route as Fastify registers it. */
+    onRoute?: (route: { method: string | string[]; url: string }) => void;
+  } = {},
 ): Promise<NestFastifyApplication> {
   const env = options.env ?? testEnv();
   const moduleRef = await Test.createTestingModule({
@@ -46,8 +57,12 @@ export async function buildTestApp(
     .useValue({ ...(options.redis ?? up), onApplicationShutdown: async () => undefined })
     .compile();
 
-  const app = moduleRef.createNestApplication<NestFastifyApplication>(buildFastifyAdapter(env), { logger: false });
-  configureApp(app, env);
+  const adapter = buildFastifyAdapter(env);
+  if (options.onRoute) {
+    adapter.getInstance().addHook('onRoute', options.onRoute);
+  }
+  const app = moduleRef.createNestApplication<NestFastifyApplication>(adapter, { logger: false });
+  await configureApp(app, env);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
   return app;

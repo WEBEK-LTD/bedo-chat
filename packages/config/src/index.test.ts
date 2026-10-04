@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  adminCliEnvSchema,
   apiEnvSchema,
   EnvValidationError,
   loadEnv,
@@ -12,6 +13,15 @@ import {
 const validApiEnv = {
   DATABASE_URL: 'postgresql://user:secret-password@localhost:5432/bedo',
   REDIS_URL: 'redis://localhost:6379',
+  ACCESS_TOKEN_SECRET: 'a'.repeat(40),
+  OTP_HMAC_SECRET: 'b'.repeat(40),
+  ADMIN_TOTP_KEY: Buffer.alloc(32, 7).toString('base64'),
+};
+
+const validWorkerEnv = {
+  REDIS_URL: 'rediss://cache.example.com:6380',
+  DATABASE_URL: 'postgresql://user:pw@localhost:5432/bedo',
+  WAABEK_API_KEY: 'test-key-not-real',
 };
 
 describe('apiEnvSchema', () => {
@@ -55,6 +65,26 @@ describe('apiEnvSchema', () => {
     ).not.toThrow();
   });
 
+  it('rejects short secrets and a malformed TOTP key', () => {
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ACCESS_TOKEN_SECRET: 'short' })).toThrow(/ACCESS_TOKEN_SECRET/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ADMIN_TOTP_KEY: Buffer.from('too short').toString('base64') })).toThrow(/ADMIN_TOTP_KEY/);
+  });
+
+  it('requires every admin origin to be an allowed origin', () => {
+    const origins = { CORS_ALLOWED_ORIGINS: 'https://chat.example.com,https://admin.example.com' };
+    expect(loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, ADMIN_ORIGINS: 'https://admin.example.com' }).ADMIN_ORIGINS).toEqual([
+      'https://admin.example.com',
+    ]);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, ADMIN_ORIGINS: 'https://other.example.com' })).toThrow(/ADMIN_ORIGINS/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, NODE_ENV: 'production' })).toThrow(/ADMIN_ORIGINS/);
+  });
+
+  it('requires the Supabase URL and service key together', () => {
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co' })).toThrow(
+      /SUPABASE_SERVICE_ROLE_KEY/,
+    );
+  });
+
   it('reports missing variables by name', () => {
     try {
       loadEnv(apiEnvSchema, {});
@@ -80,9 +110,29 @@ describe('apiEnvSchema', () => {
 
 describe('workerEnvSchema', () => {
   it('requires REDIS_URL and applies worker defaults', () => {
-    const env = loadEnv(workerEnvSchema, { REDIS_URL: 'rediss://cache.example.com:6380' });
+    const env = loadEnv(workerEnvSchema, validWorkerEnv);
     expect(env.WORKER_CONCURRENCY).toBe(4);
     expect(env.WORKER_HEARTBEAT_INTERVAL_MS).toBe(15_000);
+    expect(env.OTP_DELIVERY).toBe('waabek');
+    expect(env.WAABEK_API_URL).toBe('https://waabek.com/api/v1/send');
+  });
+
+  it('requires the Waabek key when delivering real codes', () => {
+    const { WAABEK_API_KEY: _omit, ...withoutKey } = validWorkerEnv;
+    expect(() => loadEnv(workerEnvSchema, withoutKey)).toThrow(/WAABEK_API_KEY/);
+  });
+
+  it('refuses the test code sender outside NODE_ENV=test', () => {
+    for (const NODE_ENV of ['production', 'development']) {
+      expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, OTP_DELIVERY: 'test-capture', NODE_ENV })).toThrow(
+        /OTP_DELIVERY/,
+      );
+    }
+    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, OTP_DELIVERY: 'test-capture', NODE_ENV: 'test' })).not.toThrow();
+  });
+
+  it('requires the three VAPID settings together', () => {
+    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, VAPID_PUBLIC_KEY: 'x' })).toThrow(/VAPID/);
   });
 });
 
@@ -98,6 +148,7 @@ describe('server variable classification', () => {
       ...Object.keys(apiEnvSchema.shape),
       ...Object.keys(workerEnvSchema.shape),
       ...Object.keys(migrationEnvSchema.shape),
+      ...Object.keys(adminCliEnvSchema.shape),
     ]);
     for (const key of allKeys) {
       expect(secret.has(key) || nonSecret.has(key), `${key} is not classified`).toBe(true);
@@ -106,7 +157,7 @@ describe('server variable classification', () => {
   });
 
   it('rejects an invalid queue prefix', () => {
-    expect(() => loadEnv(workerEnvSchema, { REDIS_URL: 'redis://localhost:6379', QUEUE_PREFIX: 'Bad Prefix' })).toThrow(
+    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, QUEUE_PREFIX: 'Bad Prefix' })).toThrow(
       EnvValidationError,
     );
   });

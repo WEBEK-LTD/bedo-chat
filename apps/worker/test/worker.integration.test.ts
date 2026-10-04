@@ -23,9 +23,11 @@ describe.runIf(redisUrl)('worker against real Redis', () => {
 
   afterAll(async () => {
     const connection = new Redis(redisUrl!, { maxRetriesPerRequest: null });
-    const queue = new Queue(QUEUE_NAMES.system, { connection, prefix });
-    await queue.obliterate({ force: true });
-    await queue.close();
+    for (const name of [QUEUE_NAMES.system, QUEUE_NAMES.otp, QUEUE_NAMES.push, QUEUE_NAMES.maintenance]) {
+      const queue = new Queue(name, { connection, prefix });
+      await queue.obliterate({ force: true });
+      await queue.close();
+    }
     await connection.quit();
     await redis.del(heartbeatKey);
     await redis.quit();
@@ -36,6 +38,8 @@ describe.runIf(redisUrl)('worker against real Redis', () => {
       NODE_ENV: 'test',
       LOG_LEVEL: 'silent',
       REDIS_URL: redisUrl!,
+      DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/postgres',
+      OTP_DELIVERY: 'test-capture',
       WORKER_HEARTBEAT_INTERVAL_MS: '1000',
       QUEUE_PREFIX: prefix,
     });

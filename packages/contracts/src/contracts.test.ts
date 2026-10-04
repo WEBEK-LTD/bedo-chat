@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { errorEnvelopeSchema, readyResponseSchema } from './index.js';
+import { errorEnvelopeSchema, isPushServiceUrl, readyResponseSchema } from './index.js';
 import { buildOpenApiDocument } from './openapi.js';
 
 describe('response schemas', () => {
@@ -36,5 +36,29 @@ describe('buildOpenApiDocument', () => {
     expect(Object.keys(document.components?.schemas ?? {})).toEqual(
       expect.arrayContaining(['ErrorEnvelope', 'LiveResponse', 'ReadyResponse']),
     );
+  });
+});
+
+describe('push subscription endpoints', () => {
+  it('accept only browser push services over https on the default port', () => {
+    for (const url of [
+      'https://fcm.googleapis.com/fcm/send/abc',
+      'https://updates.push.services.mozilla.com/wpush/v2/abc',
+      'https://wns2-par02p.notify.windows.com/w/?token=abc',
+      'https://web.push.apple.com/abc',
+    ]) {
+      expect(isPushServiceUrl(url), url).toBe(true);
+    }
+    for (const url of [
+      'http://fcm.googleapis.com/fcm/send/abc',
+      'https://fcm.googleapis.com:8443/x',
+      'https://fcm.googleapis.com.evil.example/x',
+      'https://evilfcm.googleapis.com.example/x',
+      'https://10.0.0.5/x',
+      'https://localhost/x',
+      'not a url',
+    ]) {
+      expect(isPushServiceUrl(url), url).toBe(false);
+    }
   });
 });

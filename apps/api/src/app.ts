@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import fastifyCookie from '@fastify/cookie';
 import { ConsoleLogger, type LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
@@ -37,11 +38,15 @@ export function buildFastifyAdapter(env: ApiEnv): FastifyAdapter {
 }
 
 /** Cross-cutting HTTP behaviour shared by the real server and the tests. */
-export function configureApp(app: NestFastifyApplication, env: ApiEnv): void {
+export async function configureApp(app: NestFastifyApplication, env: ApiEnv): Promise<void> {
+  // Cookies carry the web refresh token and the admin session (httpOnly, never readable by scripts).
+  await app.register(fastifyCookie as never);
+
   app.enableCors({
     origin: env.CORS_ALLOWED_ORIGINS.length > 0 ? env.CORS_ALLOWED_ORIGINS : false,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['content-type', 'authorization', 'x-bedo-csrf'],
     maxAge: 600,
   });
 
@@ -82,7 +87,7 @@ export async function createApp(env: ApiEnv): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule.forRoot(env), buildFastifyAdapter(env), {
     logger: buildLogger(env),
   });
-  configureApp(app, env);
+  await configureApp(app, env);
   app.enableShutdownHooks();
   return app;
 }

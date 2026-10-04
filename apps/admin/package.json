@@ -2,7 +2,7 @@
   "name": "@bedo/admin",
   "version": "0.1.0",
   "private": true,
-  "description": "Bedo Chat admin dashboard (spec \u00a722), separate from the user app",
+  "description": "Bedo Chat admin dashboard (spec §22), separate from the user app",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3001",
@@ -12,6 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@bedo/api-client": "workspace:*",
+    "@bedo/contracts": "workspace:*",
     "@bedo/ui": "workspace:*",
     "next": "16.3.6",
     "react": "^19.0.0",

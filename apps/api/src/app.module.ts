@@ -7,6 +7,11 @@ import { API_ENV } from './config/tokens.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
 import { RedisModule } from './redis/redis.module.js';
+import { AuditModule } from './audit/audit.module.js';
+import { AuthModule } from './auth/auth.module.js';
+import { AdminModule } from './admin/admin.module.js';
+import { QueuesModule } from './queues/queues.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({})
 export class AppModule {
@@ -14,7 +19,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DatabaseModule, RedisModule, HealthModule],
+      imports: [DatabaseModule, RedisModule, QueuesModule, AuditModule, StorageModule, HealthModule, AuthModule, AdminModule],
       providers: [
         { provide: API_ENV, useValue: env },
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

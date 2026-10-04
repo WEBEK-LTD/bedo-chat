@@ -1,4 +1,4 @@
-export { createDb, type AuditLogTable, type CreateDbOptions, type Database, type DbHandle } from './database.js';
+export * from './database.js';
 export {
   assertMigrationConnection,
   checksumOf,
