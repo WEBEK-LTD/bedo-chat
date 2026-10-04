@@ -362,3 +362,41 @@ different settings, the output holds exactly one admin build and no leftover fil
   404s; per the owner's instruction, no catch-all was added.
 - `pnpm --filter @bedo/admin start` no longer works, because a static export has no server; Next.js says so
   when it is run. `pnpm --filter @bedo/admin dev` (development) works as before.
+
+## Phase 2.3.1
+
+**Decision.** D-27, recorded in the blueprint and in `docs/DECISIONS.md` before implementation.
+
+**Why.** After Phase 2.3 the real `bedochat` site kept building from `apps/admin`. That setting is stored in
+Netlify, and the repository cannot override it: Netlify reads the `netlify.toml` of the site's Package directory
+first. Netlify's own app detection lists `apps/admin` before `apps/web`. `apps/admin/netlify.toml` was still a
+working site configuration, so the wrong setting gave a "successful" deploy: the Admin Dashboard alone at the
+site root, with its scripts missing, so the pages stayed on "Loading…". The build also had no
+`NEXT_PUBLIC_API_URL`, because it was only expected as a Netlify UI setting.
+
+| Change | Where |
+| --- | --- |
+| Guard: the build command always fails with `ERROR: Bedo Chat production uses ONE Netlify site (D-26). The production Package directory must be apps/web, not apps/admin. ...` (exit code 1). The file is kept; the publish path is unchanged | `apps/admin/netlify.toml` |
+| `NEXT_PUBLIC_API_URL = "https://bedochat.com/api"` in the one site's build environment. Values in `netlify.toml` take precedence over the Netlify UI (Netlify's config code: file, then UI, then account) | `apps/web/netlify.toml` |
+| The Phase 1.2 config test now expects the guard for the admin file | `scripts/checks.test.mjs` |
+| Regression tests: the configured admin build command fails with the guard message; the web build environment sets the API URL exactly once | `scripts/one-netlify-site.test.mjs` |
+| Docs | `docs/DEPLOYMENT.md`, `docs/DECISIONS.md`, this report |
+
+**Checked with Netlify's real build tooling** (`netlify build --offline`):
+- From `apps/admin`, the build stops at the build command with the guard message. Nothing is built or
+  published, and Netlify keeps the last good deploy.
+- From `apps/web` with no API URL in the environment, the build produces the combined site. Both apps'
+  scripts contain `https://bedochat.com/api`, and the files match the Phase 2.3 build made with the URL set.
+- Each regression test fails when its protection is removed.
+
+**Fresh-unpack verification** gains two checks:
+- the Netlify build runs with no `NEXT_PUBLIC_API_URL` in its environment, and both apps must contain the
+  URL;
+- a build from `apps/admin` must be refused with the guard message.
+
+**Unchanged:**
+- Application code and behaviour, authentication, permissions, the API, the Cloudflare Worker, DNS.
+- The D-26 one-site architecture.
+- Phase 3 has not started.
+- `/api/health/*` (the API deployment) is a separate task.
+

@@ -17,6 +17,10 @@
   publish = "apps/web/.next"
 
 [build.environment]
+  # Phase 2.3.1: the public API address both apps are built with (D-25: https://bedochat.com/api). A public URL,
+  # not a secret. Values in this file take precedence over variables set in the Netlify UI, so the combined
+  # build can never be produced without it.
+  NEXT_PUBLIC_API_URL = "https://bedochat.com/api"
   NODE_VERSION = "24"
   NEXT_TELEMETRY_DISABLED = "1"
   TURBO_TELEMETRY_DISABLED = "1"

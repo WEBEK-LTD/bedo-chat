@@ -185,10 +185,13 @@ own build script would add whatever admin export was built last.
   Phase 1.1 used `publish = ".next"`, which Netlify resolved to `<repo>/.next`, so the Next.js plugin
   failed with "publish directory was not found" after a successful build. Fixed in Phase 1.2;
   `scripts/checks.test.mjs` fails if the paths are wrong.
-- `apps/admin/netlify.toml` is **not** the production configuration. It is kept as the Phase 1 record of the
-  admin app's original site settings. Netlify reads it only for a site whose package directory is
-  `apps/admin`, or for a command run with `--filter @bedo/admin`; never deploy that way, because it would
-  replace the whole site with the Admin Dashboard alone (that is what happened before D-26).
+- `apps/admin/netlify.toml` is **not** the production configuration. Netlify reads it only for a site whose
+  package directory is `apps/admin`, or for a command run with `--filter @bedo/admin`. Since Phase 2.3.1 (D-27)
+  its build command is a guard that always fails with:
+  `ERROR: Bedo Chat production uses ONE Netlify site (D-26). The production Package directory must be apps/web,
+  not apps/admin. ...` So a site set up that way gets a failed build (and keeps its last good deploy) instead
+  of publishing the Admin Dashboard alone at the site root, which is what happened before. If you see this
+  error in a deploy log, set the site's Package directory to `apps/web`.
 
 ### Exact site settings
 
@@ -198,7 +201,7 @@ own build script would add whatever admin export was built last.
 | Package directory | `apps/web` |
 | Build command | *(empty: taken from netlify.toml)* |
 | Publish directory | *(empty: taken from netlify.toml)* |
-| Environment variable `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` (used by both apps' builds) |
+| Environment variable `NEXT_PUBLIC_API_URL` | Nothing to set: `apps/web/netlify.toml` sets `https://bedochat.com/api` for both apps' builds (D-27), and it takes precedence over a UI value |
 | Custom domain | *none* (Cloudflare serves `bedochat.com`) |
 
 What `apps/web/netlify.toml` sets (values in the file take precedence over the UI):
@@ -207,6 +210,7 @@ What `apps/web/netlify.toml` sets (values in the file take precedence over the U
 | --- | --- |
 | `command` | `pnpm turbo run build --filter=@bedo/web` (builds the Admin Dashboard export first, then the web app) |
 | `publish` | `apps/web/.next` |
+| `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` (public address of the API, D-25; not a secret) |
 | `NODE_VERSION` | `24` |
 | `NEXT_TELEMETRY_DISABLED`, `TURBO_TELEMETRY_DISABLED` | `1` |
 | `[[redirects]]` | none (not needed, see above) |
