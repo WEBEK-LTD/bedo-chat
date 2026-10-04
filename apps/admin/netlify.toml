@@ -1,18 +1,13 @@
-# NOT the production Netlify configuration (D-26). Bedo Chat has ONE Netlify site, configured by
-# apps/web/netlify.toml (package directory apps/web); that site's build includes the Admin Dashboard under /admin.
-# Netlify reads this file only for a site whose package directory is apps/admin, or for a CLI command run with
-# `--filter @bedo/admin`. Building that way would publish the Admin Dashboard alone at the site root.
+# The one Bedo Chat Netlify site (D-15, D-26): the student web app, with the Admin Dashboard under /admin.
+# Exact site settings are in docs/DEPLOYMENT.md.
 #
-# Production guard (Phase 2.3.1): the build command below always fails with an explicit message, so a site
-# configured to build from apps/admin stops with an error instead of deploying the Admin Dashboard alone (Netlify
-# then keeps the last good deploy). The admin app is still built for production, as part of the apps/web build.
-# Kept as the record of the admin app's original site settings (publish path checked by scripts/checks.test.mjs).
-#
-# Netlify site: Bedo Chat admin app (D-15). Exact site settings are in docs/DEPLOYMENT.md.
+# D-28: this file exists twice, byte for byte: apps/web/netlify.toml and apps/admin/netlify.toml (a test keeps
+# them identical; change both together). Netlify reads the copy in the site's Package directory, so a site set
+# to apps/web (documented) or apps/admin builds and publishes the same combined site. Netlify's Next.js runtime
+# takes the app from the build output (apps/web), not from the Package directory.
 #
 # Monorepo rules (Netlify documentation, "Monorepos" and "File-based configuration"):
-# - This file is found because the site's Package directory is apps/admin. Netlify only lets the
-#   package directory be set in its UI; it has no netlify.toml property.
+# - Netlify only lets the package directory be set in its UI; it has no netlify.toml property.
 # - The Base directory stays empty (repository root). Dependencies install and the build command runs
 #   there, so pnpm sees the whole workspace.
 # - Every path below is relative to the base directory (repository root), NOT to this folder. That is
@@ -20,11 +15,47 @@
 # The Next.js runtime (@netlify/plugin-nextjs, OpenNext adapter) is applied automatically; do not pin it.
 
 [build]
-  # Phase 2.3.1 production guard: never build or deploy the Admin Dashboard as a site of its own.
-  command = "echo 'ERROR: Bedo Chat production uses ONE Netlify site (D-26). The production Package directory must be apps/web, not apps/admin. Building from apps/admin would deploy the Admin Dashboard alone at the site root, so this build stops here. Set the Package directory of the Netlify site to apps/web and deploy again; that build includes the Admin Dashboard under /admin.' >&2; exit 1"
-  publish = "apps/admin/.next"
+  # Builds @bedo/web and the workspace packages it depends on (Turborepo). Through turbo.json this first builds
+  # the Admin Dashboard's static export, which the web build adds under /admin (D-26): one build, one deploy.
+  command = "pnpm turbo run build --filter=@bedo/web"
+  publish = "apps/web/.next"
 
 [build.environment]
+  # Phase 2.3.1: the public API address both apps are built with (D-25: https://bedochat.com/api). A public URL,
+  # not a secret. Values in this file take precedence over variables set in the Netlify UI, so the combined
+  # build can never be produced without it.
+  NEXT_PUBLIC_API_URL = "https://bedochat.com/api"
   NODE_VERSION = "24"
   NEXT_TELEMETRY_DISABLED = "1"
   TURBO_TELEMETRY_DISABLED = "1"
+
+# D-26: this one site also serves the Admin Dashboard. The web app's build adds the admin's static export to
+# public/admin (scripts/bundle-admin-into-web.mjs), which Netlify publishes as static files under /admin.
+# No routing rules are needed: Netlify serves an existing static file before the Next.js server function, and
+# its static file matching finds /admin/index.html for /admin and /admin/login.html for /admin/login (with or
+# without a trailing slash). Nothing else under /admin is mapped: other /admin paths answer 404.
+#
+# The Admin Dashboard's security headers (the same values its own Next.js configuration set before D-26). On
+# Netlify, headers in next.config do not apply to files from the public folder, so they are set here.
+# Camera, microphone, screen capture and location stay off for the admin pages.
+[[headers]]
+  for = "/admin"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), display-capture=(), geolocation=()"
+
+[[headers]]
+  for = "/admin/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), display-capture=(), geolocation=()"
+
+# Admin script and style files have content-hashed names, like the web app's own /_next/static files.
+[[headers]]
+  for = "/admin/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

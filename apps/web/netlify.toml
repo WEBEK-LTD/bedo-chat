@@ -1,9 +1,13 @@
 # The one Bedo Chat Netlify site (D-15, D-26): the student web app, with the Admin Dashboard under /admin.
 # Exact site settings are in docs/DEPLOYMENT.md.
 #
+# D-28: this file exists twice, byte for byte: apps/web/netlify.toml and apps/admin/netlify.toml (a test keeps
+# them identical; change both together). Netlify reads the copy in the site's Package directory, so a site set
+# to apps/web (documented) or apps/admin builds and publishes the same combined site. Netlify's Next.js runtime
+# takes the app from the build output (apps/web), not from the Package directory.
+#
 # Monorepo rules (Netlify documentation, "Monorepos" and "File-based configuration"):
-# - This file is found because the site's Package directory is apps/web. Netlify only lets the
-#   package directory be set in its UI; it has no netlify.toml property.
+# - Netlify only lets the package directory be set in its UI; it has no netlify.toml property.
 # - The Base directory stays empty (repository root). Dependencies install and the build command runs
 #   there, so pnpm sees the whole workspace.
 # - Every path below is relative to the base directory (repository root), NOT to this folder. That is

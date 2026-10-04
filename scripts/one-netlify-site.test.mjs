@@ -1,7 +1,5 @@
 // D-26: one Netlify site serves the student web app and, under /admin, the Admin Dashboard's static export.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -124,26 +122,27 @@ function tomlValue(toml, table, key) {
   return new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"\\s*$`, 'm').exec(section)?.[1];
 }
 
-test('a Netlify build from apps/admin fails with the explicit one-site guard message (Phase 2.3.1)', () => {
-  const command = tomlValue(read('apps/admin/netlify.toml'), 'build', 'command');
-  assert.ok(command, 'apps/admin/netlify.toml has a build command');
-  // Netlify runs the build command with a shell from the base directory (the repository root).
-  const result = spawnSync('sh', ['-c', command], { cwd: fileURLToPath(new URL('..', import.meta.url)), encoding: 'utf8' });
-  assert.equal(result.status, 1, 'the build must fail');
-  assert.equal(result.stdout, '');
-  const message = result.stderr.trim();
-  assert.match(message, /^ERROR: Bedo Chat production uses ONE Netlify site \(D-26\)\./);
-  assert.match(message, /The production Package directory must be apps\/web, not apps\/admin\./);
-  assert.match(message, /would deploy the Admin Dashboard alone at the site root/);
-  assert.match(message, /Set the Package directory of the Netlify site to apps\/web and deploy again/);
+test('either Package directory builds the one site: both netlify.toml files are identical (D-28)', () => {
+  // Netlify reads the netlify.toml in the site's Package directory. A site set to apps/web (documented) or to
+  // apps/admin (what Netlify's own app detection lists first) must build and publish the same combined site.
+  const web = read('apps/web/netlify.toml');
+  const admin = read('apps/admin/netlify.toml');
+  assert.equal(admin, web, 'apps/admin/netlify.toml must be byte-identical to apps/web/netlify.toml');
+  assert.equal(tomlValue(admin, 'build', 'command'), 'pnpm turbo run build --filter=@bedo/web');
+  assert.equal(tomlValue(admin, 'build', 'publish'), 'apps/web/.next');
+  // The superseded D-27 guard is gone: a build from apps/admin no longer fails.
+  assert.doesNotMatch(admin, /exit 1|ERROR: Bedo Chat/);
+  // Running the configured command must not be a failing stub: it is the Turborepo build of the web app.
+  assert.doesNotMatch(tomlValue(admin, 'build', 'command'), /@bedo\/admin/);
 });
 
-test('the Student Web production build sets NEXT_PUBLIC_API_URL=https://bedochat.com/api (Phase 2.3.1)', () => {
+test('the one-site production build sets NEXT_PUBLIC_API_URL=https://bedochat.com/api (Phase 2.3.1, D-28)', () => {
   const toml = read('apps/web/netlify.toml');
   assert.equal(tomlValue(toml, 'build.environment', 'NEXT_PUBLIC_API_URL'), 'https://bedochat.com/api');
   // Set once, in the build environment of the one site (not per context, not elsewhere).
   assert.equal(toml.match(/NEXT_PUBLIC_API_URL\s*=/g)?.length, 1);
-  assert.equal(tomlValue(read('apps/admin/netlify.toml'), 'build.environment', 'NEXT_PUBLIC_API_URL'), undefined);
+  // D-28: the same value whichever copy Netlify reads.
+  assert.equal(tomlValue(read('apps/admin/netlify.toml'), 'build.environment', 'NEXT_PUBLIC_API_URL'), 'https://bedochat.com/api');
 });
 
 function fakeExport(root, buildId = 'build-1') {

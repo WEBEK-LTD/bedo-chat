@@ -127,24 +127,17 @@ test('every server-only variable reaches the build, so the bundle guard can catc
   }
 });
 
-test('each Netlify site config builds its own app and publishes from the repository root', async () => {
+test('both Netlify config files build the one site (D-28) and publish from the repository root', async () => {
   const { readFileSync } = await import('node:fs');
   const { SERVER_ONLY_ENV_NAMES } = await import('../packages/config/dist/index.js');
   for (const app of ['web', 'admin']) {
     const toml = readFileSync(new URL(`../apps/${app}/netlify.toml`, import.meta.url), 'utf8');
-    const { name } = JSON.parse(readFileSync(new URL(`../apps/${app}/package.json`, import.meta.url), 'utf8'));
     const value = (key) => toml.match(new RegExp(`^\\s*${key}\\s*=\\s*"([^"]*)"`, 'm'))?.[1];
     // Netlify resolves paths in netlify.toml from the base directory (the repository root), not from
     // this app's folder: a bare ".next" would point at <repo>/.next.
-    assert.equal(value('publish'), `apps/${app}/.next`, `apps/${app}/netlify.toml publish`);
-    if (app === 'admin') {
-      // Phase 2.3.1: the admin app is never a Netlify site of its own (D-26); its build command is a guard that
-      // always fails (scripts/one-netlify-site.test.mjs runs it).
-      assert.match(value('command'), /^echo 'ERROR: Bedo Chat production uses ONE Netlify site \(D-26\)\..*' >&2; exit 1$/);
-      assert.ok(!value('command').includes(name), 'apps/admin/netlify.toml must not build the admin app');
-    } else {
-      assert.equal(value('command'), `pnpm turbo run build --filter=${name}`, `apps/${app}/netlify.toml command`);
-    }
+    // D-28: whichever copy Netlify reads, it builds the one site from the web app (which includes the admin app).
+    assert.equal(value('publish'), 'apps/web/.next', `apps/${app}/netlify.toml publish`);
+    assert.equal(value('command'), 'pnpm turbo run build --filter=@bedo/web', `apps/${app}/netlify.toml command`);
     assert.equal(value('base'), undefined, `apps/${app}/netlify.toml must not set base`);
     for (const secret of SERVER_ONLY_ENV_NAMES) {
       assert.ok(!toml.includes(secret), `apps/${app}/netlify.toml must not mention ${secret}`);

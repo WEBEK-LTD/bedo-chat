@@ -400,3 +400,49 @@ site root, with its scripts missing, so the pages stayed on "Loading…". The bu
 - Phase 3 has not started.
 - `/api/health/*` (the API deployment) is a separate task.
 
+## Phase 2.3.2
+
+**Decision.** D-28, recorded in the blueprint and in `docs/DECISIONS.md` before implementation.
+
+**Evidence.** The real Netlify build log showed the existing `bedochat` site still building with Package
+directory `apps/admin` (publish `/opt/build/repo/apps/admin/.next`), and the D-27 guard stopping it. The
+repository was correct, but production depended on one Netlify UI setting that the repository cannot set.
+
+**Finding** (from Netlify's own code, `@netlify/config` and `@netlify/plugin-nextjs` 5.16.1, then confirmed
+with real `netlify build` runs):
+- The Package directory decides only two things: which `netlify.toml` Netlify reads, and where Netlify keeps
+  its working files.
+- The Next.js runtime finds the app, its `public/` folder and its server function from the build output
+  (`requiredServerFiles.appDir`, here `apps/web`).
+- So if the `netlify.toml` Netlify reads under `apps/admin` describes the one-site build, a site set to
+  `apps/admin` publishes exactly the same combined site.
+
+| Change | Where |
+| --- | --- |
+| Replaced with a byte-for-byte copy of the production site configuration (build `pnpm turbo run build --filter=@bedo/web`, publish `apps/web/.next`, `NEXT_PUBLIC_API_URL`, admin security headers). The D-27 guard is removed; it is superseded | `apps/admin/netlify.toml` |
+| Header comment explains the two identical copies | `apps/web/netlify.toml` (settings unchanged) |
+| Both config files must build the one site (Phase 1.2 config test) | `scripts/checks.test.mjs` |
+| The two files must be byte-identical and build the web app; the guard must be gone; both carry the API URL | `scripts/one-netlify-site.test.mjs` |
+| Docs | `docs/DEPLOYMENT.md`, `docs/DECISIONS.md`, this report |
+
+**Checked with Netlify's real build tooling** (`netlify build --offline`), from a fresh unpack:
+- **From `apps/web`:** the combined site, as before.
+- **From `apps/admin`:** Netlify reads `apps/admin/netlify.toml`, runs the same build, publishes
+  `apps/web/.next`, and passes every one-site check:
+  - student app and `/sw.js`;
+  - `/admin` and `/admin/login` from the admin export, with every `/admin/_next` file present;
+  - admin security headers;
+  - both apps built with `https://bedochat.com/api`;
+  - no secrets.
+- **Both builds deploy the same files**, compared file by file with only the random build ids ignored.
+- **Drift is caught:** changing one copy without the other fails two tests.
+
+**Effect on the existing site.** Once this version is on GitHub, the `bedochat` site's next build from
+`apps/admin` publishes the combined site; no Netlify setting change is needed. Setting `apps/web`, as
+documented, gives the identical result.
+
+**Unchanged:**
+- Application code and behaviour, authentication, permissions, the API, the Cloudflare Worker, DNS.
+- The D-26 architecture and the D-27 public API URL.
+- Phase 3 has not started.
+
