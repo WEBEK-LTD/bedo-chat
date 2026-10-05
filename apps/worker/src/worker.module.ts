@@ -8,6 +8,7 @@ import { createWorkerDb, WORKER_DB } from './database.js';
 import { MaintenanceProcessor } from './maintenance/maintenance.processor.js';
 import { OtpProcessor } from './otp/otp.processor.js';
 import { WaabekClient } from './otp/waabek.client.js';
+import { WaabekKeyProvider } from './otp/waabek-key.provider.js';
 import { createWebPushSender, PUSH_SENDER, PushProcessor } from './push/push.processor.js';
 import { QueueWorkersService } from './queue-workers.service.js';
 import type { DbHandle } from '@bedo/db';
@@ -38,6 +39,7 @@ export class WorkerModule {
         },
         { provide: PUSH_SENDER, useFactory: () => createWebPushSender(env) },
         WaabekClient,
+        WaabekKeyProvider,
         OtpProcessor,
         PushProcessor,
         MaintenanceProcessor,

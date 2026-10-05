@@ -33,6 +33,14 @@ export function workerHeartbeatKey(queuePrefix: string): string {
   return `${queuePrefix}:worker:heartbeat`;
 }
 
+/** Job names on the OTP queue. */
+export const OTP_JOB_NAMES = {
+  /** A one-time code. */
+  send: 'send',
+  /** A test message from the Admin Dashboard (Phase 3.1); the API waits for its result. */
+  waabekTest: 'waabek-test',
+} as const;
+
 /** One-time code delivery job (API → worker → Waabek). Removed from Redis as soon as it completes. */
 export const otpJobDataSchema = z.object({
   phone: z.string(),
@@ -45,6 +53,25 @@ export type OtpJobData = z.infer<typeof otpJobDataSchema>;
 export function otpMessage(code: string): string {
   return `Your Bedo Chat verification code is: ${code}`;
 }
+
+/** Admin Dashboard test message (Phase 3.1): same delivery path as codes, to one admin's number. */
+export const waabekTestJobDataSchema = z.object({ phone: z.string() });
+export type WaabekTestJobData = z.infer<typeof waabekTestJobDataSchema>;
+
+/** The exact test message text. */
+export const WAABEK_TEST_MESSAGE =
+  'Bedo Chat: this is a test message from the Admin Dashboard. WhatsApp delivery of verification codes is working.';
+
+/**
+ * Failure texts the worker reports for OTP-queue jobs. They never contain the key, the number, the code or
+ * Waabek's response body; the API maps them to a reason for the Admin Dashboard.
+ */
+export const OTP_DELIVERY_ERRORS = {
+  notConfigured: 'OTP settings: no Waabek API key is configured',
+  keyUnreadable: 'OTP settings: the stored Waabek API key cannot be decrypted',
+  /** Followed by ": HTTP <status>", ": timed out" or ": network error". */
+  waabekPrefix: 'Waabek send failed',
+} as const;
 
 /** Web Push job: deliver one notification to a user's sessions, optionally skipping one session. */
 export const pushSubscriptionSnapshotSchema = z.object({
@@ -68,6 +95,11 @@ export const pushJobDataSchema = z.object({
   subscriptions: z.array(pushSubscriptionSnapshotSchema).optional(),
 });
 export type PushJobData = z.infer<typeof pushJobDataSchema>;
+
+/** Redis key where the test-only sender stores test messages (NODE_ENV=test only). */
+export function testWaabekMessageKey(queuePrefix: string, phone: string): string {
+  return `${queuePrefix}:test:waabek-test:${phone}`;
+}
 
 /** Redis key where the test-only code sender stores codes (NODE_ENV=test only). */
 export function testOtpKey(queuePrefix: string, phone: string): string {

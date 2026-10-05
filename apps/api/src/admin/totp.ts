@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { decryptAtRest, encryptAtRest } from '@bedo/server-crypto';
 
 /**
  * Authenticator-app codes (RFC 6238 TOTP: HMAC-SHA1, 30-second steps, 6 digits), compatible with
@@ -86,24 +87,21 @@ export function generateTotpSecret(): Buffer {
   return randomBytes(20);
 }
 
+/** Name shown in the authenticator app. */
+export const TOTP_ISSUER = 'Bedo Chat Admin';
+
 export function otpauthUri(secret: Buffer, accountLabel: string): string {
-  const issuer = 'Bedo Chat Admin';
+  const issuer = TOTP_ISSUER;
   const label = encodeURIComponent(`${issuer}:${accountLabel}`);
   const params = new URLSearchParams({ secret: base32Encode(secret), issuer, algorithm: 'SHA1', digits: '6', period: '30' });
   return `otpauth://totp/${label}?${params.toString()}`;
 }
 
-/** AES-256-GCM encryption of authenticator secrets at rest (key: ADMIN_TOTP_KEY). */
+/** AES-256-GCM encryption of authenticator secrets at rest (key: ADMIN_TOTP_KEY), shared format (@bedo/server-crypto). */
 export function encryptSecret(key: Buffer, secret: Buffer): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(secret), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
+  return encryptAtRest(key, secret);
 }
 
 export function decryptSecret(key: Buffer, encoded: string): Buffer {
-  const raw = Buffer.from(encoded, 'base64');
-  const decipher = createDecipheriv('aes-256-gcm', key, raw.subarray(0, 12));
-  decipher.setAuthTag(raw.subarray(12, 28));
-  return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]);
+  return decryptAtRest(key, encoded);
 }

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnApplicationShutdown } from '@nestjs/common';
 import type { WorkerEnv } from '@bedo/config';
-import { MAINTENANCE_JOB_NAMES, QUEUE_NAMES } from '@bedo/contracts';
-import { Queue, Worker } from 'bullmq';
+import { MAINTENANCE_JOB_NAMES, OTP_JOB_NAMES, QUEUE_NAMES } from '@bedo/contracts';
+import { Queue, UnrecoverableError, Worker } from 'bullmq';
 import type { DbHandle } from '@bedo/db';
 import type { Redis } from 'ioredis';
 import { WORKER_DB } from './database.js';
@@ -40,13 +40,15 @@ export class QueueWorkersService implements OnApplicationBootstrap, OnApplicatio
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    const otpWorker = new Worker(QUEUE_NAMES.otp, (job) => this.otp.process(job.data), {
+    const otpWorker = new Worker(QUEUE_NAMES.otp, (job) => (job.name === OTP_JOB_NAMES.waabekTest ? this.otp.processTest(job.data) : this.otp.process(job.data)), {
       connection: this.connection('bedo-worker-otp'),
       prefix: this.env.QUEUE_PREFIX,
       concurrency: this.env.WORKER_CONCURRENCY,
     });
     otpWorker.on('failed', (job, error) => {
-      if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
+      // Test messages report their result to the Admin Dashboard, which records it; codes are recorded here
+      // once retries are used up, or at once when retrying cannot help (settings not usable).
+      if (job && job.name !== OTP_JOB_NAMES.waabekTest && (job.attemptsMade >= (job.opts.attempts ?? 1) || error instanceof UnrecoverableError)) {
         void this.otp.onFinalFailure(job.data, error).catch(() => undefined);
       }
     });

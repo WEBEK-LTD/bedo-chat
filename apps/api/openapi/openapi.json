@@ -58,6 +58,11 @@
                   "ACCOUNT_BLOCKED",
                   "USERNAME_TAKEN",
                   "CSRF_REJECTED",
+                  "SETUP_UNAVAILABLE",
+                  "SETUP_TOKEN_INVALID",
+                  "RECOVERY_UNAVAILABLE",
+                  "RECOVERY_TOKEN_INVALID",
+                  "RECOVERY_TOKEN_USED",
                   "CANNOT_MESSAGE",
                   "USER_BLOCKED",
                   "LIMIT_REACHED"
@@ -1043,7 +1048,8 @@
           "status": {
             "type": "string",
             "enum": [
-              "totp_required"
+              "totp_required",
+              "totp_setup_required"
             ]
           },
           "pendingToken": {
@@ -1102,6 +1108,167 @@
         },
         "required": [
           "admin"
+        ]
+      },
+      "AdminTotpSetupBody": {
+        "type": "object",
+        "properties": {
+          "pendingToken": {
+            "type": "string",
+            "minLength": 10,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "pendingToken"
+        ]
+      },
+      "AdminTotpSetupResponse": {
+        "type": "object",
+        "properties": {
+          "otpauthUri": {
+            "type": "string"
+          },
+          "setupKey": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "otpauthUri",
+          "setupKey",
+          "issuer",
+          "accountName"
+        ]
+      },
+      "AdminBootstrapStatusResponse": {
+        "type": "object",
+        "properties": {
+          "setupOpen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "setupOpen"
+        ]
+      },
+      "AdminBootstrapWaabekKeyBody": {
+        "type": "object",
+        "properties": {
+          "setupToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          },
+          "apiKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^[\\x21-\\x7e]+$"
+          }
+        },
+        "required": [
+          "setupToken",
+          "apiKey"
+        ]
+      },
+      "AdminBootstrapTestBody": {
+        "type": "object",
+        "properties": {
+          "setupToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "setupToken"
+        ]
+      },
+      "WaabekTestResponse": {
+        "type": "object",
+        "properties": {
+          "delivered": {
+            "type": "boolean"
+          },
+          "sentTo": {
+            "type": "string"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "not_configured",
+              "key_unreadable",
+              "rejected",
+              "unreachable",
+              "no_answer",
+              null
+            ]
+          },
+          "httpStatus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "delivered",
+          "sentTo",
+          "reason",
+          "httpStatus"
+        ]
+      },
+      "OtpRecoveryStatusResponse": {
+        "type": "object",
+        "properties": {
+          "recoveryOpen": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recoveryOpen"
+        ]
+      },
+      "OtpRecoveryWaabekKeyBody": {
+        "type": "object",
+        "properties": {
+          "recoveryToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          },
+          "apiKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^[\\x21-\\x7e]+$"
+          }
+        },
+        "required": [
+          "recoveryToken",
+          "apiKey"
+        ]
+      },
+      "OtpRecoveryTestBody": {
+        "type": "object",
+        "properties": {
+          "recoveryToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "recoveryToken"
         ]
       },
       "PhoneListResponse": {
@@ -1599,6 +1766,104 @@
         },
         "required": [
           "reset"
+        ]
+      },
+      "OtpSettingsResponse": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "waabek"
+            ]
+          },
+          "apiKeyConfigured": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedBy": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ]
+          },
+          "updatedVia": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "initial_setup",
+              "admin_dashboard",
+              "owner_recovery",
+              null
+            ]
+          }
+        },
+        "required": [
+          "provider",
+          "apiKeyConfigured",
+          "version",
+          "updatedAt",
+          "updatedBy",
+          "updatedVia"
+        ]
+      },
+      "OtpSettingsReplaceKeyBody": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "pattern": "^[\\x21-\\x7e]+$"
+          },
+          "totpCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "apiKey",
+          "totpCode"
+        ]
+      },
+      "OtpSettingsReplaceKeyResponse": {
+        "type": "object",
+        "properties": {
+          "saved": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "saved",
+          "version"
         ]
       },
       "UserSearchResponse": {
@@ -4840,6 +5105,378 @@
         }
       }
     },
+    "/v1/admin/auth/totp/setup": {
+      "post": {
+        "operationId": "adminSetupTotp",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "First sign-in of an account created by SQL: generate the authenticator secret (Phase 3.1)",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminTotpSetupBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTotpSetupResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/bootstrap": {
+      "get": {
+        "operationId": "adminBootstrapStatus",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Whether the one-time initial setup is open",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminBootstrapStatusResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/bootstrap/waabek-key": {
+      "post": {
+        "operationId": "adminBootstrapSetWaabekKey",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Initial setup: store the first Waabek API key (setup token required)",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBootstrapWaabekKeyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/bootstrap/test-message": {
+      "post": {
+        "operationId": "adminBootstrapTestMessage",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Initial setup: send a WhatsApp test message to the Super Admin (setup token required)",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminBootstrapTestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaabekTestResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/otp-recovery": {
+      "get": {
+        "operationId": "adminOtpRecoveryStatus",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Whether an owner-opened Waabek key recovery is open",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpRecoveryStatusResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/otp-recovery/waabek-key": {
+      "post": {
+        "operationId": "adminOtpRecoverySetWaabekKey",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Recovery: store a new Waabek API key (recovery token required; signs nobody in)",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRecoveryWaabekKeyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/otp-recovery/test-message": {
+      "post": {
+        "operationId": "adminOtpRecoveryTestMessage",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Recovery: send a WhatsApp test message to the first Super Admin (recovery token required)",
+        "security": [
+          {
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpRecoveryTestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaabekTestResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/admin/session": {
       "get": {
         "operationId": "adminSession",
@@ -5396,6 +6033,156 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TwoStepResetResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/otp": {
+      "get": {
+        "operationId": "adminOtpSettings",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "OTP delivery settings; the Waabek API key is never returned (Super Admin)",
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpSettingsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/otp/waabek-key": {
+      "put": {
+        "operationId": "adminReplaceWaabekKey",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Replace the Waabek API key; needs a current authenticator code (Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OtpSettingsReplaceKeyBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OtpSettingsReplaceKeyResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/otp/test-message": {
+      "post": {
+        "operationId": "adminSendWaabekTest",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Send a WhatsApp test message to your own number (Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaabekTestResponse"
                 }
               }
             }

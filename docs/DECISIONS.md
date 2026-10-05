@@ -38,8 +38,29 @@ source of truth; if the two ever differ, the blueprint wins and this file is cor
 | D-29 (O-23, O-27, O-28) | Phase 3 open decisions | O-23: keep the current neutral design tokens; no new logo, colour system or branding; Material Symbols only; no AI-looking visuals, icons or branding. O-27: no time limit for editing messages or for delete for both sides. O-28: web first; mobile and desktop stay in Phase 12, with no mobile or desktop functionality in Phase 3 | 2026-10-04 |
 | D-30 | Phase 3 parameters (P-16 to P-31) and rate limits | Rate limits: messages 30 per minute per user, edits counted with messages; reports 20 per day per user. P-16 message text 1–4,096 characters. P-17 update log kept 30 days; a device more than 1,000 updates behind re-fetches its chats, 50 messages per page. P-18 heartbeat every 25 s, online expires after 60 s, typing lasts 6 s unless renewed, last seen to the minute. P-19 up to 5 pinned chats; archived chats stay archived when new messages arrive; mute stays in Phase 7. P-20 unread counts, mark as read, mark as unread. P-21 up to 10 folders, names 1–12 characters, chats chosen by hand, no automatic rules. P-22 either participant can pin a message; pins are visible to both. P-23 forward to at most 10 chats at once, "Forwarded from" shows the original sender ("Deleted account" for deleted accounts); multi-select up to 100 messages. P-24 "Share" shares the message text through the device's share sheet where available, otherwise copies it. P-25 starting a private chat: search by name or username, at least 3 characters, not the Phase 8 global search; phone-number matching only when that user's phone-number privacy is Everyone. P-26 "Who can message: Nobody" prevents new chats and new messages, existing history stays readable; a block and Nobody return the same neutral answer "You can't message this user" without revealing which applies; deleted accounts are read-only; suspended and banned users cannot send. P-27 report reasons Spam, Harassment, Inappropriate content, Other, optional text up to 500 characters; reports stored permanently; no admin review screen in Phase 3 (Phase 10). P-28 screenshot intake accepts events from iOS and Android only; the web app never sends them. P-29 only the sender can delete a message for both sides; anyone can delete any message for themselves. P-30 after blocking someone, the blocker cannot send to them until unblocking (the chat shows Unblock); history stays readable. P-31 when a user's last-seen privacy is Nobody, their online status is hidden too | 2026-10-04 |
 | D-31 | Content-Security-Policy (Phase 3) | A strict Content-Security-Policy for the student app and the Admin Dashboard before user messages go live. Because both share one origin, it allows exactly the resources, API and WebSocket connections the current architecture needs and blocks every other source; it is not weakened to make tests pass | 2026-10-04 |
+| D-32 | Admin Dashboard-managed Waabek API key (Phase 3.1) | The Waabek API key is an Admin Dashboard-managed setting. It must be encrypted at rest with AES-256-GCM. It must never be returned to the browser in plaintext. It must never appear in logs, audit metadata, error messages, or API responses. Only authorized Super Admins can replace it. Changes must be audited without storing the key itself. The encryption key is `SETTINGS_ENCRYPTION_KEY`, an infrastructure-only secret on the API and the Worker: a 32-byte cryptographic key, never stored in the database, never exposed to the browser, never configurable from the Admin Dashboard, required in production, and the services fail closed if it is missing or invalid. Supersedes the rule in D-05 and D-22 that the key lives only in the server environment variable `WAABEK_API_KEY`, which is no longer used; the rest of D-05 and D-22 (Waabek called only from the backend, never in source, git, ZIPs, client bundles, logs or test fixtures; the test code sender only in automated tests) is unchanged | 2026-10-04 |
+| D-33 | First authenticator setup and owner-only Waabek recovery (Phase 3.1) | First authenticator setup: approved as implemented. After a successful WhatsApp code, an admin account created by SQL sets up the authenticator: server-generated secret, encrypted server-side, QR code / setup key shown only during setup, a 6-digit code must confirm it, and only then is the admin signed in; the setup is audited; no additional setup token at this stage, no bypass, no hard-coded code. Waabek failure recovery: an owner-only SQL function `app.open_otp_settings_recovery()` issues a one-time recovery token (only its SHA-256 stored, 30 minutes, 5 wrong attempts lock it) for when the Waabek key no longer works and no admin can reach the Admin Dashboard. With the token, `/admin/login` can only save a new Waabek API key and send a test message: the API encrypts the key with `SETTINGS_ENCRYPTION_KEY` (never in SQL statements), the same settings version the Worker checks is raised, and recovery is recorded in the audit and security history without the key. The runtime role cannot run the function; it never returns a key, never creates a session or signs anyone in, never changes admin roles, authenticator secrets, sessions or authentication state, and never reopens the initial admin bootstrap (it is only available after the bootstrap has closed) | 2026-10-05 |
 | R-01 | Standing rules | No feature outside the approved specification. No AI features, AI branding, AI artwork, AI-generated icons or illustrations. Google Material Symbols only. User app limited to Login → Chat Interface. Admin Dashboard separate. Phase work starts only after its decisions are recorded | 2026-10-04 |
 | R-02 | Phase 1 frozen | Phase 1.2 is approved and complete after a successful real Netlify deployment. No further Phase 1 changes or refactoring; later phases only extend it where their work requires, and every such extension is listed in that phase's report | 2026-10-04 |
+
+## Phase 3.1 scope (approved 2026-10-04)
+
+A separate delivery before the rest of Phase 3 (messaging). Only:
+
+- the initial Super Admin created by SQL with no authenticator secret;
+- a one-time bootstrap setup token;
+- the initial Waabek configuration;
+- encrypted Waabek API key storage (D-32);
+- the Admin Dashboard OTP / Waabek settings;
+- first-time authenticator (TOTP) setup after the WhatsApp code;
+- permanent closure of the bootstrap;
+- owner-only SQL recovery of the Waabek key when no admin can reach the dashboard (D-33);
+- the required audit and security history, tests and documentation.
+
+No unrelated operational settings. Admin accounts stay SQL-created; no admin-create command, Docker command or
+environment variable is required to create an admin or to set the Waabek key. WhatsApp OTP and the authenticator
+requirement are not weakened, bypassed or replaced by a universal or hard-coded code. D-28 and the one-site Netlify
+architecture are unchanged. Phase 3 messaging continues only after Phase 3.1 is approved.
 
 ## Phase 1 implementation choices
 
@@ -95,5 +116,5 @@ Technical choices inside the approved decisions. None changes requested behaviou
 
 ## Open decisions
 
-21 decisions remain open in the blueprint; none blocked Phase 2. The next ones are needed for Phase 3:
-O-23 (brand), O-27 (edit and delete time limits) and O-28 (platform build order).
+O-23, O-27 and O-28 were decided for Phase 3 (D-29). The other open decisions in the blueprint are not needed
+for Phase 3 or Phase 3.1.

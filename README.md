@@ -82,8 +82,8 @@ in managed Redis. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYM
 | `pnpm check:bundles` | After `pnpm build`: fails if server-only variable names or values appear in any file served to browsers (see below) |
 | `pnpm verify` | lint + typecheck + test + build + both checks |
 | `pnpm e2e` | Builds API, web and admin for a local API on port 4100 and runs the browser tests (needs `TEST_DATABASE_URL`, `REDIS_URL` and Chromium; set `E2E_CHROMIUM` to its path if it is not `/opt/pw-browsers/chromium`) |
-| `pnpm --filter @bedo/api admin:create` | Creates an admin account (see below) |
-| `pnpm --filter @bedo/worker test:live` | Sends one real WhatsApp code through Waabek (opt-in, see below) |
+| `pnpm --filter @bedo/api admin:create` | Phase 2 tool that creates an admin with an authenticator secret. Optional and not needed: admins are created by SQL (see below) |
+| `pnpm --filter @bedo/worker test:live` | Sends one real WhatsApp code through Waabek with a key from your shell (opt-in developer check, see below) |
 
 Integration tests need a Postgres role that may create databases and roles (the Docker Compose
 `postgres` user can) and a Redis instance. The database tests create and drop their own temporary
@@ -103,7 +103,8 @@ variable names (values are never printed). Templates: `apps/api/.env.example`,
 `apps/worker/.env.example`, `packages/db/.env.example`, `apps/web/.env.example`, `apps/admin/.env.example`.
 
 Server-only variables (`DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY`, `ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `EDGE_SECRET`) must never be placed
+`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SETTINGS_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`,
+`EDGE_SECRET`) must never be placed
 in a web or admin app (spec §1: the Waabek key is never exposed). Every server variable must be classified as
 secret or non-secret in `packages/config` — a test fails otherwise.
 
@@ -158,33 +159,34 @@ Docker Compose superuser may be used for convenience.
 
 ## Accounts (Phase 2)
 
-**Secrets.** The API needs `ACCESS_TOKEN_SECRET`, `OTP_HMAC_SECRET` and `ADMIN_TOTP_KEY`; the worker needs
-`WAABEK_API_KEY`. Generate each with `openssl rand -base64 32` and keep them only in the host's secret
+**Secrets.** The API needs `ACCESS_TOKEN_SECRET`, `OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY` and
+`SETTINGS_ENCRYPTION_KEY`; the worker needs the same `SETTINGS_ENCRYPTION_KEY` (D-32). Generate each with
+`openssl rand -base64 32` and keep them only in the host's secret
 settings or in local `.env` files (ignored by git). Profile pictures need `SUPABASE_URL` and
 `SUPABASE_SERVICE_ROLE_KEY`; notifications need a VAPID key pair (`npx web-push generate-vapid-keys`): the
 public key goes to both API and worker, the private key and `VAPID_SUBJECT` to the worker only.
 
-**Verification codes** always go through Waabek in development, testing and production (D-22). The worker
-refuses to start without `WAABEK_API_KEY`. The test code sender (`OTP_DELIVERY=test-capture`) exists only
-for automated tests: configuration rejects it unless `NODE_ENV=test`. To check the key and the WhatsApp
-delivery alone, send one real code to a test phone:
+**Verification codes** always go through Waabek in development, testing and production (D-22). The Waabek
+API key is an Admin Dashboard setting (D-32): a Super Admin saves it under *OTP / WhatsApp*, it is stored
+encrypted with `SETTINGS_ENCRYPTION_KEY` (AES-256-GCM), and the worker reads it from the database before every
+message, so a change applies to the next message on every worker without a restart. It is never an
+environment variable: the worker refuses to start if `WAABEK_API_KEY` is set. The test code sender
+(`OTP_DELIVERY=test-capture`) exists only for automated tests: configuration rejects it unless `NODE_ENV=test`.
+The dashboard's **Send test message** checks the saved key. A developer can also check a key directly from a
+shell (the key is not stored anywhere by this):
 
 ```bash
-WAABEK_API_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/worker test:live
+WAABEK_LIVE_TEST_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/worker test:live
 ```
 
-**First admin.** Admin accounts are created from the command line until admin management arrives in Phase 10
-(P-12). Run it with the table-owner `DATABASE_URL` (as for migrations) and the API's `ADMIN_TOTP_KEY`:
-
-```bash
-pnpm --filter @bedo/api build
-DATABASE_URL=<owner connection> ADMIN_TOTP_KEY=<same as API> \
-  pnpm --filter @bedo/api admin:create --phone +2010XXXXXXXX --name "Academy Admin" --role super_admin
-```
-
-It prints an authenticator setup link and secret **once**; add it to the admin's authenticator app
-(Google Authenticator, Microsoft Authenticator, 1Password, ...). Roles: `super_admin` (changes) and
-`moderator` (read-only).
+**First admin (Phase 3.1).** Admin accounts are created by SQL, without an authenticator secret; each admin
+sets up the authenticator app at the first sign-in, after the WhatsApp code. For the very first Super Admin the
+owner also opens a one-time initial setup by SQL (`select * from app.open_admin_bootstrap();`), whose setup
+token lets `/admin/login` save the first Waabek key; it closes for good when that Super Admin confirms the
+authenticator. Exact steps: `docs/DEPLOYMENT.md`, section 4a. If the Waabek key stops working while no admin
+can sign in, the owner runs `select * from app.open_otp_settings_recovery();` for a one-time recovery token that
+lets `/admin/login` save a new key only (D-33, section 4b). Roles: `super_admin` (changes) and `moderator`
+(read-only).
 
 **One public domain (D-25).** In production everything is served from `https://bedochat.com`: the student
 chat at `/` and `/login`, the Admin Dashboard at `/admin` and `/admin/login`, the API at `/api`. Cloudflare

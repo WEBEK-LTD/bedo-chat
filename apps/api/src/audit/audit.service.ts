@@ -173,6 +173,33 @@ export class AuditService {
     return Boolean(removed);
   }
 
+  /** An action taken by the system on behalf of no signed-in admin (initial setup, Phase 3.1). */
+  async system(
+    db: Executor,
+    input: {
+      action: string;
+      targetType?: string | null;
+      targetId?: string | null;
+      ip?: string | null;
+      userAgent?: string | null;
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await db
+      .insertInto('app.audit_log')
+      .values({
+        actor_type: 'system',
+        actor_id: null,
+        action: input.action,
+        target_type: input.targetType ?? null,
+        target_id: input.targetId ?? null,
+        ip: input.ip ?? null,
+        user_agent: input.userAgent ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .execute();
+  }
+
   async admin(
     db: Executor,
     input: {

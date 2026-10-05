@@ -19,6 +19,7 @@ export function testEnv(overrides: Record<string, string> = {}): ApiEnv {
     ACCESS_TOKEN_SECRET: 'test-access-token-secret-0123456789abcdef',
     OTP_HMAC_SECRET: 'test-otp-hmac-secret-0123456789abcdef-xyz',
     ADMIN_TOTP_KEY: Buffer.alloc(32, 9).toString('base64'),
+    SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 10).toString('base64'),
     ...overrides,
   });
 }

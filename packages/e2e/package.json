@@ -13,10 +13,11 @@
   "devDependencies": {
     "@bedo/contracts": "workspace:*",
     "@bedo/db": "workspace:*",
+    "@bedo/server-crypto": "workspace:*",
+    "@types/pg": "^8.23.1",
     "bullmq": "^5.60.0 || ^6.0.0",
     "ioredis": "^5.8.0 || ^6.0.0",
     "pg": "^8.23.0",
-    "@types/pg": "^8.23.1",
     "playwright-core": "1.63.0"
   }
 }

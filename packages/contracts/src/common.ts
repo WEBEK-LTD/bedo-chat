@@ -21,6 +21,13 @@ export const ERROR_CODES = [
   'ACCOUNT_BLOCKED',
   'USERNAME_TAKEN',
   'CSRF_REJECTED',
+  // Phase 3.1
+  'SETUP_UNAVAILABLE',
+  'SETUP_TOKEN_INVALID',
+  // D-33
+  'RECOVERY_UNAVAILABLE',
+  'RECOVERY_TOKEN_INVALID',
+  'RECOVERY_TOKEN_USED',
   // Phase 3
   /** P-26: the same answer for a block by the other user and "Who can message: Nobody". */
   'CANNOT_MESSAGE',

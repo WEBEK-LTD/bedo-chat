@@ -16,12 +16,13 @@ const validApiEnv = {
   ACCESS_TOKEN_SECRET: 'a'.repeat(40),
   OTP_HMAC_SECRET: 'b'.repeat(40),
   ADMIN_TOTP_KEY: Buffer.alloc(32, 7).toString('base64'),
+  SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
 };
 
 const validWorkerEnv = {
   REDIS_URL: 'rediss://cache.example.com:6380',
   DATABASE_URL: 'postgresql://user:pw@localhost:5432/bedo',
-  WAABEK_API_KEY: 'test-key-not-real',
+  SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
 };
 
 describe('apiEnvSchema', () => {
@@ -68,6 +69,33 @@ describe('apiEnvSchema', () => {
   it('rejects short secrets and a malformed TOTP key', () => {
     expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ACCESS_TOKEN_SECRET: 'short' })).toThrow(/ACCESS_TOKEN_SECRET/);
     expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ADMIN_TOTP_KEY: Buffer.from('too short').toString('base64') })).toThrow(/ADMIN_TOTP_KEY/);
+  });
+
+  it('requires SETTINGS_ENCRYPTION_KEY: 32 bytes, base64, different from ADMIN_TOTP_KEY (D-32)', () => {
+    const { SETTINGS_ENCRYPTION_KEY: _omit, ...withoutKey } = validApiEnv;
+    for (const NODE_ENV of ['production', 'development', 'test']) {
+      expect(() => loadEnv(apiEnvSchema, { ...withoutKey, NODE_ENV })).toThrow(/SETTINGS_ENCRYPTION_KEY: is required/);
+    }
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SETTINGS_ENCRYPTION_KEY: Buffer.alloc(16, 1).toString('base64') })).toThrow(
+      /SETTINGS_ENCRYPTION_KEY: must be 32 random bytes/,
+    );
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SETTINGS_ENCRYPTION_KEY: 'not base64 at all!' })).toThrow(/SETTINGS_ENCRYPTION_KEY/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SETTINGS_ENCRYPTION_KEY: validApiEnv.ADMIN_TOTP_KEY })).toThrow(
+      /SETTINGS_ENCRYPTION_KEY: must be a different key from ADMIN_TOTP_KEY/,
+    );
+    // The same key bytes without padding, or in base64url, are the same key.
+    const samePadless = validApiEnv.ADMIN_TOTP_KEY.replace(/=+$/, '');
+    const sameUrlSafe = Buffer.from(validApiEnv.ADMIN_TOTP_KEY, 'base64').toString('base64url');
+    for (const SETTINGS_ENCRYPTION_KEY of [samePadless, sameUrlSafe]) {
+      expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SETTINGS_ENCRYPTION_KEY })).toThrow(/must be a different key from ADMIN_TOTP_KEY/);
+    }
+    // The value is never echoed in the error.
+    const tooShort = Buffer.from('short-key-value-1234').toString('base64');
+    try {
+      loadEnv(apiEnvSchema, { ...validApiEnv, SETTINGS_ENCRYPTION_KEY: tooShort });
+    } catch (error) {
+      expect(String(error)).not.toContain(tooShort);
+    }
   });
 
   it('accepts one shared origin for both apps with explicit web origins and an /api prefix (D-25)', () => {
@@ -135,9 +163,28 @@ describe('workerEnvSchema', () => {
     expect(env.WAABEK_API_URL).toBe('https://waabek.com/api/v1/send');
   });
 
-  it('requires the Waabek key when delivering real codes', () => {
-    const { WAABEK_API_KEY: _omit, ...withoutKey } = validWorkerEnv;
-    expect(() => loadEnv(workerEnvSchema, withoutKey)).toThrow(/WAABEK_API_KEY/);
+  it('requires SETTINGS_ENCRYPTION_KEY, which decrypts the Dashboard-managed Waabek key (D-32)', () => {
+    const { SETTINGS_ENCRYPTION_KEY: _omit, ...withoutKey } = validWorkerEnv;
+    for (const OTP_DELIVERY of ['waabek', 'test-capture']) {
+      expect(() => loadEnv(workerEnvSchema, { ...withoutKey, OTP_DELIVERY, NODE_ENV: 'test' })).toThrow(/SETTINGS_ENCRYPTION_KEY: is required/);
+    }
+    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, SETTINGS_ENCRYPTION_KEY: Buffer.from('too-short').toString('base64') })).toThrow(
+      /SETTINGS_ENCRYPTION_KEY/,
+    );
+  });
+
+  it('refuses WAABEK_API_KEY in the environment: the key is set from the Admin Dashboard (D-32)', () => {
+    const value = 'fake-env-key-should-be-refused';
+    let message = '';
+    try {
+      loadEnv(workerEnvSchema, { ...validWorkerEnv, WAABEK_API_KEY: value });
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/WAABEK_API_KEY: is no longer used \(D-32\)/);
+    expect(message).not.toContain(value);
+    // An empty variable is treated as absent.
+    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, WAABEK_API_KEY: '' })).not.toThrow();
   });
 
   it('refuses the test code sender outside NODE_ENV=test', () => {
@@ -155,8 +202,10 @@ describe('workerEnvSchema', () => {
 });
 
 describe('server variable classification', () => {
-  it('includes the Waabek API key as server-only', () => {
+  it('includes the Waabek API key and the settings encryption key as server-only', () => {
+    // WAABEK_API_KEY stays listed so the client-bundle guard keeps looking for its name and any value.
     expect(SERVER_ONLY_ENV_NAMES).toContain('WAABEK_API_KEY');
+    expect(SERVER_ONLY_ENV_NAMES).toContain('SETTINGS_ENCRYPTION_KEY');
   });
 
   it('classifies every server variable as secret or non-secret, never both', () => {

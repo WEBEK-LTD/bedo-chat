@@ -21,6 +21,7 @@
     "@bedo/config": "workspace:*",
     "@bedo/contracts": "workspace:*",
     "@bedo/db": "workspace:*",
+    "@bedo/server-crypto": "workspace:*",
     "@nestjs/common": "^12.0.0",
     "@nestjs/core": "^12.0.0",
     "bullmq": "^5.60.0 || ^6.0.0",

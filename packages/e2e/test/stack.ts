@@ -208,6 +208,7 @@ function start(command: string, args: string[], cwd: string, env: Record<string,
 export interface Stack {
   ownerUrl: string;
   totpKey: Buffer;
+  settingsKey: Buffer;
   latestCode(phone: string): Promise<string | null>;
   codeCount(phone: string): Promise<number>;
   /** Clears the 60-second resend cooldown so a second device can sign in straight away. */
@@ -227,6 +228,7 @@ export async function startStack(): Promise<Stack> {
   const password = randomBytes(12).toString('hex');
   const prefix = `bedo-e2e-${suffix}`;
   const totpKey = randomBytes(32);
+  const settingsKey = randomBytes(32);
 
   await query(adminUrl, `create database ${dbName}`);
   const ownerUrl = Object.assign(new URL(adminUrl), { pathname: `/${dbName}` }).toString();
@@ -255,6 +257,7 @@ export async function startStack(): Promise<Stack> {
       ACCESS_TOKEN_SECRET: randomBytes(32).toString('base64'),
       OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
       ADMIN_TOTP_KEY: totpKey.toString('base64'),
+      SETTINGS_ENCRYPTION_KEY: settingsKey.toString('base64'),
     }),
     start('node', ['node_modules/next/dist/bin/next', 'start', '-p', String(NEXT_PORT), '-H', '127.0.0.1'], path.join(repoRoot, 'apps/web'), {
       NODE_ENV: 'production',
@@ -298,11 +301,12 @@ export async function startStack(): Promise<Stack> {
   }
 
   const jobsFor = async (phone: string) =>
-    (await otpQueue.getJobs(['waiting', 'delayed', 'active', 'prioritized'])).filter((job) => job?.data.phone === phone);
+    (await otpQueue.getJobs(['waiting', 'delayed', 'active', 'prioritized'])).filter((job) => job?.name === 'send' && job.data.phone === phone);
 
   return {
     ownerUrl,
     totpKey,
+    settingsKey,
     async latestCode(phone) {
       const jobs = (await jobsFor(phone)).sort((a, b) => b.timestamp - a.timestamp);
       return jobs[0]?.data.code ?? null;

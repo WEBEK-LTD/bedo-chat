@@ -27,6 +27,7 @@
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
+        "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "VAPID_PRIVATE_KEY",
         "EDGE_SECRET"
@@ -46,6 +47,7 @@
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
+        "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "VAPID_PRIVATE_KEY",
         "EDGE_SECRET"
@@ -67,6 +69,7 @@
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
+        "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "VAPID_PRIVATE_KEY",
         "EDGE_SECRET"

@@ -1,14 +1,40 @@
 'use client';
 
-import { adminRequestCode, adminSession, adminVerifyCode, adminVerifyTotp } from '@bedo/api-client';
+import {
+  adminBootstrapStatus,
+  adminOtpRecoveryStatus,
+  adminRequestCode,
+  adminSession,
+  adminSetupTotp,
+  type AdminTotpSetupResponse,
+  adminVerifyCode,
+  adminVerifyTotp,
+} from '@bedo/api-client';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
 import { ApiError, errorMessage } from '../_lib/api';
+import { InitialSetup } from './initial-setup';
+import { OtpRecovery } from './otp-recovery';
+import { QrCode } from './qr-code';
 import { Button, FormError, TextField } from './ui';
 
-type Step = { kind: 'checking' } | { kind: 'phone' } | { kind: 'code'; phone: string } | { kind: 'totp'; pendingToken: string };
+type Step =
+  | { kind: 'checking' }
+  | { kind: 'phone' }
+  | { kind: 'code'; phone: string }
+  | { kind: 'totp'; pendingToken: string }
+  | { kind: 'setup'; pendingToken: string; setup: AdminTotpSetupResponse | null };
 
-/** Admin sign-in (D-19, P-13): phone code by WhatsApp, then the authenticator-app code. */
+/** The setup key in groups of four, as authenticator apps show it. */
+function groupKey(key: string): string {
+  return key.replace(/(.{4})(?=.)/g, '$1 ');
+}
+
+/**
+ * Admin sign-in (D-19, P-13): phone code by WhatsApp, then the authenticator-app code. An account created by
+ * SQL sets up its authenticator app here at its first sign-in (Phase 3.1); while the owner has opened the
+ * initial setup, the page also offers it (first Waabek API key).
+ */
 export function AdminLogin() {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: 'checking' });
@@ -17,12 +43,40 @@ export function AdminLogin() {
   const [totp, setTotp] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   useEffect(() => {
     adminSession()
       .then(() => router.replace('/'))
-      .catch(() => setStep({ kind: 'phone' }));
+      .catch(() => {
+        setStep({ kind: 'phone' });
+        adminBootstrapStatus()
+          .then((status) => setSetupOpen(status.setupOpen))
+          .catch(() => setSetupOpen(false));
+        adminOtpRecoveryStatus()
+          .then((status) => setRecoveryOpen(status.recoveryOpen))
+          .catch(() => setRecoveryOpen(false));
+      });
   }, [router]);
+
+  const setupPending = step.kind === 'setup' && step.setup === null ? step.pendingToken : null;
+  useEffect(() => {
+    if (!setupPending) return;
+    let cancelled = false;
+    adminSetupTotp({ pendingToken: setupPending })
+      .then((setup) => {
+        if (!cancelled) setStep({ kind: 'setup', pendingToken: setupPending, setup });
+      })
+      .catch((caught: unknown) => {
+        if (cancelled) return;
+        setError(errorMessage(caught));
+        setStep({ kind: 'phone' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [setupPending]);
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -54,13 +108,17 @@ export function AdminLogin() {
     void run(async () => {
       const response = await adminVerifyCode({ phone: step.phone, code });
       setTotp('');
-      setStep({ kind: 'totp', pendingToken: response.pendingToken });
+      setStep(
+        response.status === 'totp_setup_required'
+          ? { kind: 'setup', pendingToken: response.pendingToken, setup: null }
+          : { kind: 'totp', pendingToken: response.pendingToken },
+      );
     });
   };
 
   const submitTotp = (event: FormEvent) => {
     event.preventDefault();
-    if (step.kind !== 'totp') return;
+    if (step.kind !== 'totp' && step.kind !== 'setup') return;
     void run(async () => {
       await adminVerifyTotp({ pendingToken: step.pendingToken, code: totp });
       router.replace('/');
@@ -80,9 +138,52 @@ export function AdminLogin() {
             ? 'Sign in with your admin phone number.'
             : step.kind === 'code'
               ? `If ${step.phone} belongs to an admin account, a code was sent to it by WhatsApp.`
-              : 'Enter the 6-digit code from your authenticator app.'}
+              : step.kind === 'setup'
+                ? 'Set up your authenticator app. It is required for every admin sign-in.'
+                : 'Enter the 6-digit code from your authenticator app.'}
         </p>
       </header>
+
+      {step.kind === 'phone' && setupOpen && <InitialSetup onClosed={() => setSetupOpen(false)} />}
+
+      {step.kind === 'phone' && recoveryOpen && <OtpRecovery onClosed={() => setRecoveryOpen(false)} />}
+
+      {step.kind === 'setup' && step.setup === null && <p className="text-sm text-ink-secondary">Preparing your authenticator setup…</p>}
+
+      {step.kind === 'setup' && step.setup !== null && (
+        <form className="flex flex-col gap-4" onSubmit={submitTotp} noValidate>
+          <ol className="flex list-decimal flex-col gap-2 pl-5 text-sm">
+            <li>Open an authenticator app on your phone (for example Google Authenticator, Microsoft Authenticator or 1Password).</li>
+            <li>Scan this QR code, or enter the setup key by hand.</li>
+            <li>Enter the 6-digit code the app shows to confirm.</li>
+          </ol>
+          <div className="flex justify-center rounded-md bg-surface-subtle p-4">
+            <QrCode value={step.setup.otpauthUri} label={`QR code for ${step.setup.issuer} (${step.setup.accountName})`} />
+          </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium">Setup key</span>
+            <code data-testid="totp-setup-key" className="break-all rounded-sm bg-surface-subtle px-3 py-2 font-mono">
+              {groupKey(step.setup.setupKey)}
+            </code>
+            <span className="text-ink-secondary">
+              Account: {step.setup.issuer} · {step.setup.accountName}. Time-based, 6 digits. Keep this key private.
+            </span>
+          </div>
+          <TextField
+            id="admin-totp-setup"
+            label="Code from the authenticator app"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={totp}
+            onChange={(event) => setTotp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+          />
+          <FormError message={error} />
+          <Button type="submit" busy={busy} disabled={totp.length !== 6}>
+            Confirm and sign in
+          </Button>
+        </form>
+      )}
 
       {step.kind === 'phone' && (
         <form className="flex flex-col gap-4" onSubmit={submitPhone} noValidate>

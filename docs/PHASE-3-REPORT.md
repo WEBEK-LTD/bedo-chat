@@ -1,8 +1,9 @@
 # Phase 3 report — Messaging core
 
 Phase 3 makes private one-to-one messaging work end to end in the web app (blueprint steps 3.1–3.10,
-decisions D-29 to D-31, parameters P-16 to P-31). It was built and verified from a fresh unpack of the
-delivered ZIP on 2026-10-04. Everything below ran locally against real Postgres 16 and Redis 7; the real
+decisions D-29 to D-31, parameters P-16 to P-31). It is built on top of the approved and frozen Phase 3.1
+(D-32, D-33), which it does not change, and was verified from a fresh unpack of the delivered ZIP on
+2026-10-05. Everything below ran locally against real Postgres 16 and Redis 7; the real
 Supabase, Redis, API host, Cloudflare and Netlify have **not** been exercised (see "Not verified here").
 Phase 4 has not been started.
 
@@ -73,24 +74,36 @@ Zod is told not to probe for `eval` in browsers. No `unsafe-inline`, no `unsafe-
 `next dev`), no wildcard. Browser tests run every Phase 2 and Phase 3 flow under these policies and record
 every `securitypolicyviolation` event: none.
 
+## Phase 3 on top of Phase 3.1
+
+Phase 3 was first built on Phase 2.3.2. After Phase 3.1 was approved and frozen, the same Phase 3 change was
+applied on top of it. Shared files were merged by keeping both sides (error codes, OpenAPI routes, the worker
+integration test, the deployment guide); the OpenAPI document and the API client were regenerated. No
+Phase 3.1 file changed: the migration `20261004135000_phase3_1_admin_bootstrap.sql`, the admin sign-in, setup,
+recovery and OTP-settings screens, the API admin services, the worker's Waabek key handling and
+`@bedo/server-crypto` are byte-identical to Phase 3.1. The Phase 3 migration `20261004140000_phase3_messaging.sql`
+runs after it and references none of its tables. A new browser test (`admin-csp.e2e.test.ts`) runs the Phase 3.1
+admin screens (initial setup, authenticator setup with the QR code, OTP / WhatsApp settings, owner recovery)
+under the D-31 admin Content-Security-Policy: no violation.
+
 ## Verification from a fresh unpack of the ZIP
 
-Run by `verify.sh` from a fresh unpack, in this order (all on 2026-10-04):
+Run by `verify.sh` from a fresh unpack, in this order (all on 2026-10-05):
 
 | Step | Result |
 | --- | --- |
 | ZIP contents: no `.env`, build output or `node_modules` | Pass |
 | Secret scan (gitleaks) of the unpacked source | Pass, no leaks |
 | Clean install, frozen lockfile, install scripts blocked | Pass |
-| Lint, typecheck | Pass (15 of 15 tasks each) |
-| Unit tests | Pass: 105 tests (api 26, worker 9, config 17, db 12, contracts 5, ui 4, root scripts 32) |
+| Lint, typecheck | Pass (17 of 17 tasks each) |
+| Unit tests | Pass: 121 tests (api 28, worker 15, config 19, db 12, contracts 5, ui 4, server-crypto 6, root scripts 32) |
 | Production build, web route check (`/`, `/login` only) | Pass; routes `/` and `/login` only (source and build) |
 | Client bundle check with sentinel values for every server secret | Pass: no server-only name or value in the web or admin client files |
 | Generated API client matches the OpenAPI document | Pass |
-| Migrations on an empty database (all three earlier ones plus Phase 3), re-run no-op, status | Pass: 4 applied (`20261004000000_baseline`, `20261004120000_phase2_accounts`, `20261004130000_d24_phone_list_removal`, `20261004140000_phase3_messaging`); re-run applies nothing; status 4 applied, 0 pending |
-| Integration tests (Postgres + Redis, runtime role) | Pass: 140 tests (api 96, db 36, worker 8) |
+| Migrations on an empty database (all earlier ones plus Phase 3), re-run no-op, status | Pass: 5 applied in order (`20261004000000_baseline`, `20261004120000_phase2_accounts`, `20261004130000_d24_phone_list_removal`, `20261004135000_phase3_1_admin_bootstrap`, `20261004140000_phase3_messaging`); re-run applies nothing; status 5 applied, 0 pending |
+| Integration tests (Postgres + Redis, runtime role) | Pass: 176 tests (api 127, db 36, worker 13) |
 | Dependency audit (`pnpm audit`) | Pass: no known vulnerabilities |
-| Browser end-to-end tests (Chromium, local edge + one-site stand-in) | Pass: 22 tests (Phase 2: 16, Phase 3: 6), no CSP violation |
+| Browser end-to-end tests (Chromium, local edge + one-site stand-in) | Pass: 28 tests (Phase 2: 16, Phase 3.1: 5, Phase 3: 6 messaging + 1 admin CSP), no CSP violation |
 | Netlify build, Package directory `apps/web` (fresh unpack, `netlify build --offline`) + D-26 and D-31 artifact checks | Pass: build completes, the CSP proxy is bundled as an edge function whose route excludes `/admin`, `/api`, static files and `/sw.js`; the deploy config sends the admin policy for `/admin` and `/admin/*`; no admin page holds an inline script; every D-26 check passes |
 | Netlify build, Package directory `apps/admin` (D-28) + D-26 and D-31 artifact checks; same static files as from `apps/web` | Pass: the same checks; the same static files as from `apps/web` (moved admin scripts carry the build id in their names, so they are compared by count) |
 
@@ -98,13 +111,13 @@ Run by `verify.sh` from a fresh unpack, in this order (all on 2026-10-04):
 
 | Suite | Tests |
 | --- | --- |
-| API unit (`apps/api`) | 26 |
-| API integration: auth 26, admin 14, security 11, single domain 6, photo 5, ready 3, **messaging 23**, **realtime 8** | 96 |
-| Worker unit / integration (**+2 Phase 3 maintenance tests**) | 9 / 8 |
+| API unit (`apps/api`) | 28 |
+| API integration: auth 26, admin 14, security 11, single domain 6, photo 5, ready 3, Phase 3.1 bootstrap and recovery 31, **messaging 23**, **realtime 8** | 127 |
+| Worker unit / integration (**+2 Phase 3 maintenance tests**) | 15 / 13 |
 | Database unit / integration | 12 / 36 |
-| Config, contracts, UI | 17, 5, 4 |
+| Config, contracts, UI, server-crypto | 19, 5, 4, 6 |
 | Root scripts (`scripts/*.test.mjs`, **CSP 6 new**) | 32 |
-| Browser (Chromium): Phase 2 accounts and single domain 16, **Phase 3 messaging 6** | 22 |
+| Browser (Chromium): Phase 2 16, Phase 3.1 5, **Phase 3 messaging 6**, **admin screens under the CSP 1** | 28 |
 
 New in Phase 3:
 
@@ -129,7 +142,13 @@ New in Phase 3:
 ## Independent review
 
 A separate reviewer examined Phase 3 in three rounds (the code, then each set of fixes), with its own probes
-against real Postgres and Redis.
+against real Postgres and Redis, and a fourth round after Phase 3 was placed on top of Phase 3.1: the patch of
+every shared file is identical to the reviewed Phase 3, both sides' error codes, routes, audit writers, worker
+jobs and database types are present, the admin CSP is compatible with the Phase 3.1 screens, the realtime
+gateway is separate from admin authentication, and nothing weakens Phase 3.1, D-32, D-33 or Phase 2. No
+Critical, High, Medium or Low finding. One note for later phases: the Phase 3.1 guard triggers treat the
+table owner's role as "the owner", so a future security-definer function owned by it that writes those tables
+would pass them; Phase 3's only security-definer function (`app.ensure_message_partitions`) touches none of them.
 
 | Finding | Severity | Status |
 | --- | --- | --- |
@@ -151,12 +170,13 @@ proxy matcher and the Netlify edge function, scope (no Phase 4 or excluded featu
 
 ## Security and secret handling
 
-- No new secret. New public build variable: `NEXT_PUBLIC_STORAGE_ORIGIN`. The Waabek key and every server
+- No new secret (Phase 3.1's `SETTINGS_ENCRYPTION_KEY` is unchanged). New public build variable: `NEXT_PUBLIC_STORAGE_ORIGIN`. The Waabek key and every server
   secret remain absent from client bundles (sentinel check) and from the repository (gitleaks).
 - The realtime token travels in the first WebSocket message, never in a URL or log.
-- gitleaks: the unpacked ZIP has no findings. The repository history (not part of the ZIP) shows only two
-  fixed test values from earlier phases (`scripts/cloudflare-worker.test.mjs`, `packages/config/src/index.test.ts`),
-  which are not secrets; Phase 3 tests generate their edge secret at random.
+- gitleaks: the unpacked ZIP and the Phase 3.1 and Phase 3 commits have no findings. The older repository
+  history (not part of the ZIP) shows only two fixed test values from earlier phases
+  (`scripts/cloudflare-worker.test.mjs`, `packages/config/src/index.test.ts`), which are not secrets; Phase 3
+  tests generate their edge secret at random.
 - The local cache (IndexedDB) holds one account's recent chats and messages only and is erased whenever the
   session ends (sign-out, session ended, account blocked or deleted) and when another account signs in.
 

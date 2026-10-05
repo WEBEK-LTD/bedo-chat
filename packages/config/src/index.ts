@@ -12,6 +12,7 @@ export const SERVER_ONLY_ENV_NAMES = [
   'ACCESS_TOKEN_SECRET',
   'OTP_HMAC_SECRET',
   'ADMIN_TOTP_KEY',
+  'SETTINGS_ENCRYPTION_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
   'VAPID_PRIVATE_KEY',
   'EDGE_SECRET',
@@ -162,12 +163,22 @@ export const apiEnvSchema = z.object({
   OTP_HMAC_SECRET: serverSecret,
   /** Encrypts admin authenticator-app secrets at rest (D-19). */
   ADMIN_TOTP_KEY: aes256Key,
+  /**
+   * Encrypts Admin Dashboard-managed secrets at rest, the Waabek API key (D-32). Infrastructure only:
+   * never stored in the database, never sent to a browser, never set from the Admin Dashboard. Must
+   * differ from ADMIN_TOTP_KEY. Required: the API does not start without a valid key.
+   */
+  SETTINGS_ENCRYPTION_KEY: aes256Key,
   /** Supabase project URL and service key for private profile pictures (P-15). Both or neither. */
   SUPABASE_URL: optionalString.pipe(z.url({ protocol: /^https?$/ }).optional()),
   SUPABASE_SERVICE_ROLE_KEY: optionalString,
   /** Public half of the Web Push key pair, handed to browsers (D-21). Optional: push is off without it. */
   VAPID_PUBLIC_KEY: optionalString,
 }).superRefine((env, ctx) => {
+  // Compared as key bytes, so the same key written another way (padding, base64url) is caught too.
+  if (Buffer.from(env.SETTINGS_ENCRYPTION_KEY, 'base64').equals(Buffer.from(env.ADMIN_TOTP_KEY, 'base64'))) {
+    ctx.addIssue({ code: 'custom', path: ['SETTINGS_ENCRYPTION_KEY'], message: 'must be a different key from ADMIN_TOTP_KEY' });
+  }
   if (env.NODE_ENV === 'production' && env.ADMIN_ORIGINS.length === 0) {
     ctx.addIssue({ code: 'custom', path: ['ADMIN_ORIGINS'], message: "is required in production (the Admin Dashboard's origin)" });
   }
@@ -219,6 +230,15 @@ export const workerEnvSchema = z
      */
     OTP_DELIVERY: z.enum(['waabek', 'test-capture']).default('waabek'),
     WAABEK_API_URL: z.url({ protocol: /^https$/ }).default('https://waabek.com/api/v1/send'),
+    /**
+     * Decrypts the Waabek API key, which Super Admins set from the Admin Dashboard and which is stored
+     * encrypted in the database (D-32). The same value as the API's SETTINGS_ENCRYPTION_KEY. Required.
+     */
+    SETTINGS_ENCRYPTION_KEY: aes256Key,
+    /**
+     * No longer used (D-32): the key is set from the Admin Dashboard. Refused when present, so no copy of
+     * the key stays in the server environment.
+     */
     WAABEK_API_KEY: optionalString,
     VAPID_PUBLIC_KEY: optionalString,
     VAPID_PRIVATE_KEY: optionalString,
@@ -232,8 +252,12 @@ export const workerEnvSchema = z
         message: 'test-capture is only allowed when NODE_ENV=test; use waabek',
       });
     }
-    if (env.OTP_DELIVERY === 'waabek' && !env.WAABEK_API_KEY) {
-      ctx.addIssue({ code: 'custom', path: ['WAABEK_API_KEY'], message: 'is required when OTP_DELIVERY=waabek' });
+    if (env.WAABEK_API_KEY !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['WAABEK_API_KEY'],
+        message: 'is no longer used (D-32): remove it from the environment and set the Waabek API key from the Admin Dashboard',
+      });
     }
     const vapid = [env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT].filter(Boolean).length;
     if (vapid !== 0 && vapid !== 3) {

@@ -15,6 +15,8 @@ import { ProfilePhotoStorage } from '../src/storage/profile-photo-storage.js';
 export const WEB_ORIGIN = 'https://chat.bedo.test';
 export const ADMIN_ORIGIN = 'https://admin.bedo.test';
 export const TOTP_KEY = Buffer.alloc(32, 5);
+/** SETTINGS_ENCRYPTION_KEY for tests (D-32): random per run, never a real key. */
+export const SETTINGS_KEY = randomBytes(32);
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(url: string, sql: string, params: unknown[] = []) {
   const client = new pg.Client({ connectionString: url });
@@ -72,6 +74,7 @@ export async function setupIntegrationEnv(overrides: Record<string, string> = {}
     ACCESS_TOKEN_SECRET: randomBytes(32).toString('base64'),
     OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
     ADMIN_TOTP_KEY: TOTP_KEY.toString('base64'),
+    SETTINGS_ENCRYPTION_KEY: SETTINGS_KEY.toString('base64'),
     VAPID_PUBLIC_KEY: 'BPublicKeyForTests',
     ...overrides,
   });
@@ -127,13 +130,13 @@ export const adminCsrf = { origin: ADMIN_ORIGIN, [CSRF_HEADER]: CSRF_HEADER_VALU
 /** Reads the code that the worker would send through Waabek, straight from the job queue. */
 export async function latestCode(queue: Queue<OtpJobData>, phone: string): Promise<string | null> {
   const jobs = await queue.getJobs(['waiting', 'delayed', 'active', 'prioritized']);
-  const matching = jobs.filter((job) => job?.data.phone === phone).sort((a, b) => b.timestamp - a.timestamp);
+  const matching = jobs.filter((job) => job?.name === 'send' && job.data.phone === phone).sort((a, b) => b.timestamp - a.timestamp);
   return matching[0]?.data.code ?? null;
 }
 
 export async function jobCount(queue: Queue<OtpJobData>, phone: string): Promise<number> {
   const jobs = await queue.getJobs(['waiting', 'delayed', 'active', 'prioritized']);
-  return jobs.filter((job) => job?.data.phone === phone).length;
+  return jobs.filter((job) => job?.name === 'send' && job.data.phone === phone).length;
 }
 
 /** Extracts a cookie value from a Set-Cookie response header. */

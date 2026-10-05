@@ -22,6 +22,11 @@ export const ErrorEnvelopeErrorCode = {
   ACCOUNT_BLOCKED: 'ACCOUNT_BLOCKED',
   USERNAME_TAKEN: 'USERNAME_TAKEN',
   CSRF_REJECTED: 'CSRF_REJECTED',
+  SETUP_UNAVAILABLE: 'SETUP_UNAVAILABLE',
+  SETUP_TOKEN_INVALID: 'SETUP_TOKEN_INVALID',
+  RECOVERY_UNAVAILABLE: 'RECOVERY_UNAVAILABLE',
+  RECOVERY_TOKEN_INVALID: 'RECOVERY_TOKEN_INVALID',
+  RECOVERY_TOKEN_USED: 'RECOVERY_TOKEN_USED',
   CANNOT_MESSAGE: 'CANNOT_MESSAGE',
   USER_BLOCKED: 'USER_BLOCKED',
   LIMIT_REACHED: 'LIMIT_REACHED',
@@ -594,6 +599,7 @@ export type AdminOtpVerifyResponseStatus = typeof AdminOtpVerifyResponseStatus[k
 
 export const AdminOtpVerifyResponseStatus = {
   totp_required: 'totp_required',
+  totp_setup_required: 'totp_setup_required',
 } as const;
 
 export interface AdminOtpVerifyResponse {
@@ -627,6 +633,96 @@ export type AdminSessionResponseAdmin = {
 
 export interface AdminSessionResponse {
   admin: AdminSessionResponseAdmin;
+}
+
+export interface AdminTotpSetupBody {
+  /**
+     * @minLength 10
+     * @maxLength 200
+     */
+  pendingToken: string;
+}
+
+export interface AdminTotpSetupResponse {
+  otpauthUri: string;
+  setupKey: string;
+  issuer: string;
+  accountName: string;
+}
+
+export interface AdminBootstrapStatusResponse {
+  setupOpen: boolean;
+}
+
+export interface AdminBootstrapWaabekKeyBody {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  setupToken: string;
+  /**
+     * @minLength 8
+     * @maxLength 512
+     * @pattern ^[\x21-\x7e]+$
+     */
+  apiKey: string;
+}
+
+export interface AdminBootstrapTestBody {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  setupToken: string;
+}
+
+/**
+ * @nullable
+ */
+export type WaabekTestResponseReason = typeof WaabekTestResponseReason[keyof typeof WaabekTestResponseReason] | null;
+
+
+export const WaabekTestResponseReason = {
+  not_configured: 'not_configured',
+  key_unreadable: 'key_unreadable',
+  rejected: 'rejected',
+  unreachable: 'unreachable',
+  no_answer: 'no_answer',
+} as const;
+
+export interface WaabekTestResponse {
+  delivered: boolean;
+  sentTo: string;
+  /** @nullable */
+  reason: WaabekTestResponseReason;
+  /** @nullable */
+  httpStatus: number | null;
+}
+
+export interface OtpRecoveryStatusResponse {
+  recoveryOpen: boolean;
+}
+
+export interface OtpRecoveryWaabekKeyBody {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  recoveryToken: string;
+  /**
+     * @minLength 8
+     * @maxLength 512
+     * @pattern ^[\x21-\x7e]+$
+     */
+  apiKey: string;
+}
+
+export interface OtpRecoveryTestBody {
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  recoveryToken: string;
 }
 
 /**
@@ -851,6 +947,61 @@ export interface TwoStepResetBody {
 
 export interface TwoStepResetResponse {
   reset: true;
+}
+
+export type OtpSettingsResponseProvider = typeof OtpSettingsResponseProvider[keyof typeof OtpSettingsResponseProvider];
+
+
+export const OtpSettingsResponseProvider = {
+  waabek: 'waabek',
+} as const;
+
+/**
+ * @nullable
+ */
+export type OtpSettingsResponseUpdatedBy = {
+  id: string;
+  name: string;
+} | null;
+
+/**
+ * @nullable
+ */
+export type OtpSettingsResponseUpdatedVia = typeof OtpSettingsResponseUpdatedVia[keyof typeof OtpSettingsResponseUpdatedVia] | null;
+
+
+export const OtpSettingsResponseUpdatedVia = {
+  initial_setup: 'initial_setup',
+  admin_dashboard: 'admin_dashboard',
+  owner_recovery: 'owner_recovery',
+} as const;
+
+export interface OtpSettingsResponse {
+  provider: OtpSettingsResponseProvider;
+  apiKeyConfigured: boolean;
+  version: number;
+  /** @nullable */
+  updatedAt: string | null;
+  /** @nullable */
+  updatedBy: OtpSettingsResponseUpdatedBy;
+  /** @nullable */
+  updatedVia: OtpSettingsResponseUpdatedVia;
+}
+
+export interface OtpSettingsReplaceKeyBody {
+  /**
+     * @minLength 8
+     * @maxLength 512
+     * @pattern ^[\x21-\x7e]+$
+     */
+  apiKey: string;
+  /** @pattern ^\d{6}$ */
+  totpCode: string;
+}
+
+export interface OtpSettingsReplaceKeyResponse {
+  saved: true;
+  version: number;
 }
 
 /**
@@ -2587,6 +2738,244 @@ return apiFetch<AdminSessionResponse>(getAdminVerifyTotpUrl(),
 
 
 
+export const getAdminSetupTotpUrl = () => {
+
+
+
+
+  return `/v1/admin/auth/totp/setup`
+}
+
+/**
+ * @summary First sign-in of an account created by SQL: generate the authenticator secret (Phase 3.1)
+ */
+export const adminSetupTotp = async (adminTotpSetupBody: AdminTotpSetupBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminTotpSetupResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminTotpSetupResponse>(getAdminSetupTotpUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminTotpSetupBody)
+  }
+);}
+
+
+
+export const getAdminBootstrapStatusUrl = () => {
+
+
+
+
+  return `/v1/admin/bootstrap`
+}
+
+/**
+ * @summary Whether the one-time initial setup is open
+ */
+export const adminBootstrapStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminBootstrapStatusResponse> => {
+
+  return apiFetch<AdminBootstrapStatusResponse>(getAdminBootstrapStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminBootstrapSetWaabekKeyUrl = () => {
+
+
+
+
+  return `/v1/admin/bootstrap/waabek-key`
+}
+
+/**
+ * @summary Initial setup: store the first Waabek API key (setup token required)
+ */
+export const adminBootstrapSetWaabekKey = async (adminBootstrapWaabekKeyBody: AdminBootstrapWaabekKeyBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getAdminBootstrapSetWaabekKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminBootstrapWaabekKeyBody)
+  }
+);}
+
+
+
+export const getAdminBootstrapTestMessageUrl = () => {
+
+
+
+
+  return `/v1/admin/bootstrap/test-message`
+}
+
+/**
+ * @summary Initial setup: send a WhatsApp test message to the Super Admin (setup token required)
+ */
+export const adminBootstrapTestMessage = async (adminBootstrapTestBody: AdminBootstrapTestBody, options?: Parameters<typeof apiFetch>[1]): Promise<WaabekTestResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WaabekTestResponse>(getAdminBootstrapTestMessageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminBootstrapTestBody)
+  }
+);}
+
+
+
+export const getAdminOtpRecoveryStatusUrl = () => {
+
+
+
+
+  return `/v1/admin/otp-recovery`
+}
+
+/**
+ * @summary Whether an owner-opened Waabek key recovery is open
+ */
+export const adminOtpRecoveryStatus = async ( options?: Parameters<typeof apiFetch>[1]): Promise<OtpRecoveryStatusResponse> => {
+
+  return apiFetch<OtpRecoveryStatusResponse>(getAdminOtpRecoveryStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminOtpRecoverySetWaabekKeyUrl = () => {
+
+
+
+
+  return `/v1/admin/otp-recovery/waabek-key`
+}
+
+/**
+ * @summary Recovery: store a new Waabek API key (recovery token required; signs nobody in)
+ */
+export const adminOtpRecoverySetWaabekKey = async (otpRecoveryWaabekKeyBody: OtpRecoveryWaabekKeyBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getAdminOtpRecoverySetWaabekKeyUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(otpRecoveryWaabekKeyBody)
+  }
+);}
+
+
+
+export const getAdminOtpRecoveryTestMessageUrl = () => {
+
+
+
+
+  return `/v1/admin/otp-recovery/test-message`
+}
+
+/**
+ * @summary Recovery: send a WhatsApp test message to the first Super Admin (recovery token required)
+ */
+export const adminOtpRecoveryTestMessage = async (otpRecoveryTestBody: OtpRecoveryTestBody, options?: Parameters<typeof apiFetch>[1]): Promise<WaabekTestResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<WaabekTestResponse>(getAdminOtpRecoveryTestMessageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(otpRecoveryTestBody)
+  }
+);}
+
+
+
 export const getAdminSessionUrl = () => {
 
 
@@ -2908,6 +3297,92 @@ return apiFetch<TwoStepResetResponse>(getAdminResetTwoStepUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(twoStepResetBody)
+  }
+);}
+
+
+
+export const getAdminOtpSettingsUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/otp`
+}
+
+/**
+ * @summary OTP delivery settings; the Waabek API key is never returned (Super Admin)
+ */
+export const adminOtpSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<OtpSettingsResponse> => {
+
+  return apiFetch<OtpSettingsResponse>(getAdminOtpSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminReplaceWaabekKeyUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/otp/waabek-key`
+}
+
+/**
+ * @summary Replace the Waabek API key; needs a current authenticator code (Super Admin)
+ */
+export const adminReplaceWaabekKey = async (otpSettingsReplaceKeyBody: OtpSettingsReplaceKeyBody, options?: Parameters<typeof apiFetch>[1]): Promise<OtpSettingsReplaceKeyResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OtpSettingsReplaceKeyResponse>(getAdminReplaceWaabekKeyUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(otpSettingsReplaceKeyBody)
+  }
+);}
+
+
+
+export const getAdminSendWaabekTestUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/otp/test-message`
+}
+
+/**
+ * @summary Send a WhatsApp test message to your own number (Super Admin)
+ */
+export const adminSendWaabekTest = async ( options?: Parameters<typeof apiFetch>[1]): Promise<WaabekTestResponse> => {
+
+  return apiFetch<WaabekTestResponse>(getAdminSendWaabekTestUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

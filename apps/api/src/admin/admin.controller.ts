@@ -1,13 +1,18 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { ApiEnv } from '@bedo/config';
 import {
   ADMIN_SESSION_COOKIE,
   ADMIN_SESSION_COOKIE_PATH,
   ADMIN_SESSION_RULES,
+  adminBootstrapStatusResponseSchema,
+  adminBootstrapTestBodySchema,
+  adminBootstrapWaabekKeyBodySchema,
   adminOtpRequestBodySchema,
   adminOtpVerifyBodySchema,
   adminOtpVerifyResponseSchema,
   adminSessionResponseSchema,
+  adminTotpSetupBodySchema,
+  adminTotpSetupResponseSchema,
   adminTotpVerifyBodySchema,
   deletionDecisionBodySchema,
   deletionRequestDetailSchema,
@@ -15,6 +20,12 @@ import {
   deletionRequestListResponseSchema,
   okResponseSchema,
   otpRequestResponseSchema,
+  otpSettingsReplaceKeyBodySchema,
+  otpSettingsReplaceKeyResponseSchema,
+  otpSettingsResponseSchema,
+  otpRecoveryStatusResponseSchema,
+  otpRecoveryTestBodySchema,
+  otpRecoveryWaabekKeyBodySchema,
   phoneListAddBodySchema,
   phoneListAddResponseSchema,
   phoneListImportBodySchema,
@@ -23,6 +34,7 @@ import {
   phoneListResponseSchema,
   twoStepResetBodySchema,
   twoStepResetResponseSchema,
+  waabekTestResponseSchema,
 } from '@bedo/contracts';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -37,7 +49,10 @@ import { DatabaseService } from '../database/database.service.js';
 import { assertCsrf, publicCookiePath } from '../security/csrf.js';
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js';
 import { type AdminContext, AdminAuthService } from './admin-auth.service.js';
+import { AdminBootstrapService } from './admin-bootstrap.service.js';
 import { AdminOperationsService } from './admin-operations.service.js';
+import { OtpRecoveryService } from './otp-recovery.service.js';
+import { OtpSettingsService } from './otp-settings.service.js';
 
 const uuid = z.string().uuid();
 
@@ -72,8 +87,18 @@ export class AdminAuthController {
   @ResponseSchema(adminOtpVerifyResponseSchema)
   async verifyCode(@Body(new ZodValidationPipe(adminOtpVerifyBodySchema)) body: { phone: string; code: string }, @Req() request: FastifyRequest) {
     assertCsrf(request, this.env.ADMIN_ORIGINS);
-    const pendingToken = await this.auth.verifyCode(requirePhone(body.phone), body.code, requestInfo(request));
-    return { status: 'totp_required' as const, pendingToken };
+    return this.auth.verifyCode(requirePhone(body.phone), body.code, requestInfo(request));
+  }
+
+  /** Phase 3.1: first sign-in of an account created by SQL; the server generates the authenticator secret. */
+  @Post('totp/setup')
+  @HttpCode(200)
+  @ResponseSchema(adminTotpSetupResponseSchema)
+  setupTotp(@Body(new ZodValidationPipe(adminTotpSetupBodySchema)) body: { pendingToken: string }, @Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    // The answer carries an authenticator secret: never cached anywhere.
+    void reply.header('cache-control', 'no-store');
+    return this.auth.setupTotp(body.pendingToken, requestInfo(request));
   }
 
   @Post('totp/verify')
@@ -91,6 +116,86 @@ export class AdminAuthController {
   }
 }
 
+/**
+ * Initial setup of the first Super Admin (Phase 3.1). Public endpoints, CSRF-checked; every change needs the
+ * one-time setup token that the owner gets from app.open_admin_bootstrap() by SQL. Closed for good once the
+ * first Super Admin has confirmed their authenticator.
+ */
+@Controller('v1/admin/bootstrap')
+export class AdminBootstrapController {
+  constructor(
+    @Inject(API_ENV) private readonly env: ApiEnv,
+    @Inject(AdminBootstrapService) private readonly bootstrap: AdminBootstrapService,
+  ) {}
+
+  @Get()
+  @ResponseSchema(adminBootstrapStatusResponseSchema)
+  status(@Req() request: FastifyRequest) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    return this.bootstrap.status();
+  }
+
+  @Post('waabek-key')
+  @HttpCode(200)
+  @ResponseSchema(okResponseSchema)
+  async saveWaabekKey(
+    @Body(new ZodValidationPipe(adminBootstrapWaabekKeyBodySchema)) body: { setupToken: string; apiKey: string },
+    @Req() request: FastifyRequest,
+  ) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    await this.bootstrap.saveWaabekKey(body.setupToken, body.apiKey, requestInfo(request));
+    return { ok: true as const };
+  }
+
+  @Post('test-message')
+  @HttpCode(200)
+  @ResponseSchema(waabekTestResponseSchema)
+  testMessage(@Body(new ZodValidationPipe(adminBootstrapTestBodySchema)) body: { setupToken: string }, @Req() request: FastifyRequest) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    return this.bootstrap.sendTestMessage(body.setupToken, requestInfo(request));
+  }
+}
+
+/**
+ * Owner-only Waabek key recovery (D-33). Public endpoints, CSRF-checked; each needs the one-time recovery
+ * token that the database owner gets from app.open_otp_settings_recovery() by SQL. They can only save a new
+ * Waabek key and send a test message: no session, no sign-in, no change to any admin account.
+ */
+@Controller('v1/admin/otp-recovery')
+export class AdminOtpRecoveryController {
+  constructor(
+    @Inject(API_ENV) private readonly env: ApiEnv,
+    @Inject(OtpRecoveryService) private readonly recovery: OtpRecoveryService,
+  ) {}
+
+  @Get()
+  @ResponseSchema(otpRecoveryStatusResponseSchema)
+  status(@Req() request: FastifyRequest) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    return this.recovery.status();
+  }
+
+  @Post('waabek-key')
+  @HttpCode(200)
+  @ResponseSchema(okResponseSchema)
+  async saveWaabekKey(
+    @Body(new ZodValidationPipe(otpRecoveryWaabekKeyBodySchema)) body: { recoveryToken: string; apiKey: string },
+    @Req() request: FastifyRequest,
+  ) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    await this.recovery.saveWaabekKey(body.recoveryToken, body.apiKey, requestInfo(request));
+    return { ok: true as const };
+  }
+
+  @Post('test-message')
+  @HttpCode(200)
+  @ResponseSchema(waabekTestResponseSchema)
+  testMessage(@Body(new ZodValidationPipe(otpRecoveryTestBodySchema)) body: { recoveryToken: string }, @Req() request: FastifyRequest) {
+    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    return this.recovery.sendTestMessage(body.recoveryToken, requestInfo(request));
+  }
+}
+
 /** Phase 2 admin areas (D-20): session, academy phone list, deletion requests, 2-Step reset. */
 @Controller('v1/admin')
 @UseGuards(AdminAuthGuard)
@@ -99,6 +204,7 @@ export class AdminController {
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(AdminAuthService) private readonly auth: AdminAuthService,
     @Inject(AdminOperationsService) private readonly operations: AdminOperationsService,
+    @Inject(OtpSettingsService) private readonly otpSettings: OtpSettingsService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
@@ -234,5 +340,35 @@ export class AdminController {
     @Req() request: FastifyRequest,
   ) {
     return this.operations.resetTwoStep(admin, body.phone, body.reason, requestInfo(request));
+  }
+
+  // OTP / WhatsApp (Waabek) settings (D-32): Super Admin only. The key is never returned.
+  @Get('settings/otp')
+  @AdminRoles('super_admin')
+  @ResponseSchema(otpSettingsResponseSchema)
+  async otpSettingsView(@CurrentAdmin() admin: AdminContext, @Req() request: FastifyRequest) {
+    await this.auditView(admin, 'view.otp_settings', request);
+    return this.otpSettings.get();
+  }
+
+  @Put('settings/otp/waabek-key')
+  @HttpCode(200)
+  @AdminRoles('super_admin')
+  @ResponseSchema(otpSettingsReplaceKeyResponseSchema)
+  async replaceWaabekKey(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(otpSettingsReplaceKeyBodySchema)) body: { apiKey: string; totpCode: string },
+    @Req() request: FastifyRequest,
+  ) {
+    const { version } = await this.otpSettings.replaceKey(admin, body.apiKey, body.totpCode, requestInfo(request));
+    return { saved: true as const, version };
+  }
+
+  @Post('settings/otp/test-message')
+  @HttpCode(200)
+  @AdminRoles('super_admin')
+  @ResponseSchema(waabekTestResponseSchema)
+  sendWaabekTest(@CurrentAdmin() admin: AdminContext, @Req() request: FastifyRequest) {
+    return this.otpSettings.sendTest(admin, requestInfo(request));
   }
 }

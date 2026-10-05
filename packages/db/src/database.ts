@@ -48,12 +48,46 @@ export interface AdminAccountsTable {
   phone: string;
   name: string;
   role: AdminRole;
-  totp_secret_enc: string;
+  /** NULL for an account created by SQL until its authenticator is set up (Phase 3.1). */
+  totp_secret_enc: string | null;
   totp_confirmed_at: Date | null;
   totp_last_step: ColumnType<string | null, string | number | null | undefined, string | number | null>;
   status: Generated<'active' | 'disabled'>;
   created_at: CreatedAt;
   updated_at: CreatedAt;
+}
+
+/** OTP delivery settings (D-32): one row; the Waabek API key only ever encrypted. */
+export interface OtpSettingsTable {
+  id: Generated<boolean>;
+  provider: Generated<'waabek'>;
+  waabek_api_key_enc: string | null;
+  /** Raised by a trigger on every change. */
+  version: ColumnType<string, never, never>;
+  updated_by: string | null;
+  updated_via: 'initial_setup' | 'admin_dashboard' | 'owner_recovery' | null;
+  updated_at: ColumnType<Date | null, never, never>;
+}
+
+/** One-time initial Super Admin setup (Phase 3.1): one row. */
+export interface AdminBootstrapTable {
+  id: Generated<boolean>;
+  token_hash: ColumnType<string | null, never, never>;
+  expires_at: ColumnType<Date | null, never, never>;
+  failed_attempts: ColumnType<number, never, number>;
+  opened_at: ColumnType<Date | null, never, never>;
+  closed_at: ColumnType<Date | null, never, Date>;
+  closed_by: ColumnType<string | null, never, string>;
+}
+
+/** Owner-only Waabek key recovery (D-33): one row. */
+export interface OtpSettingsRecoveryTable {
+  id: Generated<boolean>;
+  token_hash: ColumnType<string | null, never, never>;
+  expires_at: ColumnType<Date | null, never, never>;
+  failed_attempts: ColumnType<number, never, number>;
+  opened_at: ColumnType<Date | null, never, never>;
+  key_saved_at: ColumnType<Date | null, never, Date>;
 }
 
 export interface AdminSessionsTable {
@@ -366,6 +400,9 @@ export interface Database {
   'app.academy_phone_list': AcademyPhoneListTable;
   'app.admin_accounts': AdminAccountsTable;
   'app.admin_sessions': AdminSessionsTable;
+  'app.otp_settings': OtpSettingsTable;
+  'app.admin_bootstrap': AdminBootstrapTable;
+  'app.otp_settings_recovery': OtpSettingsRecoveryTable;
   'app.users': UsersTable;
   'app.user_privacy': UserPrivacyTable;
   'app.sessions': SessionsTable;

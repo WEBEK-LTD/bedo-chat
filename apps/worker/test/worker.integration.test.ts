@@ -40,6 +40,7 @@ describe.runIf(redisUrl)('worker against real Redis', () => {
       REDIS_URL: redisUrl!,
       DATABASE_URL: process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@127.0.0.1:5432/postgres',
       OTP_DELIVERY: 'test-capture',
+      SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString('base64'),
       WORKER_HEARTBEAT_INTERVAL_MS: '1000',
       QUEUE_PREFIX: prefix,
     });

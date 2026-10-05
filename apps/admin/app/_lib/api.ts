@@ -1,4 +1,4 @@
-import { setTransport } from '@bedo/api-client';
+import { setTransport, type WaabekTestResponse } from '@bedo/api-client';
 import { CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
 
 /** An error answer from the API (or a network failure, code NETWORK). */
@@ -69,10 +69,42 @@ export function errorMessage(error: unknown): string {
       return 'Not found.';
     case 'CONFLICT':
       return 'This has already been decided.';
+    case 'SETUP_UNAVAILABLE':
+      return 'Initial setup is not available. It may be complete, or the setup token expired or was locked after wrong attempts: run the setup SQL again for a new token.';
+    case 'SETUP_TOKEN_INVALID':
+      return 'The setup token is incorrect.';
+    case 'RECOVERY_UNAVAILABLE':
+      return 'No Waabek key recovery is open. It may have expired or been locked after wrong attempts: run the recovery SQL again for a new token.';
+    case 'RECOVERY_TOKEN_INVALID':
+      return 'The recovery token is incorrect.';
+    case 'RECOVERY_TOKEN_USED':
+      return 'This recovery token has already saved a key. To save a different key, run the recovery SQL again for a new token.';
     case 'VALIDATION_FAILED':
       return error.fields?.[0]?.message ? `Please check the details: ${error.fields[0].message}.` : 'Please check the details and try again.';
     default:
       return 'Something went wrong. Try again.';
+  }
+}
+
+/** Plain-language result of a WhatsApp test message (Phase 3.1). */
+export function testMessageResult(result: WaabekTestResponse): { ok: boolean; text: string } {
+  if (result.delivered) {
+    return { ok: true, text: `Waabek accepted the test message to ${result.sentTo}. Check WhatsApp on that phone.` };
+  }
+  switch (result.reason) {
+    case 'not_configured':
+      return { ok: false, text: 'No Waabek API key is saved yet.' };
+    case 'key_unreadable':
+      return {
+        ok: false,
+        text: "The saved key cannot be decrypted with the server's settings encryption key (it may have been changed). Save the Waabek API key again.",
+      };
+    case 'rejected':
+      return { ok: false, text: `Waabek refused the message${result.httpStatus ? ` (HTTP ${result.httpStatus})` : ''}. Check the API key and your Waabek account.` };
+    case 'unreachable':
+      return { ok: false, text: 'Waabek could not be reached. Try again in a moment.' };
+    default:
+      return { ok: false, text: 'The background worker did not answer in time. Check that the worker service is running.' };
   }
 }
 

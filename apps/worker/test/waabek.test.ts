@@ -2,14 +2,15 @@ import 'reflect-metadata';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { WorkerEnv } from '@bedo/config';
-import { otpMessage } from '@bedo/contracts';
+import { OTP_DELIVERY_ERRORS, otpMessage, WAABEK_TEST_MESSAGE } from '@bedo/contracts';
 import type { DbHandle } from '@bedo/db';
 import type { Redis } from 'ioredis';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { OtpProcessor } from '../src/otp/otp.processor.js';
 import { WaabekClient, WaabekError } from '../src/otp/waabek.client.js';
+import { OtpConfigurationError, type WaabekKeyProvider } from '../src/otp/waabek-key.provider.js';
 
-// An obviously fake key: the real key is only ever supplied through the server environment.
+// An obviously fake key: the real key is only ever set from the Admin Dashboard (D-32).
 const FAKE_KEY = 'fake-waabek-key-for-unit-tests-0001';
 
 interface Captured {
@@ -54,11 +55,10 @@ describe('WaabekClient', () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
 
-  const client = (overrides: Partial<WorkerEnv> = {}) =>
-    new WaabekClient({ WAABEK_API_URL: url, WAABEK_API_KEY: FAKE_KEY, ...overrides } as WorkerEnv);
+  const client = () => new WaabekClient({ WAABEK_API_URL: url });
 
   it('sends exactly the documented request: X-API-Key header, JSON body, number without "+"', async () => {
-    await client().send('+201234567890', otpMessage('123456'));
+    await client().send(FAKE_KEY, '+201234567890', otpMessage('123456'));
     expect(requests).toHaveLength(1);
     const [request] = requests;
     expect(request?.method).toBe('POST');
@@ -71,7 +71,7 @@ describe('WaabekClient', () => {
   it('reports HTTP failures with the status only, never the key, number, message or response body', async () => {
     status = 401;
     const error = await client()
-      .send('+201234567890', otpMessage('654321'))
+      .send(FAKE_KEY, '+201234567890', otpMessage('654321'))
       .catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(WaabekError);
     expect((error as WaabekError).status).toBe(401);
@@ -82,10 +82,10 @@ describe('WaabekClient', () => {
   });
 
   it('refuses to send without a key and reports network failures without details', async () => {
-    await expect(client({ WAABEK_API_KEY: undefined }).send('+201234567890', 'x')).rejects.toThrow(/not configured/);
+    await expect(client().send('', '+201234567890', 'x')).rejects.toThrow(/no API key/);
     expect(requests).toHaveLength(0);
-    const unreachable = new WaabekClient({ WAABEK_API_URL: 'http://127.0.0.1:1/api/v1/send', WAABEK_API_KEY: FAKE_KEY } as WorkerEnv);
-    const error = await unreachable.send('+201234567890', 'x').catch((caught: unknown) => caught);
+    const unreachable = new WaabekClient({ WAABEK_API_URL: 'http://127.0.0.1:1/api/v1/send' });
+    const error = await unreachable.send(FAKE_KEY, '+201234567890', 'x').catch((caught: unknown) => caught);
     expect((error as Error).message).toBe('Waabek send failed: network error');
   });
 });
@@ -95,6 +95,7 @@ describe('OtpProcessor', () => {
 
   function processor(env: Partial<WorkerEnv>) {
     const waabek = { send: vi.fn().mockResolvedValue(undefined) };
+    const keys = { currentKey: vi.fn().mockResolvedValue(FAKE_KEY) };
     const redis = { set: vi.fn().mockResolvedValue('OK') };
     const inserted: unknown[] = [];
     const database = {
@@ -107,14 +108,15 @@ describe('OtpProcessor', () => {
       waabek as unknown as WaabekClient,
       redis as unknown as Redis,
       database as unknown as DbHandle,
+      keys as unknown as WaabekKeyProvider,
     );
-    return { instance, waabek, redis, inserted };
+    return { instance, waabek, redis, inserted, keys };
   }
 
   it('delivers through Waabek with the specified message', async () => {
     const { instance, waabek, redis } = processor({ NODE_ENV: 'production', OTP_DELIVERY: 'waabek' });
     await instance.process(job);
-    expect(waabek.send).toHaveBeenCalledWith('+201234567890', 'Your Bedo Chat verification code is: 246810');
+    expect(waabek.send).toHaveBeenCalledWith(FAKE_KEY, '+201234567890', 'Your Bedo Chat verification code is: 246810');
     expect(redis.set).not.toHaveBeenCalled();
   });
 
@@ -125,9 +127,25 @@ describe('OtpProcessor', () => {
     expect(waabek.send).toHaveBeenCalledTimes(1);
   });
 
+  it('sends the Admin Dashboard test message through the same key and client', async () => {
+    const { instance, waabek, keys } = processor({ NODE_ENV: 'production', OTP_DELIVERY: 'waabek' });
+    expect(await instance.processTest({ phone: '+201234567890' })).toEqual({ delivered: true });
+    expect(keys.currentKey).toHaveBeenCalledTimes(1);
+    expect(waabek.send).toHaveBeenCalledWith(FAKE_KEY, '+201234567890', WAABEK_TEST_MESSAGE);
+  });
+
+  it('does not send when the settings cannot be used', async () => {
+    const { instance, waabek, keys } = processor({ NODE_ENV: 'production', OTP_DELIVERY: 'waabek' });
+    keys.currentKey.mockRejectedValue(new OtpConfigurationError(OTP_DELIVERY_ERRORS.notConfigured));
+    await expect(instance.process(job)).rejects.toThrow(OTP_DELIVERY_ERRORS.notConfigured);
+    await expect(instance.processTest({ phone: '+201234567890' })).rejects.toThrow(OTP_DELIVERY_ERRORS.notConfigured);
+    expect(waabek.send).not.toHaveBeenCalled();
+  });
+
   it('captures the code only in automated tests', async () => {
-    const { instance, waabek, redis } = processor({ NODE_ENV: 'test', OTP_DELIVERY: 'test-capture' });
+    const { instance, waabek, redis, keys } = processor({ NODE_ENV: 'test', OTP_DELIVERY: 'test-capture' });
     await instance.process(job);
+    expect(keys.currentKey).not.toHaveBeenCalled();
     expect(waabek.send).not.toHaveBeenCalled();
     expect(redis.set).toHaveBeenCalledWith(expect.stringContaining('+201234567890'), '246810', 'EX', 300);
   });

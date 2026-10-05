@@ -15,7 +15,7 @@ through environment variables.
 | Queues | Managed Redis | — |
 
 Recommended order: Supabase → migrations → runtime database role → Redis → API → worker → Netlify site →
-Cloudflare and the routing Worker → first Super Admin → academy phone list.
+Cloudflare and the routing Worker → first Super Admin and Waabek key (section 4a) → academy phone list.
 
 **One public domain (D-25).** Everything is served from `https://bedochat.com`:
 
@@ -91,6 +91,7 @@ docker build -f apps/api/Dockerfile -t bedo-api .     # from the repository root
 | `ACCESS_TOKEN_SECRET` | Secret, at least 32 characters (`openssl rand -base64 32`) |
 | `OTP_HMAC_SECRET` | Secret, at least 32 characters, different from the one above |
 | `ADMIN_TOTP_KEY` | Secret, exactly 32 bytes base64 (`openssl rand -base64 32`); keep a copy in your secret store — admin authenticator setups depend on it |
+| `SETTINGS_ENCRYPTION_KEY` | Secret, exactly 32 bytes base64 (`openssl rand -base64 32`), different from `ADMIN_TOTP_KEY`; the same value on the worker. Encrypts the Waabek API key that Super Admins set from the Admin Dashboard (D-32). Infrastructure only: never in the database, never in a browser, never set from the dashboard. Keep a copy in your secret store — if it changes, the saved Waabek key must be entered again |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | From step 1.5 (profile pictures) |
 | `VAPID_PUBLIC_KEY` | Public half of the Web Push key pair (see the worker) |
 
@@ -133,29 +134,82 @@ Variables: `NODE_ENV` (set in the image), `REDIS_URL`, `QUEUE_PREFIX` (same as t
 | `DATABASE_URL` | The same `bedo_api` login as the API (or a second `bedo_runtime` member) |
 | `DATABASE_POOL_MAX` | `5` |
 | `OTP_DELIVERY` | `waabek` (the default; the only value allowed in production) |
-| `WAABEK_API_KEY` | Your Waabek key, entered only in the host's secret settings |
+| `SETTINGS_ENCRYPTION_KEY` | The same value as the API's. The worker decrypts the Dashboard-managed Waabek key with it |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Generate once with `npx web-push generate-vapid-keys`; subject `mailto:<academy address>`. The private key is a secret |
 
 No port. Give it a stop timeout of at least 30 seconds so jobs in progress finish on deploys.
+
+**The Waabek API key is not an environment variable (D-32).** A Super Admin sets it from the Admin Dashboard
+(section 4a for the first time, then *OTP / WhatsApp*); it is stored encrypted in `app.otp_settings`. The
+worker refuses to start if `WAABEK_API_KEY` is still set: remove it from the host's settings. Before every
+message the worker checks the stored settings' version and uses a changed key from the next message on, on
+every worker instance, without a restart. If no key is saved or it cannot be decrypted, nothing is sent and the
+failure is recorded in the security history (`otp_delivery_failed`, without the key).
 
 Phase 3: the worker also keeps the monthly message partitions created three months ahead (at start-up and
 every hour) and removes update-log entries and idempotency keys older than 30 days (P-17). Messages and the
 audit history are never removed. Keep at least one worker running: without it, sending would stop once the
 prepared partitions run out (more than three months later).
 
-## 4a. First Super Admin
+## 4a. First Super Admin (Phase 3.1)
 
-Admins are created from the command line until admin management arrives in Phase 10. Use the table-owner
-connection (as for migrations) and the API's `ADMIN_TOTP_KEY`:
+Admin accounts are created by SQL. No command-line tool, container command or environment variable is needed
+to create the first Super Admin or to set the Waabek key.
 
-```bash
-docker run --rm -e DATABASE_URL='postgresql://postgres:<password>@<host>:5432/postgres' \
-  -e ADMIN_TOTP_KEY='<same as the API>' \
-  bedo-api node dist/scripts/admin-create.js --phone +2010XXXXXXXX --name "Academy Admin" --role super_admin
-```
+1. In the Supabase SQL editor (the table owner, as for migrations), create the account and open the one-time
+   initial setup:
 
-The command prints an authenticator setup link and secret once. Add it to the admin's authenticator app
-right away; it cannot be shown again. Use `--role moderator` for read-only admins.
+   ```sql
+   insert into app.admin_accounts (phone, name, role, status)
+   values ('+905446731942', 'Academy Admin', 'super_admin', 'active');
+
+   select * from app.open_admin_bootstrap();
+   ```
+
+   The second statement returns `setup_token` (valid 60 minutes) and `expires_at`. Only the token's hash is
+   stored. Running it again before setup is complete replaces the token (needed after it expires, or after 5
+   wrong tokens lock it).
+2. Open `https://bedochat.com/admin/login`. While the setup is open the page shows **Initial setup**: enter
+   the setup token and the Waabek API key, then **Save key**. The key is encrypted on the server and never shown
+   again. **Send test message** sends a WhatsApp test to the Super Admin's number and shows Waabek's answer.
+3. **Continue to sign in**: enter the Super Admin's phone number and the WhatsApp code.
+4. The page asks you to **set up your authenticator app**: scan the QR code (or type the setup key) in an
+   authenticator app and enter the 6-digit code it shows. The secret is generated on the server, kept encrypted
+   with `ADMIN_TOTP_KEY`, and saved to the account only once this code is confirmed.
+5. You are signed in. The initial setup is now closed for good: the page no longer offers it,
+   `app.open_admin_bootstrap()` refuses, and the closure is in the audit log (`admin.bootstrap_closed`).
+
+The setup token never signs anyone in: the WhatsApp code and the authenticator are still required. More
+admins are created the same way with the `insert` statement only (role `super_admin` or `moderator`); each sets
+up the authenticator at the first sign-in.
+
+To change the Waabek key later: *OTP / WhatsApp* in the dashboard (Super Admins), enter the new key and a
+current authenticator code, then **Send test message**.
+
+## 4b. Waabek key recovery (D-33)
+
+Use this only when the saved Waabek key no longer works and no admin can sign in (admin sign-in needs a
+WhatsApp code). It replaces the key and nothing else: it signs nobody in, creates no session, and does not
+change admin accounts, roles, authenticator secrets or sessions. The initial setup stays closed.
+
+1. In the Supabase SQL editor (table owner):
+
+   ```sql
+   select * from app.open_otp_settings_recovery();
+   ```
+
+   It returns `recovery_token` (valid 30 minutes) and `expires_at`; only the token's hash is stored, and the
+   opening is recorded in the audit log. Running it again replaces the token (needed after it expires or after
+   5 wrong tokens lock it). It is refused before the initial setup is complete (use section 4a instead).
+2. Open `https://bedochat.com/admin/login`. The page shows **WhatsApp settings recovery**: enter the recovery
+   token and the new Waabek API key, then **Save key**. The API encrypts it with `SETTINGS_ENCRYPTION_KEY`; every
+   worker uses it from the next message on. Each token saves one key only; to save a different key, run the
+   SQL again for a new token.
+3. **Send test message** sends a WhatsApp test to the first Super Admin's number.
+4. Sign in as usual (WhatsApp code, then authenticator code). *OTP / WhatsApp* shows the key as changed "by owner
+   recovery".
+
+The key is never typed into SQL: it goes only through the sign-in page to the API.
 
 ## 5. Netlify site (one site for both apps, D-26)
 
@@ -275,8 +329,8 @@ start from a fresh clone and are not affected.
 Signing in only works on `https://bedochat.com`: the API accepts only that origin.
 
 Never set `DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY` or any other server secret (`ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`, `EDGE_SECRET`) on the
-Netlify site.
+`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SETTINGS_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`,
+`EDGE_SECRET`) on the Netlify site.
 
 Do not add `bedochat.com` to the Netlify site: Cloudflare serves it (section 5a). If a separate admin-only
 Netlify site was ever created before D-26, delete it or stop its builds: it is no longer used.
@@ -323,7 +377,8 @@ Netlify site was ever created before D-26, delete it or stop its builds: it is n
 
 - `GET https://bedochat.com/api/health/ready` returns `{"status":"ok", ...}` with both checks `up`.
 - Open `https://bedochat.com/admin`: it sends you to `/admin/login`. Sign in with the Super Admin's phone and
-  authenticator app; the dashboard opens at `/admin` and stays after a reload. Add your own number to the
+  authenticator app (the first time: section 4a); the dashboard opens at `/admin` and stays after a reload.
+  In *OTP / WhatsApp*, **Send test message** reports that Waabek accepted it. Add your own number to the
   academy phone list.
 - Open `https://bedochat.com/`: it sends you to `/login`. Sign in with that number: the WhatsApp code
   arrives, a new account asks for a name, and the chat interface opens at `/`. A reload keeps you signed in
