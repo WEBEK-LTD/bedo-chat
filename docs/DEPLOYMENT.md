@@ -239,7 +239,7 @@ The key is never typed into SQL: it goes only through the sign-in page to the AP
   password twice and a current authenticator code. Every other session of that admin ends; the current session
   stays signed in. 5 attempts per 15 minutes.
 - **Forgotten password / reset (owner only, SQL).** There is no reset page and no reset by another admin. The
-  owner runs, in the SQL editor:
+  owner can set a new password directly with the one-script method in section 4d, or run, in the SQL editor:
 
   ```sql
   select * from app.issue_admin_password_setup('<admin-phone>');
@@ -264,7 +264,40 @@ The key is never typed into SQL: it goes only through the sign-in page to the AP
 - **Upgrading from Phase 3.1.** The migration `20261005120000_phase3_2_admin_password.sql` adds the password
   columns and the setup-token table; existing admins keep their authenticator and get no password. Before they
   can sign in again, the owner runs `app.issue_admin_password_setup` for each admin, and each admin sets a
-  password with their token. Existing admin sessions are not ended by the migration.
+  password with their token. Existing admin sessions are not ended by the migration. Alternatively the owner sets each
+  password directly with the one-script method in section 4d.
+
+## 4d. Admin password with one SQL script (D-35)
+
+The owner can create or update an admin and set the password in one step, from the Supabase SQL Editor,
+without a setup token. Requires migration `20261006120000_d35_admin_password_owner_sql.sql` (`pnpm db:migrate`,
+or, for a database whose migrations were applied by hand in the SQL Editor,
+[`docs/owner-sql/apply-20261006120000.sql`](owner-sql/apply-20261006120000.sql) run once).
+
+1. Supabase → **SQL Editor** → **New query**. Paste the whole of
+   [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql).
+2. Change the three values at the top: `input_phone` (international form, for example `+905446731942`),
+   `input_name`, and `input_password` (the line marked `<<< PUT YOUR PASSWORD HERE`). If the password contains an
+   apostrophe `'`, type it twice (`''`).
+3. Click **Run** once. The last result shows the admin: `super_admin`, `active`, `has_password = true`.
+4. Delete the query from the SQL Editor's saved queries: it contains the password in plain text.
+
+What it does: the account becomes an active Super Admin with that password; every existing session of the
+admin ends; an unused password setup token is closed; `admin.password_set` (audit log) and `admin_password_set`
+(security history) are recorded without the password. The authenticator is not touched: every sign-in still
+needs the authenticator code, and an account without one sets it up at its first sign-in.
+
+The script checks the length (12–128 characters) and that the password is not the phone number. The database
+cannot produce the API's Argon2id hash, so the script stores a temporary bcrypt hash (pgcrypto, cost 12, of the
+password's SHA-256). At the first successful sign-in the API checks the full password rules, including the
+common-password list, and replaces it with its normal Argon2id hash (`admin_password_upgraded` in the security
+history). A password that breaks a rule is refused at that sign-in exactly like a wrong password (so a refusal
+never confirms a guessed password); the reason is recorded in the security history as
+`admin_password_upgrade_refused`. Run the script again with another password. A sign-in lock on the number (5
+wrong passwords) is not lifted by the script; it ends by itself within 15 minutes. Until that first sign-in, checking this account's password takes about 250 ms instead of
+about 11 ms.
+
+Signing in needs the API (section 3); running the script does not.
 
 ## 5. Netlify site (one site for both apps, D-26)
 

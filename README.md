@@ -185,7 +185,9 @@ not the admin's phone number and not on the built-in common-password list; they 
 hashes. The owner gives each admin a one-time password setup token by SQL
 (`select * from app.issue_admin_password_setup('<admin-phone>');`), entered on `/admin/login` → *Set password with
 a setup token*; it never signs anyone in. The same SQL is the only password reset (it ends all of that admin's
-sessions). Signed-in admins change their password under *Account*. Details: `docs/DEPLOYMENT.md`, section 4c.
+sessions). Signed-in admins change their password under *Account*. The owner can also set an admin's password
+directly with one SQL script, `docs/owner-sql/set-super-admin.sql` (D-35, Phase 3.2.1). Details: `docs/DEPLOYMENT.md`,
+sections 4c and 4d.
 
 **First admin (Phase 3.1).** Admin accounts are created by SQL, without an authenticator secret; each admin
 sets up the authenticator app at the first sign-in, after the password. For the very first Super Admin the

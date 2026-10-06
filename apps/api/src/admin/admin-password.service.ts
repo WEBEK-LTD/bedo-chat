@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { ApiEnv } from '@bedo/config';
 import { ADMIN_PASSWORD_RULES } from '@bedo/contracts';
-import { sql } from 'kysely';
+import type { AdminAccountsTable } from '@bedo/db';
+import { type Selectable, sql } from 'kysely';
 import { AuditService, type Executor } from '../audit/audit.service.js';
 import { TwoStepService } from '../auth/two-step.service.js';
 import { AppError } from '../common/app-error.js';
@@ -13,10 +14,12 @@ import { DatabaseService } from '../database/database.service.js';
 import { ipBucket, RateLimitService } from '../redis/rate-limit.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { type AdminContext, AdminAuthService, type AdminPendingSignIn } from './admin-auth.service.js';
+import { isOwnerSqlHash, verifyOwnerSqlHash } from './owner-sql-hash.js';
 import { isCommonPassword, isPhoneNumberPassword, loadCommonPasswords } from './password-policy.js';
 import { decryptSecret, verifyTotp } from './totp.js';
 
 type SetupCheck = 'ok' | 'invalid';
+type AdminAccount = Selectable<AdminAccountsTable>;
 
 /**
  * Admin passwords (D-34). Sign-in is phone + password, then the mandatory authenticator code (AdminAuthService);
@@ -25,6 +28,10 @@ type SetupCheck = 'ok' | 'invalid';
  * disabled accounts and wrong passwords get the same answer after the same hashing work. The initial password and
  * every reset use an owner-issued one-time setup token (app.issue_admin_password_setup, SQL only), which never
  * signs anyone in.
+ *
+ * D-35: the owner may also set a password with one SQL script; it stores a temporary bcrypt hash (see
+ * owner-sql-hash.ts), which is accepted only until the first successful sign-in replaces it with Argon2id after
+ * the full password rules are checked. The authenticator step is unchanged.
  */
 @Injectable()
 export class AdminPasswordService {
@@ -82,8 +89,8 @@ export class AdminPasswordService {
 
     const admin = await this.db.selectFrom('app.admin_accounts').selectAll().where('phone', '=', phone).executeTakeFirst();
     const usable = admin && admin.status === 'active' && admin.password_hash !== null;
-    // Exactly one Argon2id verification on every path.
-    const matches = await this.hasher.verifyPassword(usable ? admin.password_hash! : await this.dummy(), password);
+    // Exactly one password verification on every path (Argon2id, or the owner-SQL bcrypt form until it is replaced).
+    const matches = usable ? await this.verifyStored(admin.password_hash!, password) : await this.hasher.verifyPassword(await this.dummy(), password);
     if (!usable || !matches) {
       await this.audit.security(this.db, {
         subjectType: admin ? 'admin' : 'phone',
@@ -103,6 +110,8 @@ export class AdminPasswordService {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'CREDENTIALS_INVALID');
     }
 
+    // D-35: a password set by the owner's SQL script is checked against the full rules and moved to Argon2id now.
+    const account = isOwnerSqlHash(admin.password_hash!) ? await this.upgradeOwnerSqlHash(admin, password, info) : admin;
     await this.redis.client.del(this.failKey(phone));
     await this.audit.security(this.db, {
       subjectType: 'admin',
@@ -112,7 +121,73 @@ export class AdminPasswordService {
       ip: info.ip,
       userAgent: info.userAgent,
     });
-    return this.auth.startPendingSignIn(admin);
+    return this.auth.startPendingSignIn(account);
+  }
+
+  /** Argon2id, or (D-35) the temporary bcrypt form written by the owner's SQL script. */
+  private verifyStored(passwordHash: string, password: string): Promise<boolean> {
+    return isOwnerSqlHash(passwordHash) ? verifyOwnerSqlHash(passwordHash, password) : this.hasher.verifyPassword(passwordHash, password);
+  }
+
+  /**
+   * D-35: after a correct password, replaces the owner-SQL bcrypt hash with the normal Argon2id hash. The SQL
+   * script cannot read the common-password list, so every D-34 rule is checked here first; a password that
+   * breaks one is refused like a wrong password and recorded as admin_password_upgrade_refused (the owner sets
+   * another). Only the hash that was checked is replaced, so a password
+   * the owner set again in the meantime is never overwritten. Sessions are not affected (same password).
+   */
+  private async upgradeOwnerSqlHash(admin: AdminAccount, password: string, info: RequestInfo): Promise<AdminAccount> {
+    const characters = [...password].length;
+    const rule = characters < ADMIN_PASSWORD_RULES.minLength || characters > ADMIN_PASSWORD_RULES.maxLength ? 'length' : this.ruleViolation(password, admin.phone);
+    if (rule) {
+      await this.audit.security(this.db, {
+        subjectType: 'admin',
+        subjectId: admin.id,
+        phone: admin.phone,
+        event: 'admin_password_upgrade_refused',
+        ip: info.ip,
+        userAgent: info.userAgent,
+        details: { reason: rule },
+      });
+      // The same answer as a wrong password, so a refusal never confirms a guessed password (the reason is
+      // only in the security history above, for the owner).
+      throw new AppError(HttpStatus.UNAUTHORIZED, 'CREDENTIALS_INVALID');
+    }
+    const argon2Hash = await this.hasher.hashPassword(password);
+    const upgraded = await this.db.transaction().execute(async (trx) => {
+      const row = await trx
+        .updateTable('app.admin_accounts')
+        .set({ password_hash: argon2Hash })
+        .where('id', '=', admin.id)
+        .where('password_hash', '=', admin.password_hash!)
+        .returningAll()
+        .executeTakeFirst();
+      if (!row) {
+        return undefined;
+      }
+      await this.audit.security(trx, {
+        subjectType: 'admin',
+        subjectId: admin.id,
+        phone: admin.phone,
+        event: 'admin_password_upgraded',
+        ip: info.ip,
+        userAgent: info.userAgent,
+        details: { from: 'owner_sql_bcrypt', to: 'argon2id' },
+      });
+      await this.audit.system(trx, {
+        action: 'admin.password_hash_upgraded',
+        targetType: 'admin',
+        targetId: admin.id,
+        ip: info.ip,
+        userAgent: info.userAgent,
+        metadata: { from: 'owner_sql_bcrypt', to: 'argon2id' },
+      });
+      return row;
+    });
+    if (!upgraded) {
+      throw new AppError(HttpStatus.UNAUTHORIZED, 'CREDENTIALS_INVALID');
+    }
+    return upgraded;
   }
 
   /**
@@ -219,7 +294,7 @@ export class AdminPasswordService {
         .where('id', '=', admin.adminId)
         .forUpdate()
         .executeTakeFirstOrThrow();
-      const passwordOk = await this.hasher.verifyPassword(row.password_hash ?? (await this.dummy()), currentPassword);
+      const passwordOk = row.password_hash !== null ? await this.verifyStored(row.password_hash, currentPassword) : await this.hasher.verifyPassword(await this.dummy(), currentPassword);
       const lastStep = row.totp_last_step === null ? null : Number(row.totp_last_step);
       const step = row.totp_secret_enc ? verifyTotp(decryptSecret(this.totpKey, row.totp_secret_enc), totpCode, Date.now(), lastStep) : null;
       if (!passwordOk || row.password_hash === null || step === null) {

@@ -11,9 +11,13 @@ minimumReleaseAge: 20160
 # patched version is older than 14 days (recorded in docs/DECISIONS.md).
 # - next: 16.3.6 fixes GHSA critical "Remote Code Execution in next/og ImageResponse" in 16.2.0-16.3.5.
 #   Published 2026-09-22; pinned exactly in apps/web and apps/admin (with its own @next/* packages). Remove after 2026-10-06.
+# - source-map-js: 1.2.2 fixes GHSA-68fv-2mgg-jv7q (high, event-loop denial of service) in 1.0.0-1.2.1.
+#   Published 2026-09-30; forced by the override below; reached only through development tools (vite > postcss).
+#   Remove after 2026-10-14.
 minimumReleaseAgeExclude:
   - next
   - '@next/*'
+  - source-map-js
 strictDepBuilds: true
 # Every package with an install script must be listed in allowBuilds after review:
 # true = allowed to run, false = reviewed and deliberately NOT run.
@@ -32,6 +36,8 @@ allowBuilds:
 # - fastify >=5.12.5: DoS via unhandled exception on HTTP/2 trailer responses (@nestjs/platform-fastify pins 5.12.4).
 # - undici >=7.29.1: several advisories in 7.x before 7.29.1 (reached only through the development-time
 #   API-client generator: orval > @scalar/json-magic).
+# - source-map-js >=1.2.2: GHSA-68fv-2mgg-jv7q (high) in 1.0.0-1.2.1 (development only: vite > postcss).
 overrides:
   fastify: ^5.12.5
   undici: ^7.29.1
+  source-map-js: ^1.2.2
