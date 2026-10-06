@@ -32,9 +32,9 @@ function isOpen(row: BootstrapRow | undefined, now = Date.now()): row is Bootstr
 /**
  * The one-time initial setup of the first Super Admin (Phase 3.1). The owner opens it by SQL
  * (app.open_admin_bootstrap(), which returns a setup token); with that token the Admin Dashboard's sign-in
- * page can store the first Waabek API key and send a test message, so the Super Admin can then receive the
- * WhatsApp sign-in code. It closes for good when the first Super Admin confirms their authenticator.
- * The setup token never signs anyone in: the WhatsApp code and the authenticator are still required.
+ * page can store the first Waabek API key (used for students' WhatsApp sign-in codes) and send a test message.
+ * It closes for good when the first Super Admin confirms their authenticator. The setup token never signs
+ * anyone in: admin sign-in is the password and the authenticator (D-34).
  */
 @Injectable()
 export class AdminBootstrapService {

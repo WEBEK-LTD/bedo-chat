@@ -28,6 +28,13 @@ export const ERROR_CODES = [
   'RECOVERY_UNAVAILABLE',
   'RECOVERY_TOKEN_INVALID',
   'RECOVERY_TOKEN_USED',
+  // Phase 3.2 (D-34)
+  /** The same answer for an unknown number, an account without a password and a wrong password. */
+  'CREDENTIALS_INVALID',
+  /** The same answer for every setup-token problem (unknown number, no, wrong, expired, used or locked token). */
+  'PASSWORD_SETUP_INVALID',
+  'PASSWORD_IS_PHONE',
+  'PASSWORD_TOO_COMMON',
   // Phase 3
   /** P-26: the same answer for a block by the other user and "Who can message: Nobody". */
   'CANNOT_MESSAGE',

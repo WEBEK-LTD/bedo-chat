@@ -56,7 +56,7 @@ export function InitialSetup({ onClosed }: { onClosed: () => void }) {
             Initial setup
           </h2>
           <p className="mt-1 text-sm text-ink-secondary">
-            Save the Waabek API key so the Super Admin can receive the WhatsApp sign-in code. Use the setup token from the setup SQL.
+            Save the Waabek API key that sends WhatsApp sign-in codes to students. Use the setup token from the setup SQL. This does not sign you in.
           </p>
         </div>
       </header>

@@ -53,10 +53,14 @@ export function errorMessage(error: unknown): string {
       return error.message;
     case 'RATE_LIMITED':
       return error.retryAfterSeconds ? `Too many attempts. Try again in ${formatWait(error.retryAfterSeconds)}.` : 'Too many attempts. Try again later.';
-    case 'OTP_INVALID':
-      return 'The code is incorrect or has expired.';
-    case 'OTP_LOCKED':
-      return 'Too many incorrect codes. Request a new code.';
+    case 'CREDENTIALS_INVALID':
+      return 'The phone number or password is incorrect.';
+    case 'PASSWORD_SETUP_INVALID':
+      return 'The phone number or setup token is not valid. The token may have expired, been used, or been locked after wrong attempts: ask the owner to run the password setup SQL again.';
+    case 'PASSWORD_IS_PHONE':
+      return 'The password cannot be your phone number. Choose a different password.';
+    case 'PASSWORD_TOO_COMMON':
+      return 'This password is too common and easy to guess. Choose a different password.';
     case 'TOTP_INVALID':
       return 'The authenticator code is incorrect. Wait for the next code and try again.';
     case 'SESSION_INVALID':

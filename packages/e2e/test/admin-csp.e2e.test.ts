@@ -1,7 +1,7 @@
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ADMIN_CSP } from '../../../apps/web/csp.mjs';
-import { ADMIN_URL, hotp, query, type Stack, startStack, waitForCode } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, hotp, issuePasswordSetup, query, type Stack, startStack } from './stack.js';
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
 const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
@@ -38,7 +38,7 @@ async function reportViolations(context: BrowserContext): Promise<void> {
  * with its QR code, the OTP / WhatsApp settings and the owner recovery panel all work under the admin
  * Content-Security-Policy without a single violation.
  */
-describe.runIf(enabled)('Admin Dashboard Phase 3.1 screens under the Content-Security-Policy (D-31)', () => {
+describe.runIf(enabled)('Admin Dashboard Phase 3.1 and 3.2 screens under the Content-Security-Policy (D-31)', () => {
   let stack: Stack;
   let browser: Browser;
   let context: BrowserContext;
@@ -64,7 +64,7 @@ describe.runIf(enabled)('Admin Dashboard Phase 3.1 screens under the Content-Sec
     await stack?.stop();
   });
 
-  it('initial setup, authenticator setup, OTP settings and owner recovery run without a CSP violation', async () => {
+  it('initial setup, set password, authenticator setup, OTP settings, change password and owner recovery run without a CSP violation', async () => {
     const setupToken = (await query<{ setup_token: string }>(stack.ownerUrl, 'select * from app.open_admin_bootstrap()')).rows[0]!.setup_token;
     const response = await page.goto(`${ADMIN_URL}/login`);
     expect(response!.headers()['content-security-policy']).toBe(ADMIN_CSP);
@@ -75,9 +75,15 @@ describe.runIf(enabled)('Admin Dashboard Phase 3.1 screens under the Content-Sec
     await page.getByText('The Waabek API key is saved.').waitFor();
 
     await page.getByRole('button', { name: 'Continue to sign in' }).click();
-    await page.getByLabel('Phone number').fill(PHONE);
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByLabel('WhatsApp code').fill(await waitForCode(stack, PHONE));
+    // D-34: the Set Password panel with the owner's setup token, then phone + password.
+    await page.getByRole('button', { name: 'Set password with a setup token' }).click();
+    await page.getByLabel('Admin phone number').fill(PHONE);
+    await page.getByLabel('Setup token').fill(await issuePasswordSetup(stack, PHONE));
+    await page.getByLabel('New password', { exact: true }).fill(ADMIN_PASSWORD);
+    await page.getByLabel('Confirm new password').fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText('Your password is set. Sign in with it.').waitFor();
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('img', { name: /QR code for Bedo Chat Admin/ }).waitFor();
     const secret = base32Decode((await page.getByTestId('totp-setup-key').textContent()) ?? '');
@@ -86,6 +92,8 @@ describe.runIf(enabled)('Admin Dashboard Phase 3.1 screens under the Content-Sec
     await page.getByText('CSP Admin · Super Admin').waitFor();
     await page.getByRole('button', { name: 'OTP / WhatsApp' }).click();
     await page.getByText('Saved (hidden)').waitFor();
+    await page.getByRole('button', { name: 'Account', exact: true }).click();
+    await page.getByRole('heading', { name: 'Change password' }).waitFor();
 
     const recoveryToken = (await query<{ recovery_token: string }>(stack.ownerUrl, 'select * from app.open_otp_settings_recovery()')).rows[0]!.recovery_token;
     const other = await browser.newContext();

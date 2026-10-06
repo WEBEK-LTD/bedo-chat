@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { base32Decode, currentStep, decryptSecret, encryptSecret, generateTotpSecret, hotp } from '../src/admin/totp.js';
 import {
   adminCsrf,
-  clearCooldown,
+  adminPasswordLogin,
   cookieValue,
   type IntegrationEnv,
   query,
+  setAdminPassword,
   setupIntegrationEnv,
   SETTINGS_KEY,
   startApp,
@@ -36,7 +37,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
   let ctx: IntegrationEnv;
   let app: NestFastifyApplication;
   let consumer: Worker;
-  const codes = new Map<string, string>();
+  const adminCodes: string[] = [];
   const testMessages: string[] = [];
   let testOutcome: 'ok' | Error = 'ok';
   let superCookie = '';
@@ -60,23 +61,18 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       (await owner('select * from audit.security_events')).rows,
     ]);
 
-  async function waitForCode(phone: string): Promise<string> {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const code = codes.get(phone);
-      if (code) {
-        codes.delete(phone);
-        return code;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    throw new Error(`no code for ${phone}`);
-  }
+  const withPassword = new Set<string>();
 
-  /** WhatsApp code step. Returns the answer of otp/verify. */
-  async function phoneStep(phone: string) {
-    await clearCooldown(ctx.redis, ctx.prefix, phone, 'otp-admin');
-    expect((await post('/v1/admin/auth/otp/request', { phone })).statusCode).toBe(200);
-    const verified = await post('/v1/admin/auth/otp/verify', { phone, code: await waitForCode(phone) });
+  /**
+   * Password step (D-34). The first time for a number, the owner issues a setup token by SQL and the admin
+   * sets the password on the Set Password panel. Returns the answer of password/login.
+   */
+  async function passwordStep(phone: string) {
+    if (!withPassword.has(phone)) {
+      await setAdminPassword(app, ctx.ownerUrl, phone);
+      withPassword.add(phone);
+    }
+    const verified = await adminPasswordLogin(app, phone);
     expect(verified.statusCode, verified.body).toBe(200);
     return verified.json() as { status: string; pendingToken: string };
   }
@@ -88,7 +84,8 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       QUEUE_NAMES.otp,
       async (job) => {
         if (job.name === OTP_JOB_NAMES.send) {
-          codes.set(job.data.phone, job.data.code);
+          // Admin sign-in sends no WhatsApp code (D-34).
+          adminCodes.push(job.data.phone);
           return undefined;
         }
         testMessages.push(job.data.phone);
@@ -279,15 +276,15 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     });
   });
 
-  describe('first sign-in: WhatsApp code, then authenticator setup', () => {
+  describe('first sign-in: password, then authenticator setup (D-34)', () => {
     it('never signs in with the setup token alone', async () => {
       const response = await post('/v1/admin/auth/totp/verify', { pendingToken: setupToken, code: '123456' });
       expect(response.json().error.code).toBe('SESSION_INVALID');
       expect(cookieValue(response.headers['set-cookie'], ADMIN_SESSION_COOKIE)).toBeNull();
     });
 
-    it('requires authenticator setup after the WhatsApp code, confirms it, and closes the setup for good', async () => {
-      const pending = await phoneStep(SUPER_PHONE);
+    it('requires authenticator setup after the password, confirms it, and closes the setup for good', async () => {
+      const pending = await passwordStep(SUPER_PHONE);
       expect(pending.status).toBe('totp_setup_required');
 
       // No secret yet: a code cannot be checked until the setup step has generated one.
@@ -332,6 +329,8 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       expect(actions).toEqual(['admin.totp_enrolled', 'admin.bootstrap_closed', 'admin.signed_in']);
       expect((await owner("select 1 from audit.security_events where event = 'admin_totp_enrolled' and subject_id = $1", [account.id])).rowCount).toBe(1);
       expect(await allHistory()).not.toContain(setupKey);
+      // Admin sign-in sent no WhatsApp code (D-34).
+      expect(adminCodes).toEqual([]);
     });
 
     it('stays closed: no token works, the owner cannot reopen it, and the row cannot be changed back', async () => {
@@ -346,7 +345,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     });
 
     it('signs in normally afterwards with the confirmed authenticator, and refuses a replayed code', async () => {
-      const pending = await phoneStep(SUPER_PHONE);
+      const pending = await passwordStep(SUPER_PHONE);
       expect(pending.status).toBe('totp_required');
       expect((await post('/v1/admin/auth/totp/setup', { pendingToken: pending.pendingToken })).json().error.code).toBe('SESSION_INVALID');
       const used = hotp(superSecret, currentStep(Date.now()));
@@ -357,7 +356,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
 
     it('ends the setup attempt after 5 wrong authenticator codes', async () => {
       await owner("insert into app.admin_accounts (phone, name, role) values ('+201100000902', 'Brute', 'moderator')");
-      const pending = await phoneStep('+201100000902');
+      const pending = await passwordStep('+201100000902');
       await post('/v1/admin/auth/totp/setup', { pendingToken: pending.pendingToken });
       for (let attempt = 0; attempt < 5; attempt += 1) {
         await post('/v1/admin/auth/totp/verify', { pendingToken: pending.pendingToken, code: '000000' });
@@ -368,7 +367,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
 
     it('lets later SQL-created admins set up their authenticator the same way, without the setup', async () => {
       await owner("insert into app.admin_accounts (phone, name, role) values ('+201100000903', 'Second Moderator', 'moderator')");
-      const pending = await phoneStep('+201100000903');
+      const pending = await passwordStep('+201100000903');
       expect(pending.status).toBe('totp_setup_required');
       const secret = base32Decode((await post('/v1/admin/auth/totp/setup', { pendingToken: pending.pendingToken })).json().setupKey);
       const done = await post('/v1/admin/auth/totp/verify', { pendingToken: pending.pendingToken, code: hotp(secret, currentStep(Date.now())) });
@@ -387,7 +386,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     it('keeps the Phase 2 flow for admins whose secret was stored before Phase 3.1', async () => {
       const secret = generateTotpSecret();
       await owner("insert into app.admin_accounts (phone, name, role, totp_secret_enc) values ('+201100000904', 'Earlier', 'moderator', $1)", [encryptSecret(TOTP_KEY, secret)]);
-      const pending = await phoneStep('+201100000904');
+      const pending = await passwordStep('+201100000904');
       expect(pending.status).toBe('totp_required');
       expect((await post('/v1/admin/auth/totp/setup', { pendingToken: pending.pendingToken })).json().error.code).toBe('SESSION_INVALID');
       expect((await post('/v1/admin/auth/totp/verify', { pendingToken: pending.pendingToken, code: hotp(secret, currentStep(Date.now())) })).statusCode).toBe(200);
@@ -563,7 +562,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       await expect(openBootstrap()).rejects.toThrow(/cannot be opened again/);
       expect((await app.inject({ method: 'GET', url: '/v1/admin/bootstrap', headers: adminCsrf })).json()).toEqual({ setupOpen: false });
       // Signing in still needs the WhatsApp code and the authenticator; the recovered key is what delivers the code.
-      const pending = await phoneStep(SUPER_PHONE);
+      const pending = await passwordStep(SUPER_PHONE);
       expect(pending.status).toBe('totp_required');
       expect((await post('/v1/admin/auth/totp/verify', { pendingToken: pending.pendingToken, code: '000000' })).json().error.code).toBe('TOTP_INVALID');
       const view = (await asAdmin(superCookie, 'GET', '/v1/admin/settings/otp')).json();

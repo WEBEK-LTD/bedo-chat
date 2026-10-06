@@ -151,10 +151,12 @@ every hour) and removes update-log entries and idempotency keys older than 30 da
 audit history are never removed. Keep at least one worker running: without it, sending would stop once the
 prepared partitions run out (more than three months later).
 
-## 4a. First Super Admin (Phase 3.1)
+## 4a. First Super Admin (Phase 3.1, sign-in as amended by D-34)
 
-Admin accounts are created by SQL. No command-line tool, container command or environment variable is needed
-to create the first Super Admin or to set the Waabek key.
+Admin sign-in is **phone number + password → authenticator (TOTP) code → admin session** (D-34). The phone
+number is the only admin identifier. No WhatsApp code is used for admin sign-in, and no admin session exists
+without a valid authenticator code. Admin accounts are created by SQL; no command-line tool, container command
+or environment variable is needed to create the first Super Admin, set its password or set the Waabek key.
 
 1. In the Supabase SQL editor (the table owner, as for migrations), create the account and open the one-time
    initial setup:
@@ -171,26 +173,41 @@ to create the first Super Admin or to set the Waabek key.
    wrong tokens lock it).
 2. Open `https://bedochat.com/admin/login`. While the setup is open the page shows **Initial setup**: enter
    the setup token and the Waabek API key, then **Save key**. The key is encrypted on the server and never shown
-   again. **Send test message** sends a WhatsApp test to the Super Admin's number and shows Waabek's answer.
-3. **Continue to sign in**: enter the Super Admin's phone number and the WhatsApp code.
-4. The page asks you to **set up your authenticator app**: scan the QR code (or type the setup key) in an
-   authenticator app and enter the 6-digit code it shows. The secret is generated on the server, kept encrypted
-   with `ADMIN_TOTP_KEY`, and saved to the account only once this code is confirmed.
-5. You are signed in. The initial setup is now closed for good: the page no longer offers it,
+   again; it is used for the students' WhatsApp sign-in codes. **Send test message** sends a WhatsApp test to
+   the Super Admin's number and shows Waabek's answer. Then **Continue to sign in**.
+3. Create the admin's **password setup token** in the SQL editor (table owner):
+
+   ```sql
+   select * from app.issue_admin_password_setup('+905446731942');
+   ```
+
+   It returns `setup_token` (one-time, valid 60 minutes) and `expires_at`. Only its hash is stored. Give the
+   token to the admin by a private channel. It is a different token from step 1's.
+4. On `/admin/login`, choose **Set password with a setup token**, enter the phone number, the password setup
+   token and the new password twice, then **Set password**. Password rules: 12–128 characters, no required
+   mix of character types, not the admin's phone number, and not on the built-in list of common passwords
+   (checked on the server; no network calls). The password is stored only as an Argon2id hash. This does
+   **not** sign anyone in.
+5. Sign in with the phone number and the password. The first time, the page asks you to **set up your
+   authenticator app**: scan the QR code (or type the setup key) in an authenticator app and enter the 6-digit
+   code it shows. The secret is generated on the server, kept encrypted with `ADMIN_TOTP_KEY`, and saved to
+   the account only once this code is confirmed.
+6. You are signed in. The initial setup is now closed for good: the page no longer offers it,
    `app.open_admin_bootstrap()` refuses, and the closure is in the audit log (`admin.bootstrap_closed`).
 
-The setup token never signs anyone in: the WhatsApp code and the authenticator are still required. More
-admins are created the same way with the `insert` statement only (role `super_admin` or `moderator`); each sets
-up the authenticator at the first sign-in.
+Neither setup token signs anyone in. More admins are created the same way: the `insert` statement (role
+`super_admin` or `moderator`), then step 3 for their own password setup token, step 4, and the authenticator
+setup at their first sign-in.
 
 To change the Waabek key later: *OTP / WhatsApp* in the dashboard (Super Admins), enter the new key and a
 current authenticator code, then **Send test message**.
 
 ## 4b. Waabek key recovery (D-33)
 
-Use this only when the saved Waabek key no longer works and no admin can sign in (admin sign-in needs a
-WhatsApp code). It replaces the key and nothing else: it signs nobody in, creates no session, and does not
-change admin accounts, roles, authenticator secrets or sessions. The initial setup stays closed.
+Use this when the saved Waabek key no longer works and you want to replace it without signing in to the
+dashboard (since D-34, admins can still sign in without WhatsApp and replace it in *OTP / WhatsApp*). It
+replaces the key and nothing else: it signs nobody in, creates no session, and does not change admin accounts,
+passwords, roles, authenticator secrets or sessions. The initial setup stays closed.
 
 1. In the Supabase SQL editor (table owner):
 
@@ -206,10 +223,48 @@ change admin accounts, roles, authenticator secrets or sessions. The initial set
    worker uses it from the next message on. Each token saves one key only; to save a different key, run the
    SQL again for a new token.
 3. **Send test message** sends a WhatsApp test to the first Super Admin's number.
-4. Sign in as usual (WhatsApp code, then authenticator code). *OTP / WhatsApp* shows the key as changed "by owner
-   recovery".
+4. Sign in as usual (phone + password, then authenticator code). *OTP / WhatsApp* shows the key as changed "by
+   owner recovery".
 
 The key is never typed into SQL: it goes only through the sign-in page to the API.
+
+## 4c. Admin passwords (D-34)
+
+- **Sign-in limits.** 5 wrong passwords for one phone number within 15 minutes lock password sign-in for that
+  number for 15 minutes (also for numbers that are not admins, so the answers do not reveal which numbers are).
+  Each IP address can make 20 password attempts per 15 minutes. Attempts are counted before the password is
+  checked. Unknown numbers, accounts without a password, disabled accounts and wrong passwords all get the
+  same answer ("The phone number or password is incorrect.") after the same hashing work.
+- **Change password (any admin).** Dashboard → *Account* → *Change password*: the current password, the new
+  password twice and a current authenticator code. Every other session of that admin ends; the current session
+  stays signed in. 5 attempts per 15 minutes.
+- **Forgotten password / reset (owner only, SQL).** There is no reset page and no reset by another admin. The
+  owner runs, in the SQL editor:
+
+  ```sql
+  select * from app.issue_admin_password_setup('<admin-phone>');
+  ```
+
+  For an admin who already has a password this is a reset: the old password stops working at once and **every
+  session of that admin ends**, including sign-ins in progress. It returns a new one-time setup token (60
+  minutes); the admin sets a new password with it on `/admin/login` → **Set password with a setup token**, as in
+  section 4a step 4. Setting it also lifts a sign-in lockout on that number. The authenticator app is unchanged.
+- **Setup tokens.** One per admin (running the function again replaces it). A token sets one password only,
+  expires after 60 minutes and stops working after 5 wrong tokens; a refused password (too common, the phone
+  number) does not use it up. A wrong number, a wrong, used, expired or locked token all get the same answer.
+  20 attempts per IP address per 15 minutes.
+- **Disabling an admin** stays as before: `update app.admin_accounts set status = 'disabled' where phone = …`.
+  A disabled admin's password answers like a wrong one, and `issue_admin_password_setup` refuses the account.
+- **What is recorded.** Security history: `admin_password_setup_issued` / `admin_password_reset_issued`,
+  `admin_password_set`, `admin_password_verified`, `admin_password_failed`, `admin_password_locked`,
+  `admin_password_locked_attempt`, `admin_password_setup_refused`, `admin_password_setup_token_failed`,
+  `admin_password_changed`. Audit log: `admin.password_setup_issued` / `admin.password_reset_issued`,
+  `admin.password_set`, `admin.password_changed`. No password, hash or token is ever written to them, to the
+  logs or to a response.
+- **Upgrading from Phase 3.1.** The migration `20261005120000_phase3_2_admin_password.sql` adds the password
+  columns and the setup-token table; existing admins keep their authenticator and get no password. Before they
+  can sign in again, the owner runs `app.issue_admin_password_setup` for each admin, and each admin sets a
+  password with their token. Existing admin sessions are not ended by the migration.
 
 ## 5. Netlify site (one site for both apps, D-26)
 
@@ -376,8 +431,10 @@ Netlify site was ever created before D-26, delete it or stop its builds: it is n
 ## 6. Check the deployment
 
 - `GET https://bedochat.com/api/health/ready` returns `{"status":"ok", ...}` with both checks `up`.
-- Open `https://bedochat.com/admin`: it sends you to `/admin/login`. Sign in with the Super Admin's phone and
-  authenticator app (the first time: section 4a); the dashboard opens at `/admin` and stays after a reload.
+- Open `https://bedochat.com/admin`: it sends you to `/admin/login`. Sign in with the Super Admin's phone
+  number, password and authenticator app (the first time: section 4a); the dashboard opens at `/admin` and
+  stays after a reload. A wrong password answers "The phone number or password is incorrect." and no WhatsApp
+  message is sent for admin sign-in.
   In *OTP / WhatsApp*, **Send test message** reports that Waabek accepted it. Add your own number to the
   academy phone list.
 - Open `https://bedochat.com/`: it sends you to `/login`. Sign in with that number: the WhatsApp code

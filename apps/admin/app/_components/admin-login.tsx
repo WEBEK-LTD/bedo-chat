@@ -3,11 +3,10 @@
 import {
   adminBootstrapStatus,
   adminOtpRecoveryStatus,
-  adminRequestCode,
+  adminPasswordLogin,
   adminSession,
   adminSetupTotp,
   type AdminTotpSetupResponse,
-  adminVerifyCode,
   adminVerifyTotp,
 } from '@bedo/api-client';
 import { useRouter } from 'next/navigation';
@@ -15,13 +14,14 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { ApiError, errorMessage } from '../_lib/api';
 import { InitialSetup } from './initial-setup';
 import { OtpRecovery } from './otp-recovery';
+import { PasswordSetup } from './password-setup';
 import { QrCode } from './qr-code';
 import { Button, FormError, TextField } from './ui';
 
 type Step =
   | { kind: 'checking' }
-  | { kind: 'phone' }
-  | { kind: 'code'; phone: string }
+  | { kind: 'credentials' }
+  | { kind: 'set-password' }
   | { kind: 'totp'; pendingToken: string }
   | { kind: 'setup'; pendingToken: string; setup: AdminTotpSetupResponse | null };
 
@@ -31,15 +31,17 @@ function groupKey(key: string): string {
 }
 
 /**
- * Admin sign-in (D-19, P-13): phone code by WhatsApp, then the authenticator-app code. An account created by
- * SQL sets up its authenticator app here at its first sign-in (Phase 3.1); while the owner has opened the
- * initial setup, the page also offers it (first Waabek API key).
+ * Admin sign-in (D-19 as amended by D-34, P-13): phone number and password, then the authenticator-app code,
+ * which every admin sign-in needs. An account created by SQL sets up its authenticator app here at its first
+ * sign-in (Phase 3.1). The Set Password panel takes the owner's one-time setup token (first password or after a
+ * reset). While the owner has opened the initial setup or a Waabek key recovery, the page also offers those.
  */
 export function AdminLogin() {
   const router = useRouter();
   const [step, setStep] = useState<Step>({ kind: 'checking' });
   const [phone, setPhone] = useState('');
-  const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
   const [totp, setTotp] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export function AdminLogin() {
     adminSession()
       .then(() => router.replace('/'))
       .catch(() => {
-        setStep({ kind: 'phone' });
+        setStep({ kind: 'credentials' });
         adminBootstrapStatus()
           .then((status) => setSetupOpen(status.setupOpen))
           .catch(() => setSetupOpen(false));
@@ -71,7 +73,7 @@ export function AdminLogin() {
       .catch((caught: unknown) => {
         if (cancelled) return;
         setError(errorMessage(caught));
-        setStep({ kind: 'phone' });
+        setStep({ kind: 'credentials' });
       });
     return () => {
       cancelled = true;
@@ -86,33 +88,29 @@ export function AdminLogin() {
     } catch (caught) {
       setError(errorMessage(caught));
       if (caught instanceof ApiError && caught.code === 'SESSION_INVALID') {
-        setStep({ kind: 'phone' });
+        setStep({ kind: 'credentials' });
       }
     } finally {
       setBusy(false);
     }
   }
 
-  const submitPhone = (event: FormEvent) => {
+  const submitCredentials = (event: FormEvent) => {
     event.preventDefault();
+    setNotice(null);
     void run(async () => {
-      await adminRequestCode({ phone: phone.trim() });
-      setCode('');
-      setStep({ kind: 'code', phone: phone.trim() });
-    });
-  };
-
-  const submitCode = (event: FormEvent) => {
-    event.preventDefault();
-    if (step.kind !== 'code') return;
-    void run(async () => {
-      const response = await adminVerifyCode({ phone: step.phone, code });
-      setTotp('');
-      setStep(
-        response.status === 'totp_setup_required'
-          ? { kind: 'setup', pendingToken: response.pendingToken, setup: null }
-          : { kind: 'totp', pendingToken: response.pendingToken },
-      );
+      try {
+        const response = await adminPasswordLogin({ phone: phone.trim(), password });
+        setTotp('');
+        setStep(
+          response.status === 'totp_setup_required'
+            ? { kind: 'setup', pendingToken: response.pendingToken, setup: null }
+            : { kind: 'totp', pendingToken: response.pendingToken },
+        );
+      } finally {
+        // The password is not kept in the page after it has been sent.
+        setPassword('');
+      }
     });
   };
 
@@ -134,19 +132,32 @@ export function AdminLogin() {
       <header>
         <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Bedo Chat Admin</h1>
         <p className="mt-2 text-sm text-ink-secondary">
-          {step.kind === 'phone'
-            ? 'Sign in with your admin phone number.'
-            : step.kind === 'code'
-              ? `If ${step.phone} belongs to an admin account, a code was sent to it by WhatsApp.`
+          {step.kind === 'credentials'
+            ? 'Sign in with your admin phone number and password.'
+            : step.kind === 'set-password'
+              ? 'Set your admin password.'
               : step.kind === 'setup'
                 ? 'Set up your authenticator app. It is required for every admin sign-in.'
                 : 'Enter the 6-digit code from your authenticator app.'}
         </p>
       </header>
 
-      {step.kind === 'phone' && setupOpen && <InitialSetup onClosed={() => setSetupOpen(false)} />}
+      {step.kind === 'credentials' && setupOpen && <InitialSetup onClosed={() => setSetupOpen(false)} />}
 
-      {step.kind === 'phone' && recoveryOpen && <OtpRecovery onClosed={() => setRecoveryOpen(false)} />}
+      {step.kind === 'credentials' && recoveryOpen && <OtpRecovery onClosed={() => setRecoveryOpen(false)} />}
+
+      {step.kind === 'set-password' && (
+        <PasswordSetup
+          initialPhone={phone}
+          onDone={(donePhone) => {
+            setPhone(donePhone);
+            setError(null);
+            setNotice('Your password is set. Sign in with it.');
+            setStep({ kind: 'credentials' });
+          }}
+          onCancel={() => setStep({ kind: 'credentials' })}
+        />
+      )}
 
       {step.kind === 'setup' && step.setup === null && <p className="text-sm text-ink-secondary">Preparing your authenticator setup…</p>}
 
@@ -185,34 +196,35 @@ export function AdminLogin() {
         </form>
       )}
 
-      {step.kind === 'phone' && (
-        <form className="flex flex-col gap-4" onSubmit={submitPhone} noValidate>
-          <TextField id="admin-phone" label="Phone number" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
-          <FormError message={error} />
-          <Button type="submit" busy={busy} disabled={phone.trim().length < 5}>
-            Continue
-          </Button>
-        </form>
-      )}
-
-      {step.kind === 'code' && (
-        <form className="flex flex-col gap-4" onSubmit={submitCode} noValidate>
+      {step.kind === 'credentials' && (
+        <form className="flex flex-col gap-4" onSubmit={submitCredentials} noValidate>
+          <TextField id="admin-phone" label="Phone number" type="tel" autoComplete="username" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
           <TextField
-            id="admin-code"
-            label="WhatsApp code"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={6}
-            value={code}
-            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            autoFocus
+            id="admin-password"
+            label="Password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
           />
+          {notice ? (
+            <p role="status" className="text-sm text-ink-secondary">
+              {notice}
+            </p>
+          ) : null}
           <FormError message={error} />
-          <Button type="submit" busy={busy} disabled={code.length !== 6}>
+          <Button type="submit" busy={busy} disabled={phone.trim().length < 5 || password.length === 0}>
             Continue
           </Button>
-          <Button variant="ghost" onClick={() => setStep({ kind: 'phone' })}>
-            Change number
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setError(null);
+              setNotice(null);
+              setStep({ kind: 'set-password' });
+            }}
+          >
+            Set password with a setup token
           </Button>
         </form>
       )}

@@ -27,6 +27,10 @@ export const ErrorEnvelopeErrorCode = {
   RECOVERY_UNAVAILABLE: 'RECOVERY_UNAVAILABLE',
   RECOVERY_TOKEN_INVALID: 'RECOVERY_TOKEN_INVALID',
   RECOVERY_TOKEN_USED: 'RECOVERY_TOKEN_USED',
+  CREDENTIALS_INVALID: 'CREDENTIALS_INVALID',
+  PASSWORD_SETUP_INVALID: 'PASSWORD_SETUP_INVALID',
+  PASSWORD_IS_PHONE: 'PASSWORD_IS_PHONE',
+  PASSWORD_TOO_COMMON: 'PASSWORD_TOO_COMMON',
   CANNOT_MESSAGE: 'CANNOT_MESSAGE',
   USER_BLOCKED: 'USER_BLOCKED',
   LIMIT_REACHED: 'LIMIT_REACHED',
@@ -576,35 +580,44 @@ export interface DeletionRequestResponse {
   requestedAt: string;
 }
 
-export interface AdminOtpRequestBody {
+export interface AdminPasswordLoginBody {
   /**
      * @minLength 5
      * @maxLength 32
      */
   phone: string;
-}
-
-export interface AdminOtpVerifyBody {
   /**
-     * @minLength 5
-     * @maxLength 32
+     * @minLength 1
+     * @maxLength 1024
      */
-  phone: string;
-  /** @pattern ^\d{6}$ */
-  code: string;
+  password: string;
 }
 
-export type AdminOtpVerifyResponseStatus = typeof AdminOtpVerifyResponseStatus[keyof typeof AdminOtpVerifyResponseStatus];
+export type AdminPasswordLoginResponseStatus = typeof AdminPasswordLoginResponseStatus[keyof typeof AdminPasswordLoginResponseStatus];
 
 
-export const AdminOtpVerifyResponseStatus = {
+export const AdminPasswordLoginResponseStatus = {
   totp_required: 'totp_required',
   totp_setup_required: 'totp_setup_required',
 } as const;
 
-export interface AdminOtpVerifyResponse {
-  status: AdminOtpVerifyResponseStatus;
+export interface AdminPasswordLoginResponse {
+  status: AdminPasswordLoginResponseStatus;
   pendingToken: string;
+}
+
+export interface AdminPasswordSetupBody {
+  /**
+     * @minLength 5
+     * @maxLength 32
+     */
+  phone: string;
+  /**
+     * @minLength 20
+     * @maxLength 200
+     */
+  setupToken: string;
+  password: string;
 }
 
 export interface AdminTotpVerifyBody {
@@ -723,6 +736,22 @@ export interface OtpRecoveryTestBody {
      * @maxLength 200
      */
   recoveryToken: string;
+}
+
+export interface AdminPasswordChangeBody {
+  /**
+     * @minLength 1
+     * @maxLength 1024
+     */
+  currentPassword: string;
+  newPassword: string;
+  /** @pattern ^\d{6}$ */
+  totpCode: string;
+}
+
+export interface AdminPasswordChangeResponse {
+  changed: true;
+  otherSessionsEnded: number;
 }
 
 /**
@@ -2624,18 +2653,18 @@ export const requestAccountDeletion = async ( options?: Parameters<typeof apiFet
 
 
 
-export const getAdminRequestCodeUrl = () => {
+export const getAdminPasswordLoginUrl = () => {
 
 
 
 
-  return `/v1/admin/auth/otp/request`
+  return `/v1/admin/auth/password/login`
 }
 
 /**
- * @summary Send an admin sign-in code
+ * @summary Admin sign-in step 1: phone and password (D-34); the authenticator code follows
  */
-export const adminRequestCode = async (adminOtpRequestBody: AdminOtpRequestBody, options?: Parameters<typeof apiFetch>[1]): Promise<OtpRequestResponse> => {
+export const adminPasswordLogin = async (adminPasswordLoginBody: AdminPasswordLoginBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminPasswordLoginResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2651,29 +2680,29 @@ export const adminRequestCode = async (adminOtpRequestBody: AdminOtpRequestBody,
     }
     return headers;
   };
-return apiFetch<OtpRequestResponse>(getAdminRequestCodeUrl(),
+return apiFetch<AdminPasswordLoginResponse>(getAdminPasswordLoginUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(adminOtpRequestBody)
+    body: JSON.stringify(adminPasswordLoginBody)
   }
 );}
 
 
 
-export const getAdminVerifyCodeUrl = () => {
+export const getAdminPasswordSetupUrl = () => {
 
 
 
 
-  return `/v1/admin/auth/otp/verify`
+  return `/v1/admin/auth/password/setup`
 }
 
 /**
- * @summary Verify the admin phone code
+ * @summary Set an admin password with an owner-issued setup token (D-34); signs nobody in
  */
-export const adminVerifyCode = async (adminOtpVerifyBody: AdminOtpVerifyBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminOtpVerifyResponse> => {
+export const adminPasswordSetup = async (adminPasswordSetupBody: AdminPasswordSetupBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -2689,12 +2718,12 @@ export const adminVerifyCode = async (adminOtpVerifyBody: AdminOtpVerifyBody, op
     }
     return headers;
   };
-return apiFetch<AdminOtpVerifyResponse>(getAdminVerifyCodeUrl(),
+return apiFetch<OkResponse>(getAdminPasswordSetupUrl(),
   {
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(adminOtpVerifyBody)
+    body: JSON.stringify(adminPasswordSetupBody)
   }
 );}
 
@@ -3019,6 +3048,44 @@ export const adminLogout = async ( options?: Parameters<typeof apiFetch>[1]): Pr
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export const getAdminChangePasswordUrl = () => {
+
+
+
+
+  return `/v1/admin/account/password`
+}
+
+/**
+ * @summary Change one's own password with the current password and an authenticator code (D-34); ends the other sessions
+ */
+export const adminChangePassword = async (adminPasswordChangeBody: AdminPasswordChangeBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminPasswordChangeResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminPasswordChangeResponse>(getAdminChangePasswordUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminPasswordChangeBody)
   }
 );}
 

@@ -5,23 +5,25 @@ import { Icon, type IconName } from '@bedo/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../_lib/api';
+import { AccountPassword } from './account-password';
 import { DeletionRequests } from './deletion-requests';
 import { OtpSettings } from './otp-settings';
 import { PhoneList } from './phone-list';
 import { TwoStepReset } from './two-step-reset';
 
-type Section = 'phones' | 'deletions' | 'two-step' | 'otp';
+type Section = 'phones' | 'deletions' | 'two-step' | 'otp' | 'account';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: IconName; superAdminOnly?: boolean }> = [
   { id: 'phones', label: 'Academy phone list', icon: 'list_alt' },
   { id: 'deletions', label: 'Deletion requests', icon: 'person_remove' },
   { id: 'two-step', label: '2-Step reset', icon: 'lock_reset', superAdminOnly: true },
   { id: 'otp', label: 'OTP / WhatsApp', icon: 'key', superAdminOnly: true },
+  { id: 'account', label: 'Account', icon: 'lock' },
 ];
 
 const ROLE_LABELS = { super_admin: 'Super Admin', moderator: 'Moderator' } as const;
 
-/** Admin dashboard (spec §22, D-20): Phase 2 areas and the OTP / WhatsApp settings (D-32). Separate from the user app. */
+/** Admin dashboard (spec §22, D-20): Phase 2 areas, the OTP / WhatsApp settings (D-32) and the admin's own password (D-34). Separate from the user app. */
 export function Dashboard() {
   const router = useRouter();
   const [admin, setAdmin] = useState<AdminInfo | null>(null);
@@ -90,6 +92,7 @@ export function Dashboard() {
           {section === 'deletions' && <DeletionRequests canDecide={canChange} onSessionError={onSessionError} />}
           {section === 'two-step' && canChange && <TwoStepReset onSessionError={onSessionError} />}
           {section === 'otp' && canChange && <OtpSettings onSessionError={onSessionError} />}
+          {section === 'account' && <AccountPassword onSessionError={onSessionError} />}
         </main>
       </div>
     </div>

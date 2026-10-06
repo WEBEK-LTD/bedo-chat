@@ -12,6 +12,8 @@ import {
   jobCount,
   latestCode,
   query,
+  setAdminPassword,
+  adminPasswordLogin,
   setupIntegrationEnv,
   startApp,
   TOTP_KEY,
@@ -119,8 +121,8 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
       phone,
       encryptSecret(TOTP_KEY, secret),
     ]);
-    await post('/v1/admin/auth/otp/request', { phone }, adminCsrf);
-    const pending = await post('/v1/admin/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) }, adminCsrf);
+    await setAdminPassword(app, ctx.ownerUrl, phone);
+    const pending = await adminPasswordLogin(app, phone);
     const token = pending.json().pendingToken as string;
     const good = hotp(secret, currentStep(Date.now()));
     const wrong = good === '000000' ? '111111' : '000000';
@@ -209,7 +211,10 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
 
   it('keeps the two apps apart: admin routes refuse the web origin, user cookie routes refuse the admin origin', async () => {
     const fromWeb = { origin: WEB_ORIGIN, 'x-bedo-csrf': '1' };
-    expect((await post('/v1/admin/auth/otp/request', { phone: nextPhone() }, fromWeb)).json().error.code).toBe('CSRF_REJECTED');
+    expect((await post('/v1/admin/auth/password/login', { phone: nextPhone(), password: 'x' }, fromWeb)).json().error.code).toBe('CSRF_REJECTED');
+    expect((await post('/v1/admin/auth/password/setup', { phone: nextPhone(), setupToken: 'x'.repeat(43), password: 'y'.repeat(16) }, fromWeb)).json().error.code).toBe(
+      'CSRF_REJECTED',
+    );
     const read = await app.inject({ method: 'GET', url: '/v1/admin/phone-list', headers: { ...fromWeb, cookie: `${ADMIN_SESSION_COOKIE}=anything` } });
     expect(read.json().error.code).toBe('CSRF_REJECTED');
 
@@ -282,17 +287,17 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     expect(next.body.user.id).toBe(userA.body.user.id);
   });
 
-  it('counts student and admin code requests against one 20-per-hour budget per IP', async () => {
+  it('keeps the 20-per-hour student code budget per IP; admin password sign-in has its own limit (D-34)', async () => {
     const ip = '203.0.113.77';
-    const request = (url: string, phone: string, headers: Record<string, string> = {}) =>
-      app.inject({ method: 'POST', url, payload: { phone }, headers, remoteAddress: ip });
-    for (let index = 0; index < 15; index += 1) {
-      expect((await request('/v1/auth/otp/request', nextPhone())).statusCode).toBe(200);
+    const request = (url: string, payload: object, headers: Record<string, string> = {}) =>
+      app.inject({ method: 'POST', url, payload, headers, remoteAddress: ip });
+    for (let index = 0; index < 20; index += 1) {
+      expect((await request('/v1/auth/otp/request', { phone: nextPhone() })).statusCode).toBe(200);
     }
-    for (let index = 0; index < 5; index += 1) {
-      expect((await request('/v1/admin/auth/otp/request', nextPhone(), adminCsrf)).statusCode).toBe(200);
-    }
-    expect((await request('/v1/auth/otp/request', nextPhone())).json().error.code).toBe('RATE_LIMITED');
-    expect((await request('/v1/admin/auth/otp/request', nextPhone(), adminCsrf)).json().error.code).toBe('RATE_LIMITED');
+    expect((await request('/v1/auth/otp/request', { phone: nextPhone() })).json().error.code).toBe('RATE_LIMITED');
+    // Admin sign-in sends no code and does not use the student budget.
+    expect((await request('/v1/admin/auth/password/login', { phone: nextPhone(), password: 'not-the-password' }, adminCsrf)).json().error.code).toBe(
+      'CREDENTIALS_INVALID',
+    );
   });
 });

@@ -6,7 +6,8 @@
   "type": "module",
   "files": [
     "dist",
-    "openapi"
+    "openapi",
+    "assets"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node dist/scripts/generate-openapi.js",

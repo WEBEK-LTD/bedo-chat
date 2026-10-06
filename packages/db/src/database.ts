@@ -50,6 +50,10 @@ export interface AdminAccountsTable {
   role: AdminRole;
   /** NULL for an account created by SQL until its authenticator is set up (Phase 3.1). */
   totp_secret_enc: string | null;
+  /** Argon2id hash of the admin password (D-34); NULL until set with an owner-issued setup token. */
+  password_hash: string | null;
+  /** Set by a trigger whenever the hash changes. */
+  password_changed_at: ColumnType<Date | null, never, never>;
   totp_confirmed_at: Date | null;
   totp_last_step: ColumnType<string | null, string | number | null | undefined, string | number | null>;
   status: Generated<'active' | 'disabled'>;
@@ -78,6 +82,17 @@ export interface AdminBootstrapTable {
   opened_at: ColumnType<Date | null, never, never>;
   closed_at: ColumnType<Date | null, never, Date>;
   closed_by: ColumnType<string | null, never, string>;
+}
+
+/** Owner-issued admin password setup tokens (D-34): at most one per admin. */
+export interface AdminPasswordSetupTable {
+  admin_id: ColumnType<string, never, never>;
+  token_hash: ColumnType<string, never, never>;
+  expires_at: ColumnType<Date, never, never>;
+  failed_attempts: ColumnType<number, never, number>;
+  issued_at: ColumnType<Date, never, never>;
+  is_reset: ColumnType<boolean, never, never>;
+  used_at: ColumnType<Date | null, never, Date>;
 }
 
 /** Owner-only Waabek key recovery (D-33): one row. */
@@ -403,6 +418,7 @@ export interface Database {
   'app.otp_settings': OtpSettingsTable;
   'app.admin_bootstrap': AdminBootstrapTable;
   'app.otp_settings_recovery': OtpSettingsRecoveryTable;
+  'app.admin_password_setup': AdminPasswordSetupTable;
   'app.users': UsersTable;
   'app.user_privacy': UserPrivacyTable;
   'app.sessions': SessionsTable;

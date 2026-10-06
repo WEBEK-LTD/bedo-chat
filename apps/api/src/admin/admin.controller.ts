@@ -7,9 +7,11 @@ import {
   adminBootstrapStatusResponseSchema,
   adminBootstrapTestBodySchema,
   adminBootstrapWaabekKeyBodySchema,
-  adminOtpRequestBodySchema,
-  adminOtpVerifyBodySchema,
-  adminOtpVerifyResponseSchema,
+  adminPasswordChangeBodySchema,
+  adminPasswordChangeResponseSchema,
+  adminPasswordLoginBodySchema,
+  adminPasswordLoginResponseSchema,
+  adminPasswordSetupBodySchema,
   adminSessionResponseSchema,
   adminTotpSetupBodySchema,
   adminTotpSetupResponseSchema,
@@ -19,7 +21,6 @@ import {
   deletionRequestListQuerySchema,
   deletionRequestListResponseSchema,
   okResponseSchema,
-  otpRequestResponseSchema,
   otpSettingsReplaceKeyBodySchema,
   otpSettingsReplaceKeyResponseSchema,
   otpSettingsResponseSchema,
@@ -51,6 +52,7 @@ import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js'
 import { type AdminContext, AdminAuthService } from './admin-auth.service.js';
 import { AdminBootstrapService } from './admin-bootstrap.service.js';
 import { AdminOperationsService } from './admin-operations.service.js';
+import { AdminPasswordService } from './admin-password.service.js';
 import { OtpRecoveryService } from './otp-recovery.service.js';
 import { OtpSettingsService } from './otp-settings.service.js';
 
@@ -66,28 +68,37 @@ function setAdminCookie(reply: FastifyReply, env: ApiEnv, token: string): void {
   });
 }
 
-/** Admin sign-in (D-19). Public endpoints, CSRF-checked because they set the session cookie. */
+/**
+ * Admin sign-in (D-19 as amended by D-34): phone + password, then the mandatory authenticator code. Public
+ * endpoints, CSRF-checked (admin origins only) because they lead to the session cookie.
+ */
 @Controller('v1/admin/auth')
 export class AdminAuthController {
   constructor(
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(AdminAuthService) private readonly auth: AdminAuthService,
+    @Inject(AdminPasswordService) private readonly passwords: AdminPasswordService,
   ) {}
 
-  @Post('otp/request')
+  @Post('password/login')
   @HttpCode(200)
-  @ResponseSchema(otpRequestResponseSchema)
-  requestCode(@Body(new ZodValidationPipe(adminOtpRequestBodySchema)) body: { phone: string }, @Req() request: FastifyRequest) {
+  @ResponseSchema(adminPasswordLoginResponseSchema)
+  login(@Body(new ZodValidationPipe(adminPasswordLoginBodySchema)) body: { phone: string; password: string }, @Req() request: FastifyRequest) {
     assertCsrf(request, this.env.ADMIN_ORIGINS);
-    return this.auth.requestCode(requirePhone(body.phone), requestInfo(request));
+    return this.passwords.login(requirePhone(body.phone), body.password, requestInfo(request));
   }
 
-  @Post('otp/verify')
+  /** Sets a password with the owner's one-time setup token (D-34). Never signs anyone in. */
+  @Post('password/setup')
   @HttpCode(200)
-  @ResponseSchema(adminOtpVerifyResponseSchema)
-  async verifyCode(@Body(new ZodValidationPipe(adminOtpVerifyBodySchema)) body: { phone: string; code: string }, @Req() request: FastifyRequest) {
+  @ResponseSchema(okResponseSchema)
+  async setPassword(
+    @Body(new ZodValidationPipe(adminPasswordSetupBodySchema)) body: { phone: string; setupToken: string; password: string },
+    @Req() request: FastifyRequest,
+  ) {
     assertCsrf(request, this.env.ADMIN_ORIGINS);
-    return this.auth.verifyCode(requirePhone(body.phone), body.code, requestInfo(request));
+    await this.passwords.setWithToken(requirePhone(body.phone), body.setupToken, body.password, requestInfo(request));
+    return { ok: true as const };
   }
 
   /** Phase 3.1: first sign-in of an account created by SQL; the server generates the authenticator secret. */
@@ -203,6 +214,7 @@ export class AdminController {
   constructor(
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(AdminAuthService) private readonly auth: AdminAuthService,
+    @Inject(AdminPasswordService) private readonly passwords: AdminPasswordService,
     @Inject(AdminOperationsService) private readonly operations: AdminOperationsService,
     @Inject(OtpSettingsService) private readonly otpSettings: OtpSettingsService,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -240,6 +252,19 @@ export class AdminController {
       path: publicCookiePath(this.env, ADMIN_SESSION_COOKIE_PATH),
     });
     return { ok: true as const };
+  }
+
+  /** Any signed-in admin changes their own password (D-34): current password + authenticator code. */
+  @Post('account/password')
+  @HttpCode(200)
+  @ResponseSchema(adminPasswordChangeResponseSchema)
+  async changePassword(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(adminPasswordChangeBodySchema)) body: { currentPassword: string; newPassword: string; totpCode: string },
+    @Req() request: FastifyRequest,
+  ) {
+    const result = await this.passwords.change(admin, body.currentPassword, body.newPassword, body.totpCode, requestInfo(request));
+    return { changed: true as const, otherSessionsEnded: result.otherSessionsEnded };
   }
 
   @Get('phone-list')

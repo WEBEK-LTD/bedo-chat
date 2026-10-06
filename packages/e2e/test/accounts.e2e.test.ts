@@ -1,6 +1,6 @@
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_URL, createAdmin, query, type Stack, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, createAdmin, query, type Stack, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -61,11 +61,15 @@ describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + 
     await stack?.stop();
   });
 
-  it('admin signs in with the WhatsApp code and the authenticator app', async () => {
+  it('admin signs in with phone, password and the authenticator app (D-34)', async () => {
     await adminPage.goto(`${ADMIN_URL}/login`);
     await adminPage.getByLabel('Phone number').fill(SUPER_ADMIN);
+    await adminPage.getByLabel('Password', { exact: true }).fill('not-the-right-password');
     await adminPage.getByRole('button', { name: 'Continue' }).click();
-    await adminPage.getByLabel('WhatsApp code').fill(await waitForCode(stack, SUPER_ADMIN));
+    await adminPage.getByText('The phone number or password is incorrect.').waitFor();
+    // The password field is emptied after every attempt.
+    expect(await adminPage.getByLabel('Password', { exact: true }).inputValue()).toBe('');
+    await adminPage.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await adminPage.getByRole('button', { name: 'Continue' }).click();
     await adminPage.getByLabel('Authenticator code').fill('000000');
     await adminPage.getByRole('button', { name: 'Sign in' }).click();
@@ -253,8 +257,7 @@ describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + 
     const page = await newPage();
     await page.goto(`${ADMIN_URL}/login`);
     await page.getByLabel('Phone number').fill(MODERATOR);
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByLabel('WhatsApp code').fill(await waitForCode(stack, MODERATOR));
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByLabel('Authenticator code').fill(totpNow(moderatorSecret));
     await page.getByRole('button', { name: 'Sign in' }).click();

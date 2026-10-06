@@ -4,6 +4,7 @@ import type net from 'node:net';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
+  ADMIN_PASSWORD,
   ADMIN_URL,
   API_URL,
   createAdmin,
@@ -210,8 +211,7 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
     await page.goto(`${ADMIN_URL}`);
     await page.waitForURL(`${ADMIN_URL}/login`);
     await page.getByLabel('Phone number').fill(ADMIN);
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByLabel('WhatsApp code').fill(await waitForCode(stack, ADMIN));
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByLabel('Authenticator code').fill(totpNow(secret));
     await page.getByRole('button', { name: 'Sign in' }).click();

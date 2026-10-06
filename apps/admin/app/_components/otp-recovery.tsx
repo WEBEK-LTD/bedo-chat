@@ -56,7 +56,7 @@ export function OtpRecovery({ onClosed }: { onClosed: () => void }) {
             WhatsApp settings recovery
           </h2>
           <p className="mt-1 text-sm text-ink-secondary">
-            Replace the Waabek API key so admins can receive WhatsApp sign-in codes again. Use the recovery token from the recovery SQL. This does not sign you in.
+            Replace the Waabek API key so students can receive WhatsApp sign-in codes again. Use the recovery token from the recovery SQL. This does not sign you in.
           </p>
         </div>
       </header>

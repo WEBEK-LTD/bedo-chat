@@ -1,7 +1,7 @@
 import { decryptWaabekApiKey } from '@bedo/server-crypto';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_URL, hotp, query, type Stack, startStack, waitForCode } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, hotp, query, type Stack, startStack } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -17,6 +17,7 @@ const SUPER_PHONE = '+905446731942';
 const FIRST_KEY = 'fake-waabek-key-e2e-initial-0001';
 const SECOND_KEY = 'fake-waabek-key-e2e-replaced-0002';
 const RECOVERED_KEY = 'fake-waabek-key-e2e-recovered-0003';
+const CHANGED_PASSWORD = 'harbour-violet-compass-8826';
 
 function base32Decode(input: string): Buffer {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -38,9 +39,11 @@ const step = (offset = 0) => Math.floor(Date.now() / 30_000) + offset;
 
 /**
  * Phase 3.1 in a real browser: the owner creates the Super Admin and opens the initial setup by SQL; the
- * sign-in page stores the first Waabek key; the Super Admin signs in with the WhatsApp code, sets up the
- * authenticator from the QR code / setup key; the setup closes for good; the key is replaced from the
- * dashboard with an authenticator code. The key is never shown in any page.
+ * sign-in page stores the first Waabek key; the Super Admin sets a password with the owner's one-time password
+ * setup token (D-34), signs in with phone + password and sets up the authenticator from the QR code / setup
+ * key; the setup closes for good; the key is replaced from the dashboard with an authenticator code; the
+ * admin changes the password. Neither the key nor any password or token is shown in a page or written to the
+ * API's logs.
  */
 describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', () => {
   let stack: Stack;
@@ -48,6 +51,7 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
   let page: Page;
   let setupToken: string;
   let secret: Buffer;
+  const secrets: string[] = [FIRST_KEY, SECOND_KEY, RECOVERED_KEY, ADMIN_PASSWORD, CHANGED_PASSWORD];
   const contexts: BrowserContext[] = [];
 
   async function newPage(): Promise<Page> {
@@ -65,6 +69,7 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     // Exactly what the owner runs in the SQL editor.
     await query(stack.ownerUrl, "insert into app.admin_accounts (phone, name, role, status) values ('+905446731942', 'Academy Admin', 'super_admin', 'active')");
     setupToken = (await query<{ setup_token: string }>(stack.ownerUrl, 'select * from app.open_admin_bootstrap()')).rows[0]!.setup_token;
+    secrets.push(setupToken);
     page = await newPage();
   });
 
@@ -93,11 +98,64 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     expect(decryptWaabekApiKey(stack.settingsKey, row.waabek_api_key_enc!)).toBe(FIRST_KEY);
   });
 
-  it('signs in with the WhatsApp code and sets up the authenticator from the QR code and setup key', async () => {
+  it('sets the first password on the sign-in page with the owner\'s setup token, without signing in (D-34)', async () => {
     await page.getByRole('button', { name: 'Continue to sign in' }).click();
+    // No password yet: the answer is the same as for a wrong password.
     await page.getByLabel('Phone number').fill(SUPER_PHONE);
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByLabel('WhatsApp code').fill(await waitForCode(stack, SUPER_PHONE));
+    await page.getByText('The phone number or password is incorrect.').waitFor();
+
+    // Exactly what the owner runs in the SQL editor.
+    const passwordToken = (await query<{ setup_token: string }>(stack.ownerUrl, `select * from app.issue_admin_password_setup('${SUPER_PHONE}')`)).rows[0]!.setup_token;
+    secrets.push(passwordToken);
+    await page.getByRole('button', { name: 'Set password with a setup token' }).click();
+    await page.getByRole('heading', { name: 'Set password' }).waitFor();
+    expect(await page.getByLabel('Admin phone number').inputValue()).toBe(SUPER_PHONE);
+    await page.getByLabel('Setup token').fill('t'.repeat(43));
+    await page.getByLabel('New password', { exact: true }).fill(ADMIN_PASSWORD);
+    await page.getByLabel('Confirm new password').fill(ADMIN_PASSWORD);
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText(/The phone number or setup token is not valid/).waitFor();
+
+    await page.getByLabel('Setup token').fill(passwordToken);
+    await page.getByLabel('New password', { exact: true }).fill('short-pass');
+    await page.getByLabel('Confirm new password').fill('short-pass');
+    expect(await page.getByRole('button', { name: 'Set password', exact: true }).isDisabled()).toBe(true);
+    await page.getByLabel('New password', { exact: true }).fill('Password1234');
+    await page.getByLabel('Confirm new password').fill('Password1234-x');
+    await page.getByText('The passwords do not match.').waitFor();
+    await page.getByLabel('Confirm new password').fill('Password1234');
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText('This password is too common and easy to guess. Choose a different password.').waitFor();
+    await page.getByLabel('New password', { exact: true }).fill(SUPER_PHONE);
+    await page.getByLabel('Confirm new password').fill(SUPER_PHONE);
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText('The password cannot be your phone number. Choose a different password.').waitFor();
+    await page.getByLabel('New password', { exact: true }).fill(ADMIN_PASSWORD);
+    await page.getByLabel('Confirm new password').fill(ADMIN_PASSWORD);
+    await shot(page, '35-set-password');
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText('Your password is set. Sign in with it.').waitFor();
+    expect(await page.content()).not.toContain(ADMIN_PASSWORD);
+    expect(await page.content()).not.toContain(passwordToken);
+    expect((await page.context().cookies()).some((cookie) => cookie.name === 'bedo_admin_session')).toBe(false);
+    const stored = (await query<{ password_hash: string }>(stack.ownerUrl, 'select password_hash from app.admin_accounts where phone = $1', [SUPER_PHONE])).rows[0]!;
+    expect(stored.password_hash).toMatch(/^\$argon2id\$/);
+    // The token worked once.
+    await page.getByRole('button', { name: 'Set password with a setup token' }).click();
+    await page.getByLabel('Setup token').fill(passwordToken);
+    await page.getByLabel('New password', { exact: true }).fill(CHANGED_PASSWORD);
+    await page.getByLabel('Confirm new password').fill(CHANGED_PASSWORD);
+    await page.getByRole('button', { name: 'Set password', exact: true }).click();
+    await page.getByText(/The phone number or setup token is not valid/).waitFor();
+    await page.getByRole('button', { name: 'Back to sign in' }).click();
+  });
+
+  it('signs in with phone and password and sets up the authenticator from the QR code and setup key', async () => {
+    expect(await page.getByLabel('Phone number').inputValue()).toBe(SUPER_PHONE);
+    await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
+    await shot(page, '36-sign-in-password');
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByText('Set up your authenticator app. It is required for every admin sign-in.').waitFor();
     await page.getByRole('img', { name: /QR code for Bedo Chat Admin/ }).waitFor();
@@ -189,5 +247,62 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     await page.reload();
     await page.getByRole('button', { name: 'OTP / WhatsApp' }).click();
     await page.getByText(/by owner recovery/).waitFor();
+  });
+
+  it('changes the password from Account: needs the current password and an authenticator code, signs out other sessions only', async () => {
+    // A second session of the same admin (the replay marker is cleared so a new code can be used at once).
+    await query(stack.ownerUrl, 'update app.admin_accounts set totp_last_step = null where phone = $1', [SUPER_PHONE]);
+    const other = await newPage();
+    await other.goto(`${ADMIN_URL}/login`);
+    await other.getByLabel('Phone number').fill(SUPER_PHONE);
+    await other.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
+    await other.getByRole('button', { name: 'Continue' }).click();
+    await other.getByLabel('Authenticator code').fill(hotp(secret, step()));
+    await other.getByRole('button', { name: 'Sign in' }).click();
+    await other.getByText('Academy Admin · Super Admin').waitFor();
+
+    await page.getByRole('button', { name: 'Account', exact: true }).click();
+    await page.getByRole('heading', { name: 'Change password' }).waitFor();
+    await page.getByLabel('Current password').fill('not-the-current-password');
+    await page.getByLabel('New password', { exact: true }).fill(CHANGED_PASSWORD);
+    await page.getByLabel('Confirm new password').fill(CHANGED_PASSWORD);
+    await page.getByLabel('Authenticator code').fill(hotp(secret, step(1)));
+    await page.getByRole('button', { name: 'Change password', exact: true }).click();
+    await page.getByText('The current password or the authenticator code is incorrect.').waitFor();
+    // The code field is emptied: a code works once.
+    expect(await page.getByLabel('Authenticator code').inputValue()).toBe('');
+
+    await page.getByLabel('Current password').fill(ADMIN_PASSWORD);
+    await page.getByLabel('Authenticator code').fill(hotp(secret, step(1)));
+    await shot(page, '37-change-password');
+    await page.getByRole('button', { name: 'Change password', exact: true }).click();
+    await page.getByText('Your password is changed. 1 other session was signed out.').waitFor();
+    expect(await page.content()).not.toContain(CHANGED_PASSWORD);
+
+    // This session stays; the other one ends.
+    await page.getByRole('button', { name: 'Deletion requests' }).click();
+    await page.getByRole('heading', { name: 'Deletion requests' }).first().waitFor();
+    await other.reload();
+    await other.waitForURL(`${ADMIN_URL}/login`);
+
+    // The old password no longer works; the new one does.
+    await other.getByLabel('Phone number').fill(SUPER_PHONE);
+    await other.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
+    await other.getByRole('button', { name: 'Continue' }).click();
+    await other.getByText('The phone number or password is incorrect.').waitFor();
+    await other.getByLabel('Password', { exact: true }).fill(CHANGED_PASSWORD);
+    await other.getByRole('button', { name: 'Continue' }).click();
+    await other.getByLabel('Authenticator code').waitFor();
+  });
+
+  it('never writes a password, token or Waabek key to the API logs', async () => {
+    const output = stack.apiOutput();
+    // The request log is on (level info), so the sign-in requests are there — without their bodies.
+    expect(output).toContain('/v1/admin/auth/password/login');
+    expect(output).toContain('/v1/admin/auth/password/setup');
+    expect(output).toContain('/v1/admin/account/password');
+    for (const value of [...secrets, 'Password1234', 'not-the-current-password']) {
+      expect(output.includes(value), value).toBe(false);
+    }
   });
 });

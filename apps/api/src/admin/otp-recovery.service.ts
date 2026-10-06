@@ -37,8 +37,8 @@ function refuseUnless(check: TokenCheck): void {
 }
 
 /**
- * Owner-only Waabek key recovery (D-33). When the stored Waabek key no longer works and no admin can reach
- * the Admin Dashboard (admin sign-in needs a WhatsApp code), the database owner runs
+ * Owner-only Waabek key recovery (D-33). When the stored Waabek key no longer works (D-33 predates D-34,
+ * when admin sign-in still needed a WhatsApp code; it is kept unchanged), the database owner runs
  * app.open_otp_settings_recovery() by SQL and gets a one-time recovery token. With it, the sign-in page can do
  * exactly two things: save ONE new Waabek key (the token is then used up for saving) (encrypted here with SETTINGS_ENCRYPTION_KEY, raising the settings
  * version every worker checks) and send a test message. It never signs anyone in, never creates a session and

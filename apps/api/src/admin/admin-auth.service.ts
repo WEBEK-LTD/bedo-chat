@@ -8,7 +8,6 @@ import { hashToken, randomToken } from '../common/crypto.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { API_ENV } from '../config/tokens.js';
 import { AuditService } from '../audit/audit.service.js';
-import { OtpService } from '../auth/otp.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import { RateLimitService } from '../redis/rate-limit.service.js';
 import { RedisService } from '../redis/redis.service.js';
@@ -30,13 +29,23 @@ interface PendingAdmin {
    * written to the account only after the admin confirms it with a code.
    */
   enrol?: true;
+  /**
+   * D-34: when the password that started this sign-in was set. If the password is reset or changed before the
+   * authenticator step completes, the pending sign-in is refused.
+   */
+  passwordChangedAt: string;
 }
 
-export type AdminVerifyCodeResult = { status: 'totp_required' | 'totp_setup_required'; pendingToken: string };
+function passwordStamp(value: Date | null): string {
+  return value ? new Date(value).toISOString() : 'none';
+}
+
+export type AdminPendingSignIn = { status: 'totp_required' | 'totp_setup_required'; pendingToken: string };
 
 /**
- * Admin sign-in (D-19, P-13): phone code through Waabek, then a mandatory authenticator-app code.
- * Admin accounts and sessions are separate from student accounts and sessions.
+ * Admin sign-in (D-19 as amended by D-34, P-13): phone and password (AdminPasswordService), then a mandatory
+ * authenticator-app code; no admin session exists without it. Admin accounts and sessions are separate from
+ * student accounts and sessions. WhatsApp codes are not part of admin sign-in.
  */
 @Injectable()
 export class AdminAuthService {
@@ -45,7 +54,6 @@ export class AdminAuthService {
   constructor(
     @Inject(API_ENV) env: ApiEnv,
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(OtpService) private readonly otp: OtpService,
     @Inject(RedisService) private readonly redis: RedisService,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -58,37 +66,15 @@ export class AdminAuthService {
     return this.database.db;
   }
 
-  private findActiveAdminByPhone(phone: string) {
-    return this.db.selectFrom('app.admin_accounts').selectAll().where('phone', '=', phone).where('status', '=', 'active').executeTakeFirst();
-  }
-
-  async requestCode(phone: string, info: RequestInfo) {
-    const admin = await this.findActiveAdminByPhone(phone);
-    return this.otp.issue({
-      purpose: 'admin_sign_in',
-      phone,
-      eligible: Boolean(admin),
-      subject: admin ? { subjectType: 'admin', subjectId: admin.id } : { subjectType: 'phone', subjectId: null },
-      info,
-    });
-  }
-
-  async verifyCode(phone: string, code: string, info: RequestInfo): Promise<AdminVerifyCodeResult> {
-    const admin = await this.findActiveAdminByPhone(phone);
-    await this.otp.check({
-      purpose: 'admin_sign_in',
-      phone,
-      code,
-      subject: admin ? { subjectType: 'admin', subjectId: admin.id } : { subjectType: 'phone', subjectId: null },
-      info,
-    });
-    if (!admin) {
-      // Unreachable in practice: codes are only issued to admin numbers.
-      throw new AppError(HttpStatus.BAD_REQUEST, 'OTP_INVALID');
-    }
+  /**
+   * After a correct password (D-34): starts the authenticator step. An account without an authenticator
+   * (created by SQL) must set one up first (Phase 3.1). Returns the short-lived pending sign-in token.
+   */
+  async startPendingSignIn(admin: { id: string; totp_secret_enc: string | null; password_changed_at: Date | null }): Promise<AdminPendingSignIn> {
     const pendingToken = randomToken();
     const enrol = admin.totp_secret_enc === null;
-    const pending: PendingAdmin = enrol ? { adminId: admin.id, enrol: true } : { adminId: admin.id };
+    const stamp = passwordStamp(admin.password_changed_at);
+    const pending: PendingAdmin = enrol ? { adminId: admin.id, enrol: true, passwordChangedAt: stamp } : { adminId: admin.id, passwordChangedAt: stamp };
     await this.redis.client.set(
       this.pendingKey(pendingToken),
       JSON.stringify(pending),
@@ -99,7 +85,7 @@ export class AdminAuthService {
   }
 
   /**
-   * First-time authenticator setup (Phase 3.1), after the WhatsApp code: returns the secret generated for
+   * First-time authenticator setup (Phase 3.1), after the password (D-34): returns the secret generated for
    * this sign-in attempt (the same one on every call), for the QR code and manual entry. Nothing is written
    * to the account until the admin confirms a code with POST totp/verify.
    */
@@ -109,7 +95,7 @@ export class AdminAuthService {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
     const admin = await this.db.selectFrom('app.admin_accounts').selectAll().where('id', '=', pending.adminId).executeTakeFirst();
-    if (!admin || admin.status !== 'active' || admin.totp_secret_enc !== null) {
+    if (!admin || admin.status !== 'active' || admin.totp_secret_enc !== null || !this.passwordStillValid(admin, pending)) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
     const ttlMs = await this.redis.client.pttl(this.pendingKey(pendingToken));
@@ -152,7 +138,7 @@ export class AdminAuthService {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
     const admin = await this.db.selectFrom('app.admin_accounts').selectAll().where('id', '=', pending.adminId).executeTakeFirst();
-    if (!admin || admin.status !== 'active') {
+    if (!admin || admin.status !== 'active' || !this.passwordStillValid(admin, pending)) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
     // Phase 3.1: an account without an authenticator confirms the secret generated by setupTotp.
@@ -288,6 +274,11 @@ export class AdminAuthService {
 
   private pendingKey(token: string): string {
     return `${this.redis.prefix}:admin-pending:${hashToken(token)}`;
+  }
+
+  /** D-34: the account still has the password that started this sign-in (not reset or changed since). */
+  private passwordStillValid(admin: { password_hash: string | null; password_changed_at: Date | null }, pending: PendingAdmin): boolean {
+    return admin.password_hash !== null && passwordStamp(admin.password_changed_at) === pending.passwordChangedAt;
   }
 
   private enrolmentKey(token: string): string {

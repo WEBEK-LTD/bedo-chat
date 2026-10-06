@@ -6,12 +6,14 @@ import { createAdmin as createAdminAccount } from '../src/admin/create-admin.js'
 import { base32Decode, currentStep, encryptSecret, generateTotpSecret, hotp } from '../src/admin/totp.js';
 import {
   adminCsrf,
+  adminPasswordLogin,
   clearCooldown,
   cookieValue,
   jobCount,
   type IntegrationEnv,
   latestCode,
   query,
+  setAdminPassword,
   setupIntegrationEnv,
   startApp,
   TOTP_KEY,
@@ -46,18 +48,16 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
       'insert into app.admin_accounts (phone, name, role, totp_secret_enc) values ($1, $2, $3, $4) returning id',
       [phone, `${role} tester`, role, encryptSecret(TOTP_KEY, secret)],
     );
+    await setAdminPassword(app, ctx.ownerUrl, phone);
     return { id: row.rows[0]!.id, phone, secret };
   }
 
   const post = (url: string, payload: unknown, headers: Record<string, string>) =>
     app.inject({ method: 'POST', url, payload: payload as object, headers, remoteAddress: nextIp() });
 
-  /** Phone code, then authenticator code. Returns the admin session cookie. */
+  /** Phone + password, then authenticator code (D-34). Returns the admin session cookie. */
   async function adminSignIn(admin: TestAdmin, stepOffset = 0): Promise<string> {
-    await clearCooldown(ctx.redis, ctx.prefix, admin.phone, 'otp-admin');
-    expect((await post('/v1/admin/auth/otp/request', { phone: admin.phone }, adminCsrf)).statusCode).toBe(200);
-    const code = await latestCode(ctx.otpQueue, admin.phone);
-    const pending = await post('/v1/admin/auth/otp/verify', { phone: admin.phone, code }, adminCsrf);
+    const pending = await adminPasswordLogin(app, admin.phone);
     expect(pending.statusCode, pending.body).toBe(200);
     const totp = hotp(admin.secret, currentStep(Date.now()) + stepOffset);
     const session = await post('/v1/admin/auth/totp/verify', { pendingToken: pending.json().pendingToken, code: totp }, adminCsrf);
@@ -102,18 +102,17 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
   });
 
   describe('admin sign-in (D-19, P-13)', () => {
-    it('answers unknown numbers like admin numbers and sends no code', async () => {
-      const stranger = nextPhone();
-      const a = await post('/v1/admin/auth/otp/request', { phone: stranger }, adminCsrf);
-      expect(a.statusCode).toBe(200);
-      expect(await latestCode(ctx.otpQueue, stranger)).toBeNull();
+    it('sends no WhatsApp code for admin sign-in (D-34)', async () => {
+      const admin = await createAdmin('moderator');
+      expect((await adminPasswordLogin(app, admin.phone)).statusCode).toBe(200);
+      expect(await latestCode(ctx.otpQueue, admin.phone)).toBeNull();
+      expect((await post('/v1/admin/auth/otp/request', { phone: admin.phone }, adminCsrf)).statusCode).toBe(404);
+      expect((await post('/v1/admin/auth/otp/verify', { phone: admin.phone, code: '123456' }, adminCsrf)).statusCode).toBe(404);
     });
 
     it('requires the authenticator code, rejects wrong and replayed codes, and confirms enrolment', async () => {
       const admin = await createAdmin('moderator');
-      await clearCooldown(ctx.redis, ctx.prefix, admin.phone, 'otp-admin');
-      await post('/v1/admin/auth/otp/request', { phone: admin.phone }, adminCsrf);
-      const pending = await post('/v1/admin/auth/otp/verify', { phone: admin.phone, code: await latestCode(ctx.otpQueue, admin.phone) }, adminCsrf);
+      const pending = await adminPasswordLogin(app, admin.phone);
       const token = pending.json().pendingToken;
       expect((await post('/v1/admin/auth/totp/verify', { pendingToken: token, code: '000000' }, adminCsrf)).json().error.code).toBe('TOTP_INVALID');
       const good = hotp(admin.secret, currentStep(Date.now()));
@@ -122,9 +121,7 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
       expect(confirmed.rows[0]?.totp_confirmed_at).not.toBeNull();
 
       // The same authenticator code can never be used for a second sign-in.
-      await clearCooldown(ctx.redis, ctx.prefix, admin.phone, 'otp-admin');
-      await post('/v1/admin/auth/otp/request', { phone: admin.phone }, adminCsrf);
-      const second = await post('/v1/admin/auth/otp/verify', { phone: admin.phone, code: await latestCode(ctx.otpQueue, admin.phone) }, adminCsrf);
+      const second = await adminPasswordLogin(app, admin.phone);
       expect((await post('/v1/admin/auth/totp/verify', { pendingToken: second.json().pendingToken, code: good }, adminCsrf)).json().error.code).toBe(
         'TOTP_INVALID',
       );
@@ -395,6 +392,7 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
         const audit = await query(ctx.ownerUrl, "select 1 from app.audit_log where action = 'admin.created_by_cli' and target_id = $1", [result.id]);
         expect(audit.rowCount).toBe(1);
 
+        await setAdminPassword(app, ctx.ownerUrl, phone);
         const cookie = await adminSignIn({ id: result.id, phone, secret: base32Decode(result.secret) });
         expect((await asAdmin(cookie, 'GET', '/v1/admin/session')).json().admin).toEqual({ id: result.id, name: 'Academy Admin', role: 'super_admin' });
 

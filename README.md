@@ -6,8 +6,8 @@ phase plan live in the *Bedo Chat — Phase 0 Blueprint*; `docs/DECISIONS.md` mi
 
 **Current state: Phase 2 (Accounts and audit foundation).** Students sign in with a WhatsApp code
 (academy phone list only), manage their profile, privacy, devices, 2-Step Verification, notifications and
-account deletion requests inside the chat interface. Admins sign in with a phone code and an authenticator
-app and manage the academy phone list, deletion requests and 2-Step resets. Every identity, account,
+account deletion requests inside the chat interface. Admins sign in with their phone number, a password and
+an authenticator app (D-34, Phase 3.2) and manage the academy phone list, deletion requests and 2-Step resets. Every identity, account,
 security and admin action is kept in an append-only history. Messaging starts in Phase 3.
 What Phase 2 contains and how it was verified: [`docs/PHASE-2-REPORT.md`](docs/PHASE-2-REPORT.md).
 
@@ -82,7 +82,7 @@ in managed Redis. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYM
 | `pnpm check:bundles` | After `pnpm build`: fails if server-only variable names or values appear in any file served to browsers (see below) |
 | `pnpm verify` | lint + typecheck + test + build + both checks |
 | `pnpm e2e` | Builds API, web and admin for a local API on port 4100 and runs the browser tests (needs `TEST_DATABASE_URL`, `REDIS_URL` and Chromium; set `E2E_CHROMIUM` to its path if it is not `/opt/pw-browsers/chromium`) |
-| `pnpm --filter @bedo/api admin:create` | Phase 2 tool that creates an admin with an authenticator secret. Optional and not needed: admins are created by SQL (see below) |
+| `pnpm --filter @bedo/api admin:create` | Phase 2 tool that creates an admin with an authenticator secret. Optional and not needed: admins are created by SQL (see below). Such an admin still needs a password set with an owner setup token (D-34) |
 | `pnpm --filter @bedo/worker test:live` | Sends one real WhatsApp code through Waabek with a key from your shell (opt-in developer check, see below) |
 
 Integration tests need a Postgres role that may create databases and roles (the Docker Compose
@@ -179,13 +179,21 @@ shell (the key is not stored anywhere by this):
 WAABEK_LIVE_TEST_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/worker test:live
 ```
 
+**Admin sign-in (D-34, Phase 3.2).** Phone number + password, then the authenticator (TOTP) code; no admin
+session exists without it, and no WhatsApp code is used for admin sign-in. Passwords are 12–128 characters,
+not the admin's phone number and not on the built-in common-password list; they are stored only as Argon2id
+hashes. The owner gives each admin a one-time password setup token by SQL
+(`select * from app.issue_admin_password_setup('<admin-phone>');`), entered on `/admin/login` → *Set password with
+a setup token*; it never signs anyone in. The same SQL is the only password reset (it ends all of that admin's
+sessions). Signed-in admins change their password under *Account*. Details: `docs/DEPLOYMENT.md`, section 4c.
+
 **First admin (Phase 3.1).** Admin accounts are created by SQL, without an authenticator secret; each admin
-sets up the authenticator app at the first sign-in, after the WhatsApp code. For the very first Super Admin the
+sets up the authenticator app at the first sign-in, after the password. For the very first Super Admin the
 owner also opens a one-time initial setup by SQL (`select * from app.open_admin_bootstrap();`), whose setup
 token lets `/admin/login` save the first Waabek key; it closes for good when that Super Admin confirms the
-authenticator. Exact steps: `docs/DEPLOYMENT.md`, section 4a. If the Waabek key stops working while no admin
-can sign in, the owner runs `select * from app.open_otp_settings_recovery();` for a one-time recovery token that
-lets `/admin/login` save a new key only (D-33, section 4b). Roles: `super_admin` (changes) and `moderator`
+authenticator. Exact steps: `docs/DEPLOYMENT.md`, section 4a. If the Waabek key stops working, the owner can
+also run `select * from app.open_otp_settings_recovery();` for a one-time recovery token that lets
+`/admin/login` save a new key only (D-33, section 4b). Roles: `super_admin` (changes) and `moderator`
 (read-only).
 
 **One public domain (D-25).** In production everything is served from `https://bedochat.com`: the student

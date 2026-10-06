@@ -3,7 +3,18 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ADMIN_SESSION_COOKIE, CSRF_HEADER, CSRF_HEADER_VALUE, REFRESH_COOKIE } from '@bedo/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { currentStep, encryptSecret, generateTotpSecret, hotp } from '../src/admin/totp.js';
-import { clearCooldown, cookieValue, type IntegrationEnv, latestCode, query, setupIntegrationEnv, startApp, TOTP_KEY } from './integration-env.js';
+import {
+  ADMIN_TEST_PASSWORD,
+  clearCooldown,
+  cookieValue,
+  type IntegrationEnv,
+  issuePasswordSetup,
+  latestCode,
+  query,
+  setupIntegrationEnv,
+  startApp,
+  TOTP_KEY,
+} from './integration-env.js';
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
 const SITE = 'https://bedochat.test';
@@ -55,9 +66,11 @@ describe.runIf(enabled)('single public domain (D-25)', () => {
       phone,
       encryptSecret(TOTP_KEY, secret),
     ]);
-    await clearCooldown(ctx.redis, ctx.prefix, phone, 'otp-admin');
-    await post('/v1/admin/auth/otp/request', { phone });
-    const pending = await post('/v1/admin/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+    // D-34: the owner's setup token, the Set Password panel, then phone + password — all through the edge.
+    const setupToken = await issuePasswordSetup(ctx.ownerUrl, phone);
+    expect((await post('/v1/admin/auth/password/setup', { phone, setupToken, password: ADMIN_TEST_PASSWORD })).statusCode).toBe(200);
+    const pending = await post('/v1/admin/auth/password/login', { phone, password: ADMIN_TEST_PASSWORD });
+    expect(pending.statusCode, pending.body).toBe(200);
     const session = await post('/v1/admin/auth/totp/verify', { pendingToken: pending.json().pendingToken, code: hotp(secret, currentStep(Date.now())) });
     expect(session.statusCode, session.body).toBe(200);
     return {
@@ -145,12 +158,13 @@ describe.runIf(enabled)('single public domain (D-25)', () => {
       const response = await app.inject({ method: 'POST', url, payload, headers: { ...studentCredentials, origin: SITE } });
       expect(response.statusCode, url).toBe(401);
     }
-    // A student's sign-in code cannot start an admin session.
+    // A student's sign-in code cannot start an admin session: admin sign-in takes no WhatsApp code at all (D-34).
     const phone = nextPhone();
     await query(ctx.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [phone]);
     await post('/v1/auth/otp/request', { phone });
     const code = await latestCode(ctx.otpQueue, phone);
-    expect((await post('/v1/admin/auth/otp/verify', { phone, code })).json().error.code).toBe('OTP_INVALID');
+    expect((await post('/v1/admin/auth/otp/verify', { phone, code })).statusCode).toBe(404);
+    expect((await post('/v1/admin/auth/password/login', { phone, password: code ?? 'x' })).json().error.code).toBe('CREDENTIALS_INVALID');
 
     const office = await admin();
     const asStudent = await app.inject({ method: 'GET', url: '/v1/me', headers: { ...sameOriginRead, cookie: office.cookie } });

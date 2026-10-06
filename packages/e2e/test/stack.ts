@@ -197,11 +197,13 @@ async function waitForHttp(url: string, timeoutMs = 60_000): Promise<void> {
   }
 }
 
-function start(command: string, args: string[], cwd: string, env: Record<string, string>): ChildProcess {
-  const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, stdio: ['ignore', 'ignore', 'pipe'], detached: true });
+function start(command: string, args: string[], cwd: string, env: Record<string, string>, output?: Buffer[]): ChildProcess {
+  const child = spawn(command, args, { cwd, env: { ...process.env, ...env }, stdio: ['ignore', output ? 'pipe' : 'ignore', 'pipe'], detached: true });
   child.stderr?.on('data', (chunk: Buffer) => {
+    output?.push(chunk);
     if (process.env.E2E_DEBUG) process.stderr.write(chunk);
   });
+  child.stdout?.on('data', (chunk: Buffer) => output?.push(chunk));
   return child;
 }
 
@@ -212,7 +214,9 @@ export interface Stack {
   latestCode(phone: string): Promise<string | null>;
   codeCount(phone: string): Promise<number>;
   /** Clears the 60-second resend cooldown so a second device can sign in straight away. */
-  clearCooldown(phone: string, scope?: 'otp' | 'otp-admin'): Promise<void>;
+  clearCooldown(phone: string): Promise<void>;
+  /** Everything the API process wrote to stdout and stderr (its logs, at level info). */
+  apiOutput(): string;
   stop(): Promise<void>;
 }
 
@@ -238,10 +242,12 @@ export async function startStack(): Promise<Stack> {
   runtime.username = login;
   runtime.password = password;
 
+  const apiOutput: Buffer[] = [];
   const processes = [
     start('node', ['dist/main.js'], path.join(repoRoot, 'apps/api'), {
       NODE_ENV: 'development',
-      LOG_LEVEL: 'warn',
+      // Request logs are kept so tests can check that no password or token ever reaches them (D-34).
+      LOG_LEVEL: 'info',
       API_HOST: '127.0.0.1',
       API_PORT: String(API_PORT),
       DATABASE_URL: runtime.toString(),
@@ -258,7 +264,7 @@ export async function startStack(): Promise<Stack> {
       OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
       ADMIN_TOTP_KEY: totpKey.toString('base64'),
       SETTINGS_ENCRYPTION_KEY: settingsKey.toString('base64'),
-    }),
+    }, apiOutput),
     start('node', ['node_modules/next/dist/bin/next', 'start', '-p', String(NEXT_PORT), '-H', '127.0.0.1'], path.join(repoRoot, 'apps/web'), {
       NODE_ENV: 'production',
     }),
@@ -314,10 +320,13 @@ export async function startStack(): Promise<Stack> {
     async codeCount(phone) {
       return (await jobsFor(phone)).length;
     },
-    async clearCooldown(phone, scope = 'otp') {
+    async clearCooldown(phone) {
       const redis = new Redis(redisUrl);
-      await redis.del(`${prefix}:rl:${scope}:cooldown:${phone}`);
+      await redis.del(`${prefix}:rl:otp:cooldown:${phone}`);
       await redis.quit();
+    },
+    apiOutput() {
+      return Buffer.concat(apiOutput).toString('utf8');
     },
     stop,
   };
@@ -348,7 +357,30 @@ export function totpNow(secret: Buffer, offsetSteps = 0): string {
   return hotp(secret, Math.floor(Date.now() / 30_000) + offsetSteps);
 }
 
-/** Creates an admin the same way the admin-create command stores it (AES-256-GCM encrypted secret). */
+// ---------------------------------------------------------------- admin passwords (D-34)
+
+/** The password browser-test admins get: long enough, not a phone number, not a common password. */
+export const ADMIN_PASSWORD = ['tidal', 'quartz', 'lantern', '0471'].join('-');
+
+/** What the owner runs in the SQL editor: a one-time password setup token for that admin. */
+export async function issuePasswordSetup(stack: Stack, phone: string): Promise<string> {
+  return (await query<{ setup_token: string }>(stack.ownerUrl, 'select setup_token from app.issue_admin_password_setup($1)', [phone])).rows[0]!.setup_token;
+}
+
+/** Sets an admin's password through the edge, as the Set Password panel on /admin/login does. */
+export async function setPasswordByApi(stack: Stack, phone: string, password = ADMIN_PASSWORD): Promise<void> {
+  const setupToken = await issuePasswordSetup(stack, phone);
+  const response = await fetch(`${API_URL}/v1/admin/auth/password/setup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: SITE_URL, 'x-bedo-csrf': '1' },
+    body: JSON.stringify({ phone, setupToken, password }),
+  });
+  if (!response.ok) {
+    throw new Error(`Setting the admin password failed: ${response.status} ${await response.text()}`);
+  }
+}
+
+/** Creates an admin the same way the admin-create command stores it (AES-256-GCM encrypted secret), with a password. */
 export async function createAdmin(stack: Stack, phone: string, name: string, role: 'super_admin' | 'moderator'): Promise<Buffer> {
   const secret = randomBytes(20);
   const iv = randomBytes(12);
@@ -356,5 +388,6 @@ export async function createAdmin(stack: Stack, phone: string, name: string, rol
   const ciphertext = Buffer.concat([cipher.update(secret), cipher.final()]);
   const encrypted = Buffer.concat([iv, cipher.getAuthTag(), ciphertext]).toString('base64');
   await query(stack.ownerUrl, 'insert into app.admin_accounts (phone, name, role, totp_secret_enc) values ($1, $2, $3, $4)', [phone, name, role, encrypted]);
+  await setPasswordByApi(stack, phone);
   return secret;
 }

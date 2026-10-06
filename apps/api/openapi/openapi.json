@@ -63,6 +63,10 @@
                   "RECOVERY_UNAVAILABLE",
                   "RECOVERY_TOKEN_INVALID",
                   "RECOVERY_TOKEN_USED",
+                  "CREDENTIALS_INVALID",
+                  "PASSWORD_SETUP_INVALID",
+                  "PASSWORD_IS_PHONE",
+                  "PASSWORD_TOO_COMMON",
                   "CANNOT_MESSAGE",
                   "USER_BLOCKED",
                   "LIMIT_REACHED"
@@ -1011,20 +1015,7 @@
           "requestedAt"
         ]
       },
-      "AdminOtpRequestBody": {
-        "type": "object",
-        "properties": {
-          "phone": {
-            "type": "string",
-            "minLength": 5,
-            "maxLength": 32
-          }
-        },
-        "required": [
-          "phone"
-        ]
-      },
-      "AdminOtpVerifyBody": {
+      "AdminPasswordLoginBody": {
         "type": "object",
         "properties": {
           "phone": {
@@ -1032,17 +1023,18 @@
             "minLength": 5,
             "maxLength": 32
           },
-          "code": {
+          "password": {
             "type": "string",
-            "pattern": "^\\d{6}$"
+            "minLength": 1,
+            "maxLength": 1024
           }
         },
         "required": [
           "phone",
-          "code"
+          "password"
         ]
       },
-      "AdminOtpVerifyResponse": {
+      "AdminPasswordLoginResponse": {
         "type": "object",
         "properties": {
           "status": {
@@ -1059,6 +1051,29 @@
         "required": [
           "status",
           "pendingToken"
+        ]
+      },
+      "AdminPasswordSetupBody": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 32
+          },
+          "setupToken": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 200
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone",
+          "setupToken",
+          "password"
         ]
       },
       "AdminTotpVerifyBody": {
@@ -1269,6 +1284,46 @@
         },
         "required": [
           "recoveryToken"
+        ]
+      },
+      "AdminPasswordChangeBody": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "newPassword": {
+            "type": "string"
+          },
+          "totpCode": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword",
+          "totpCode"
+        ]
+      },
+      "AdminPasswordChangeResponse": {
+        "type": "object",
+        "properties": {
+          "changed": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "otherSessionsEnded": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changed",
+          "otherSessionsEnded"
         ]
       },
       "PhoneListResponse": {
@@ -4937,13 +4992,13 @@
         }
       }
     },
-    "/v1/admin/auth/otp/request": {
+    "/v1/admin/auth/password/login": {
       "post": {
-        "operationId": "adminRequestCode",
+        "operationId": "adminPasswordLogin",
         "tags": [
           "Admin"
         ],
-        "summary": "Send an admin sign-in code",
+        "summary": "Admin sign-in step 1: phone and password (D-34); the authenticator code follows",
         "security": [
           {
             "csrfHeader": []
@@ -4954,7 +5009,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminOtpRequestBody"
+                "$ref": "#/components/schemas/AdminPasswordLoginBody"
               }
             }
           }
@@ -4965,7 +5020,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/OtpRequestResponse"
+                  "$ref": "#/components/schemas/AdminPasswordLoginResponse"
                 }
               }
             }
@@ -4993,13 +5048,13 @@
         }
       }
     },
-    "/v1/admin/auth/otp/verify": {
+    "/v1/admin/auth/password/setup": {
       "post": {
-        "operationId": "adminVerifyCode",
+        "operationId": "adminPasswordSetup",
         "tags": [
           "Admin"
         ],
-        "summary": "Verify the admin phone code",
+        "summary": "Set an admin password with an owner-issued setup token (D-34); signs nobody in",
         "security": [
           {
             "csrfHeader": []
@@ -5010,7 +5065,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AdminOtpVerifyBody"
+                "$ref": "#/components/schemas/AdminPasswordSetupBody"
               }
             }
           }
@@ -5021,7 +5076,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminOtpVerifyResponse"
+                  "$ref": "#/components/schemas/OkResponse"
                 }
               }
             }
@@ -5543,6 +5598,63 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/account/password": {
+      "post": {
+        "operationId": "adminChangePassword",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Change one's own password with the current password and an authenticator code (D-34); ends the other sessions",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminPasswordChangeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPasswordChangeResponse"
                 }
               }
             }

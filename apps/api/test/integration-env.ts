@@ -156,3 +156,36 @@ export function cookieValue(setCookie: string | string[] | undefined, name: stri
 export async function clearCooldown(redis: Redis, prefix: string, phone: string, scope = 'otp'): Promise<void> {
   await redis.del(`${prefix}:rl:${scope}:cooldown:${phone}`);
 }
+
+let adminIpCounter = 0;
+/** A fresh client address per admin password request, so tests do not share the per-IP limit unless they mean to. */
+export const nextAdminIp = () => `10.77.${Math.floor(++adminIpCounter / 250)}.${(adminIpCounter % 250) + 1}`;
+
+/** The password test admins get (D-34): long enough, not a phone number, not on the common-password list. */
+export const ADMIN_TEST_PASSWORD = ['tidal', 'quartz', 'lantern', '0471'].join('-');
+
+/** What the owner runs in the SQL editor (D-34): a one-time password setup token for that admin. */
+export async function issuePasswordSetup(ownerUrl: string, phone: string): Promise<string> {
+  const result = await query<{ setup_token: string }>(ownerUrl, 'select setup_token from app.issue_admin_password_setup($1)', [phone]);
+  return result.rows[0]!.setup_token;
+}
+
+/** Sets an admin's password the supported way: owner setup token, then the Set Password endpoint. */
+export async function setAdminPassword(app: NestFastifyApplication, ownerUrl: string, phone: string, password = ADMIN_TEST_PASSWORD): Promise<void> {
+  const setupToken = await issuePasswordSetup(ownerUrl, phone);
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/admin/auth/password/setup',
+    headers: adminCsrf,
+    payload: { phone, setupToken, password },
+    remoteAddress: nextAdminIp(),
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(`Setting the admin password failed: ${response.statusCode} ${response.body}`);
+  }
+}
+
+/** Admin sign-in step 1 (D-34): phone + password. Returns the response (pendingToken on success). */
+export function adminPasswordLogin(app: NestFastifyApplication, phone: string, password = ADMIN_TEST_PASSWORD, remoteAddress = nextAdminIp()) {
+  return app.inject({ method: 'POST', url: '/v1/admin/auth/password/login', headers: adminCsrf, payload: { phone, password }, remoteAddress });
+}
