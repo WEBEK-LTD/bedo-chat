@@ -34,6 +34,73 @@ of those are the same Netlify site, which serves the student app and the Admin D
 Netlify alone cannot do this: its proxy does not carry WebSockets. Because the apps and the API share one
 origin, the session cookies are first-party (P-14 is met) and scoped under `/api`.
 
+## 0. Production deployment from the dashboards (D-37)
+
+The production setup is written into the repository, so nothing below needs a terminal, Docker, pnpm or Wrangler:
+
+| File | What it sets up |
+| --- | --- |
+| `render.yaml` | Render Blueprint: Key Value `bedochat-redis` (noeviction, persistent, private only), Docker web service `bedochat-api` (health check `/health/ready`) and background worker `bedochat-worker`, all in **Singapore** (Render's closest region to the Supabase project in **Sydney**; Render has no Australian region). Every setting is in the file; Render generates the secrets. Automatic deploys are off. |
+| `deploy/supabase/prod-ca-2021.crt` | Supabase's CA certificate (public). Both images carry it at `/app/certs/supabase-ca.crt`, so the database connection is verified in full (`sslmode=verify-full`). A build without it stops. |
+| `deploy/cloudflare/wrangler.toml`, `package.json` | The routing Worker `bedochat-router` with its origins filled in and Wrangler pinned; Cloudflare builds and deploys it from GitHub. |
+
+`scripts/deployment-files.test.mjs` checks these files: the Blueprint passes the API's and the worker's own start-up
+validation, it asks only for the database password, and the certificate and Worker settings are complete.
+
+Already done once in Supabase (section 1): the runtime login `bedo_api` exists, member of `bedo_runtime`, and its
+password is in your password manager. Migrations 1–6 are applied; migration 7 (D-35) is applied in step 3 below.
+
+1. **GitHub.** Push this repository to `main` of `WEBEK-LTD/bedo-chat` (GitHub Desktop). Netlify rebuilds the same
+   site; nothing else deploys by itself.
+2. **Render.** Dashboard → **New** → **Blueprint** → repository `WEBEK-LTD/bedo-chat`, branch `main` → Render
+   lists `bedochat-redis`, `bedochat-api`, `bedochat-worker` and the group `bedochat-shared`. It asks for
+   `PGPASSWORD` twice (API and worker): paste the `bedo_api` password in both. **Apply**. The first build takes
+   about 10 minutes. Expected: `bedochat-redis` *Available*; `bedochat-api` *Live*, its log ends with
+   `Bedo Chat API listening on 0.0.0.0:4000`; `bedochat-worker` *Live*, its log shows `Bedo Chat worker started`.
+   The API's address must be `https://bedochat-api.onrender.com` (the Worker points there). If Render shows a
+   different address because the name is taken, stop: `API_ORIGIN` in `deploy/cloudflare/wrangler.toml` must be
+   changed to it first.
+   Then copy `ADMIN_TOTP_KEY` and `SETTINGS_ENCRYPTION_KEY` (*bedochat-api* → *Environment*; the second is in the
+   group *bedochat-shared*) into your password manager: authenticator setups and the saved Waabek key depend on
+   them, and Render keeps them only while the service and group exist.
+3. **Supabase SQL Editor** (role `postgres`): run [`docs/owner-sql/apply-20261006120000.sql`](owner-sql/apply-20261006120000.sql)
+   once (migration 7, D-35), then [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql) with
+   the three values at the top filled in (section 4d). Delete that query afterwards.
+4. **Cloudflare** (`bedochat.com` must be an *Active* zone in your Cloudflare account):
+   1. If `bedochat.com` is listed in Netlify → site `bedochat` → *Domain management*, remove it there (otherwise
+      Netlify redirects its own address to `bedochat.com` and the Worker would loop).
+   2. Cloudflare → `bedochat.com` → **DNS** → delete the **A, AAAA or CNAME** records named `bedochat.com` (`@`).
+      Keep MX and TXT records.
+   3. **Workers & Pages** → **Create application** → **Import a repository** → `WEBEK-LTD/bedo-chat`. Project name
+      `bedochat-router` (must match `wrangler.toml`), **Root directory** `deploy/cloudflare`, build command empty,
+      deploy command `npx wrangler deploy` (the default) → **Save and Deploy**. The deploy attaches
+      `bedochat.com` as the Worker's Custom Domain. If the log says the custom domain could not be attached, add it
+      by hand: Worker → *Settings* → *Domains & Routes* → *Add* → *Custom domain* → `bedochat.com`.
+   4. Worker → *Settings* → *Variables and Secrets* → *Add* → type **Secret**, name `EDGE_SECRET`, value: Render →
+      *bedochat-api* → *Environment* → `EDGE_SECRET` → **Deploy**. Until then the Worker answers "router is not
+      configured".
+   5. `bedochat.com` → *SSL/TLS* → *Edge Certificates* → **Always Use HTTPS** on. Leave Rocket Loader, Zaraz and
+      Bot Fight Mode off (section 5a).
+5. **Check.**
+   - `https://bedochat-api.onrender.com/health/ready` and `https://bedochat.com/api/health/ready`: `{"status":"ok",…}`
+     with `database` and `redis` both `up`.
+   - `https://bedochat.com/api/v1/admin/bootstrap` opened in the browser answers `CSRF_REJECTED` (the Worker's secret
+     was accepted); `https://bedochat-api.onrender.com/v1/admin/bootstrap` answers `FORBIDDEN` (no direct access).
+   - `https://bedochat.com/` goes to `/login`, `https://bedochat.com/admin` to `/admin/login`.
+   - Client address (`API_TRUST_PROXY_HOPS`): the `ip=` line of `https://bedochat.com/cdn-cgi/trace` must equal
+     `"remoteAddress"` in the *bedochat-api* log line for your last `/api/health/ready` request. If it differs, change
+     `API_TRUST_PROXY_HOPS` in `render.yaml` before students sign in.
+6. **Admin sign-in.** `https://bedochat.com/admin/login` (a browser profile without a student sign-in): phone and
+   password → set up the authenticator app (QR code) → code → the dashboard opens. Then the Waabek key in
+   *OTP / WhatsApp* (section 4a) and the academy phone list.
+
+Later changes: push to `main`, then *Manual Deploy* → *Deploy latest commit* on `bedochat-api` and
+`bedochat-worker`. Render applies changes to `render.yaml` itself (Blueprint sync), and Cloudflare rebuilds the
+Worker on every push to `main`. Do not put `PGPASSWORD` or any other server secret on the Netlify site.
+
+Sections 1–5a below describe each part in detail; with the files above, their command-line steps (Docker,
+`pnpm db:migrate`, `wrangler`) are not needed.
+
 ## 1. Supabase
 
 1. Create a project in the region closest to the academy's students.
@@ -431,11 +498,10 @@ Netlify site was ever created before D-26, delete it or stop its builds: it is n
    creates its own record and certificate in step 4.
 3. **SSL/TLS**: encryption mode *Full (strict)*; turn on *Always Use HTTPS*. Network → *WebSockets* on (the
    default).
-4. **Worker**: in `deploy/cloudflare/wrangler.toml` replace the three origins: `WEB_ORIGIN` and `ADMIN_ORIGIN`
-   both with `https://bedochat.netlify.app` (the one Netlify site, D-26), and `API_ORIGIN` with the API's host
-   address. Then from that folder run
-   `npx wrangler login`, `npx wrangler secret put EDGE_SECRET` (paste the API's `EDGE_SECRET`) and
-   `npx wrangler deploy`. This attaches `bedochat.com` to the Worker as a Custom
+4. **Worker**: `deploy/cloudflare/wrangler.toml` holds the three origins (D-37): `WEB_ORIGIN` and `ADMIN_ORIGIN`
+   both `https://bedochat.netlify.app` (the one Netlify site, D-26), and `API_ORIGIN` the Render API
+   `https://bedochat-api.onrender.com`. Cloudflare deploys it from GitHub (section 0, step 4); the secret
+   `EDGE_SECRET` is added in the Worker's settings. The deploy attaches `bedochat.com` to the Worker as a Custom
    Domain (Cloudflare's recommended setup); every request to it is answered by the Worker.
 4a. **www**: add a DNS record `CNAME www → bedochat.com`, Proxied, and a Redirect Rule (Rules → Redirect
    Rules) from `https://www.bedochat.com/*` to `https://bedochat.com/${1}`, status 301, preserving the query.

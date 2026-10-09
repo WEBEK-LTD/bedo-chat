@@ -66,7 +66,9 @@ Super Admin, sign in to the admin app and add the students' numbers to the acade
 Web app and Admin Dashboard deploy together as one Netlify site (D-26, `apps/web/netlify.toml`: the admin
 app's static export is included under `/admin`); the API and worker run as containers
 on persistent hosting (`apps/api/Dockerfile`, `apps/worker/Dockerfile`); data lives in Supabase and queues
-in managed Redis. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+in managed Redis. Production (D-37): Render creates the API, worker and Redis in Singapore from `render.yaml`
+(Blueprint; it asks only for the database password), Supabase stays in Sydney, and Cloudflare deploys the routing
+Worker from `deploy/cloudflare`. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), section 0.
 
 ## Scripts
 

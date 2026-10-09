@@ -13,6 +13,10 @@ RUN pnpm turbo run build --filter=@bedo/api
 # Self-contained production folder: the API, its workspace packages (built) and production dependencies only.
 RUN pnpm --filter=@bedo/api deploy --prod --legacy /out \
  && cp -r supabase /out/supabase
+# D-37: Supabase's CA certificate (public), so the database connection is verified in full
+# (DATABASE_URL ...?sslmode=verify-full&sslrootcert=/app/certs/supabase-ca.crt). The build stops if it is missing.
+RUN grep -q -- '-----BEGIN CERTIFICATE-----' deploy/supabase/prod-ca-2021.crt \
+ && mkdir -p /out/certs && cp deploy/supabase/prod-ca-2021.crt /out/certs/supabase-ca.crt
 
 FROM node:24-slim
 ENV NODE_ENV=production \

@@ -37,6 +37,9 @@ importers:
       vitest:
         specifier: ^4.0.0 || ^5.0.0
         version: 5.0.1(@types/node@24.13.6)(vite@8.3.0(@types/node@24.13.6)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.1))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
 
   apps/admin:
     dependencies:
