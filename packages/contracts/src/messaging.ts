@@ -47,8 +47,6 @@ export const MESSAGING_RULES = {
   peerActionsPerMinute: 60,
   /** Guard for people search (P-25), per user per minute. */
   userSearchesPerMinute: 60,
-  /** Realtime connections per account per API instance. */
-  maxConnectionsPerUser: 10,
 } as const;
 
 const uuid = z.string().uuid();
@@ -326,40 +324,54 @@ export type SyncResponse = z.infer<typeof syncResponseSchema>;
 
 // --------------------------------------------------------------------------------------- Realtime
 
-/** WebSocket endpoint, under the API base URL (https://bedochat.com/api/v1/realtime in production). */
-export const REALTIME_PATH = '/v1/realtime';
+/**
+ * Realtime (D-36). The API runs in the website's server functions, which cannot hold connections open, so
+ * devices listen on Supabase Realtime: each signed-in device gets its own private broadcast channel (a name
+ * derived from its session and the current hour with a server secret, never guessable) and receives short
+ * signals on it. Signals carry no message content: "updates" tells the device to fetch its new updates over
+ * HTTP (permission-checked like every request); typing and presence are sent only where the permission service
+ * allows. Devices send their heartbeat, typing and going offline over HTTP.
+ */
+export const REALTIME_SIGNAL_EVENT = 'signal';
 
-/** Close codes the realtime gateway uses. */
-export const REALTIME_CLOSE = {
-  unauthenticated: 4401,
-  forbidden: 4403,
-  authTimeout: 4408,
-  heartbeatTimeout: 4409,
-  invalidMessage: 4400,
-  tooManyConnections: 4429,
-  serverShutdown: 1001,
-} as const;
-
-export const realtimeClientMessageSchema = z.discriminatedUnion('type', [
-  /** First message on a new connection: the access token (never in the URL). */
-  z.object({ type: z.literal('auth'), token: z.string().min(1).max(4096) }),
-  /** Heartbeat, every 25 seconds (P-18). */
-  z.object({ type: z.literal('ping') }),
-  /** Start receiving updates after this seq (sent after `ready`, and again to catch up). */
-  z.object({ type: z.literal('sync'), since: seq }),
-  /** The user is typing in a chat; lasts 6 seconds unless sent again (P-18). */
-  z.object({ type: z.literal('typing'), chatId: uuid }),
-  /** This device has received the chat's messages up to seq. */
-  z.object({ type: z.literal('delivered'), chatId: uuid, seq }),
-]);
-export type RealtimeClientMessage = z.infer<typeof realtimeClientMessageSchema>;
-
-export const realtimeServerMessageSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('ready'), seq }),
-  z.object({ type: z.literal('pong') }),
-  z.object({ type: z.literal('updates'), sync: syncResponseSchema }),
+export const realtimeSignalSchema = z.discriminatedUnion('type', [
+  /** The user's update log moved on: fetch GET /v1/sync. */
+  z.object({ type: z.literal('updates') }),
   z.object({ type: z.literal('typing'), chatId: z.string(), userId: z.string() }),
   z.object({ type: z.literal('presence'), userId: z.string(), presence: presenceSchema.nullable() }),
-  z.object({ type: z.literal('error'), code: z.string() }),
 ]);
-export type RealtimeServerMessage = z.infer<typeof realtimeServerMessageSchema>;
+export type RealtimeSignal = z.infer<typeof realtimeSignalSchema>;
+
+/** Where this device listens. `enabled` is false when realtime is not configured: devices then poll. */
+export const realtimeChannelResponseSchema = z.object({
+  enabled: z.boolean(),
+  /** Supabase project URL (https://<project>.supabase.co). */
+  url: z.string().nullable(),
+  /** The project's public (anon) key; with public access turned off it grants no channel on its own. */
+  apiKey: z.string().nullable(),
+  /**
+   * This device's realtime token (a short-lived JWT): it may receive on `topic` and nowhere else, and send nothing.
+   * Valid until a few minutes after `expiresAt`.
+   */
+  accessToken: z.string().nullable(),
+  /** This device's private channel name. */
+  topic: z.string().nullable(),
+  /** When the name changes (every hour): the device asks for the new one then. */
+  expiresAt: z.string().nullable(),
+  /**
+   * Seconds until then, by the server's clock: the device schedules the change from this, so a wrong clock on the
+   * device cannot make it keep an expired token or ask for a new one in a loop.
+   */
+  expiresInSeconds: z.number().int().nonnegative().nullable(),
+  event: z.literal(REALTIME_SIGNAL_EVENT),
+  /** Send POST /v1/realtime/heartbeat this often (P-18). */
+  heartbeatSeconds: z.number().int().positive(),
+});
+export type RealtimeChannelResponse = z.infer<typeof realtimeChannelResponseSchema>;
+
+/** Heartbeat answer: the user's current update seq, so a device that missed a signal catches up. */
+export const realtimeHeartbeatResponseSchema = z.object({ seq });
+export type RealtimeHeartbeatResponse = z.infer<typeof realtimeHeartbeatResponseSchema>;
+
+/** The user is typing in a chat; lasts 6 seconds unless sent again (P-18). */
+export const realtimeTypingBodySchema = z.object({ chatId: uuid });

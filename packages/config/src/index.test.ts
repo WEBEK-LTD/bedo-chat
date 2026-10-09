@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   adminCliEnvSchema,
@@ -7,63 +8,62 @@ import {
   migrationEnvSchema,
   NON_SECRET_SERVER_ENV_NAMES,
   SERVER_ONLY_ENV_NAMES,
-  workerEnvSchema,
+  supabaseKeySignedWith,
 } from './index.js';
+
+const JWT_SECRET = 'test-project-jwt-secret-0123456789-abcdefghij';
+
+/** A legacy Supabase API key: an HS256 JWT with a role claim, signed with the project's JWT secret. */
+function signedKey(role: string, secret: string): string {
+  const head = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const body = Buffer.from(JSON.stringify({ iss: 'supabase', ref: 'ref', role })).toString('base64url');
+  return `${head}.${body}.${createHmac('sha256', secret).update(`${head}.${body}`).digest('base64url')}`;
+}
 
 const validApiEnv = {
   DATABASE_URL: 'postgresql://user:secret-password@localhost:5432/bedo',
-  REDIS_URL: 'redis://localhost:6379',
   ACCESS_TOKEN_SECRET: 'a'.repeat(40),
   OTP_HMAC_SECRET: 'b'.repeat(40),
   ADMIN_TOTP_KEY: Buffer.alloc(32, 7).toString('base64'),
   SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
 };
 
-const validWorkerEnv = {
-  REDIS_URL: 'rediss://cache.example.com:6380',
-  DATABASE_URL: 'postgresql://user:pw@localhost:5432/bedo',
-  SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 8).toString('base64'),
-};
-
 describe('apiEnvSchema', () => {
   it('applies defaults to a minimal valid environment', () => {
     const env = loadEnv(apiEnvSchema, validApiEnv);
-    expect(env.API_PORT).toBe(4000);
-    expect(env.API_HOST).toBe('0.0.0.0');
-    expect(env.API_TRUST_PROXY_HOPS).toBe(0);
+    expect(env.DATABASE_POOL_MAX).toBe(3);
     expect(env.DATABASE_STATEMENT_TIMEOUT_MS).toBe(15_000);
-    expect(env.QUEUE_PREFIX).toBe('bedo');
-    expect(env.CORS_ALLOWED_ORIGINS).toEqual([]);
+    expect(env.WAABEK_API_URL).toBe('https://waabek.com/api/v1/send');
     expect(env.NODE_ENV).toBe('development');
   });
 
-  it('parses a comma-separated list of allowed origins', () => {
-    const env = loadEnv(apiEnvSchema, {
-      ...validApiEnv,
-      CORS_ALLOWED_ORIGINS: 'https://chat.example.com, https://admin.example.com',
-    });
-    expect(env.CORS_ALLOWED_ORIGINS).toEqual(['https://chat.example.com', 'https://admin.example.com']);
+  it('needs nothing about hosts, origins, proxies, an edge or Redis (D-36: one Netlify site)', () => {
+    const env = loadEnv(apiEnvSchema, { ...validApiEnv, NODE_ENV: 'production' }) as Record<string, unknown>;
+    for (const removed of [
+      'API_ORIGIN',
+      'EDGE_SECRET',
+      'REDIS_URL',
+      'QUEUE_PREFIX',
+      'CORS_ALLOWED_ORIGINS',
+      'ADMIN_ORIGINS',
+      'WEB_ORIGINS',
+      'API_PUBLIC_PATH',
+      'API_TRUST_PROXY_HOPS',
+      'API_HOST',
+      'API_PORT',
+    ]) {
+      expect(removed in env, removed).toBe(false);
+      expect(Object.keys(apiEnvSchema.shape), removed).not.toContain(removed);
+    }
   });
 
-  it('rejects an origin that is not an http(s) URL', () => {
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, CORS_ALLOWED_ORIGINS: 'javascript:alert(1)' })).toThrow(
-      EnvValidationError,
-    );
-  });
-
-  it('rejects the Supabase transaction pooler port', () => {
-    expect(() =>
-      loadEnv(apiEnvSchema, {
-        ...validApiEnv,
-        DATABASE_URL: 'postgresql://postgres.ref:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres',
-      }),
-    ).toThrow(/6543/);
-    expect(() =>
-      loadEnv(apiEnvSchema, {
-        ...validApiEnv,
-        DATABASE_URL: 'postgresql://postgres.ref:pw@aws-0-eu-central-1.pooler.supabase.com:5432/postgres',
-      }),
-    ).not.toThrow();
+  it('accepts the Supabase transaction pooler (recommended for server functions) and the session pooler', () => {
+    for (const port of ['6543', '5432']) {
+      expect(() =>
+        loadEnv(apiEnvSchema, { ...validApiEnv, DATABASE_URL: `postgresql://postgres.ref:pw@aws-0-eu-central-1.pooler.supabase.com:${port}/postgres` }),
+      ).not.toThrow();
+    }
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, DATABASE_POOL_MAX: '50' })).toThrow(/DATABASE_POOL_MAX/);
   });
 
   it('rejects short secrets and a malformed TOTP key', () => {
@@ -98,37 +98,80 @@ describe('apiEnvSchema', () => {
     }
   });
 
-  it('accepts one shared origin for both apps with explicit web origins and an /api prefix (D-25)', () => {
-    const shared = { CORS_ALLOWED_ORIGINS: 'https://bedochat.com', ADMIN_ORIGINS: 'https://bedochat.com', API_PUBLIC_PATH: '/api' };
-    const edge = { EDGE_SECRET: 'e'.repeat(40) };
-    const env = loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, ...edge, WEB_ORIGINS: 'https://bedochat.com', NODE_ENV: 'production' });
-    // Behind the edge in production the edge secret is required, and must be long.
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, WEB_ORIGINS: 'https://bedochat.com', NODE_ENV: 'production' })).toThrow(/EDGE_SECRET/);
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, EDGE_SECRET: 'short' })).toThrow(/EDGE_SECRET/);
-    expect(env.WEB_ORIGINS).toEqual(['https://bedochat.com']);
-    expect(env.API_PUBLIC_PATH).toBe('/api');
-    // Without WEB_ORIGINS the student app would have no allowed origin at all.
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, ...edge, NODE_ENV: 'production' })).toThrow(/WEB_ORIGINS/);
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...shared, WEB_ORIGINS: 'https://other.example' })).toThrow(/WEB_ORIGINS/);
-    for (const path of ['api', '/api/', '/API', '/a b']) {
-      expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, API_PUBLIC_PATH: path }), path).toThrow(/API_PUBLIC_PATH/);
-    }
-    expect(loadEnv(apiEnvSchema, validApiEnv).API_PUBLIC_PATH).toBe('');
-  });
-
-  it('requires every admin origin to be an allowed origin', () => {
-    const origins = { CORS_ALLOWED_ORIGINS: 'https://chat.example.com,https://admin.example.com' };
-    expect(loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, ADMIN_ORIGINS: 'https://admin.example.com' }).ADMIN_ORIGINS).toEqual([
-      'https://admin.example.com',
-    ]);
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, ADMIN_ORIGINS: 'https://other.example.com' })).toThrow(/ADMIN_ORIGINS/);
-    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ...origins, NODE_ENV: 'production' })).toThrow(/ADMIN_ORIGINS/);
-  });
-
-  it('requires the Supabase URL and service key together', () => {
+  it('requires the Supabase URL and service key together, and the public key only with them (D-36 realtime)', () => {
     expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co' })).toThrow(
       /SUPABASE_SERVICE_ROLE_KEY/,
     );
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_ANON_KEY: 'anon' })).toThrow(/SUPABASE_URL/);
+    expect(() =>
+      loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'same-key', SUPABASE_ANON_KEY: 'same-key' }),
+    ).toThrow(/SUPABASE_ANON_KEY: must be the public anon key/);
+    const env = loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service', SUPABASE_ANON_KEY: 'anon', SUPABASE_JWT_SECRET: JWT_SECRET });
+    expect(env.SUPABASE_ANON_KEY).toBe('anon');
+    // Swapped keys are caught from the keys themselves (legacy JWT role claim, or the newer key prefixes).
+    const jwt = (role: string) => signedKey(role, JWT_SECRET);
+    const swapped = { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: jwt('anon'), SUPABASE_ANON_KEY: jwt('service_role'), SUPABASE_JWT_SECRET: JWT_SECRET };
+    expect(() => loadEnv(apiEnvSchema, swapped)).toThrow(/SUPABASE_ANON_KEY: must be the public anon key[\s\S]*SUPABASE_SERVICE_ROLE_KEY: must be the service role key/);
+    expect(() =>
+      loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'sb_publishable_x', SUPABASE_ANON_KEY: 'sb_secret_y', SUPABASE_JWT_SECRET: JWT_SECRET }),
+    ).toThrow(/SUPABASE_ANON_KEY/);
+    const right = loadEnv(apiEnvSchema, { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: jwt('service_role'), SUPABASE_ANON_KEY: jwt('anon'), SUPABASE_JWT_SECRET: JWT_SECRET });
+    expect(right.SUPABASE_ANON_KEY).toBe(jwt('anon'));
+  });
+
+  it('requires the project JWT secret with the public key, and checks it against the key (private realtime channels)', () => {
+    const base = { ...validApiEnv, SUPABASE_URL: 'https://ref.supabase.co', SUPABASE_SERVICE_ROLE_KEY: signedKey('service_role', JWT_SECRET) };
+    expect(() => loadEnv(apiEnvSchema, { ...base, SUPABASE_ANON_KEY: signedKey('anon', JWT_SECRET) })).toThrow(
+      /SUPABASE_JWT_SECRET: SUPABASE_ANON_KEY and SUPABASE_JWT_SECRET must be set together/,
+    );
+    expect(() => loadEnv(apiEnvSchema, { ...base, SUPABASE_JWT_SECRET: JWT_SECRET })).toThrow(/SUPABASE_ANON_KEY: SUPABASE_ANON_KEY and SUPABASE_JWT_SECRET/);
+    expect(() => loadEnv(apiEnvSchema, { ...base, SUPABASE_ANON_KEY: signedKey('anon', JWT_SECRET), SUPABASE_JWT_SECRET: 'short' })).toThrow(
+      /SUPABASE_JWT_SECRET: must be the project's JWT secret/,
+    );
+    // A secret from another project (or mistyped): the anon key is not signed with it.
+    const other = 'another-projects-jwt-secret-value-0123456789';
+    let message = '';
+    try {
+      loadEnv(apiEnvSchema, { ...base, SUPABASE_ANON_KEY: signedKey('anon', JWT_SECRET), SUPABASE_JWT_SECRET: other });
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/SUPABASE_JWT_SECRET: is not this project's JWT secret/);
+    expect(message).not.toContain(other);
+    // Newer publishable keys are not JWTs: nothing to check against, accepted.
+    expect(loadEnv(apiEnvSchema, { ...base, SUPABASE_ANON_KEY: 'sb_publishable_abc', SUPABASE_JWT_SECRET: other }).SUPABASE_JWT_SECRET).toBe(other);
+    expect(supabaseKeySignedWith(signedKey('anon', JWT_SECRET), JWT_SECRET)).toBe(true);
+    expect(supabaseKeySignedWith(signedKey('anon', JWT_SECRET), other)).toBe(false);
+    expect(supabaseKeySignedWith('sb_publishable_abc', JWT_SECRET)).toBeNull();
+  });
+
+  it('names any value still holding the template placeholder', () => {
+    expect(() =>
+      loadEnv(apiEnvSchema, { ...validApiEnv, DATABASE_URL: 'postgresql://bedo_api.ref:PASTE_DB_PASSWORD@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres' }),
+    ).toThrow(/DATABASE_URL: still holds the template placeholder/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, ACCESS_TOKEN_SECRET: 'PASTE_ACCESS_TOKEN_SECRET_HERE_0123456789' })).toThrow(
+      /ACCESS_TOKEN_SECRET: still holds the template placeholder/,
+    );
+  });
+
+  it('refuses WAABEK_API_KEY in the environment: the key is set from the Admin Dashboard (D-32)', () => {
+    const value = 'fake-env-key-should-be-refused';
+    let message = '';
+    try {
+      loadEnv(apiEnvSchema, { ...validApiEnv, WAABEK_API_KEY: value });
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/WAABEK_API_KEY: is no longer used \(D-32\)/);
+    expect(message).not.toContain(value);
+    // An empty variable is treated as absent.
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, WAABEK_API_KEY: '' })).not.toThrow();
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, WAABEK_API_URL: 'http://waabek.example/send' })).toThrow(/WAABEK_API_URL/);
+  });
+
+  it('requires the three VAPID settings together', () => {
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, VAPID_PUBLIC_KEY: 'x' })).toThrow(/VAPID/);
+    expect(() => loadEnv(apiEnvSchema, { ...validApiEnv, VAPID_PUBLIC_KEY: 'x', VAPID_PRIVATE_KEY: 'y', VAPID_SUBJECT: 'mailto:a@b.c' })).not.toThrow();
   });
 
   it('reports missing variables by name', () => {
@@ -138,7 +181,7 @@ describe('apiEnvSchema', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(EnvValidationError);
       const variables = (error as EnvValidationError).issues.map((issue) => issue.variable);
-      expect(variables).toEqual(expect.arrayContaining(['DATABASE_URL', 'REDIS_URL']));
+      expect(variables).toEqual(expect.arrayContaining(['DATABASE_URL', 'ACCESS_TOKEN_SECRET', 'SETTINGS_ENCRYPTION_KEY']));
     }
   });
 
@@ -154,53 +197,6 @@ describe('apiEnvSchema', () => {
   });
 });
 
-describe('workerEnvSchema', () => {
-  it('requires REDIS_URL and applies worker defaults', () => {
-    const env = loadEnv(workerEnvSchema, validWorkerEnv);
-    expect(env.WORKER_CONCURRENCY).toBe(4);
-    expect(env.WORKER_HEARTBEAT_INTERVAL_MS).toBe(15_000);
-    expect(env.OTP_DELIVERY).toBe('waabek');
-    expect(env.WAABEK_API_URL).toBe('https://waabek.com/api/v1/send');
-  });
-
-  it('requires SETTINGS_ENCRYPTION_KEY, which decrypts the Dashboard-managed Waabek key (D-32)', () => {
-    const { SETTINGS_ENCRYPTION_KEY: _omit, ...withoutKey } = validWorkerEnv;
-    for (const OTP_DELIVERY of ['waabek', 'test-capture']) {
-      expect(() => loadEnv(workerEnvSchema, { ...withoutKey, OTP_DELIVERY, NODE_ENV: 'test' })).toThrow(/SETTINGS_ENCRYPTION_KEY: is required/);
-    }
-    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, SETTINGS_ENCRYPTION_KEY: Buffer.from('too-short').toString('base64') })).toThrow(
-      /SETTINGS_ENCRYPTION_KEY/,
-    );
-  });
-
-  it('refuses WAABEK_API_KEY in the environment: the key is set from the Admin Dashboard (D-32)', () => {
-    const value = 'fake-env-key-should-be-refused';
-    let message = '';
-    try {
-      loadEnv(workerEnvSchema, { ...validWorkerEnv, WAABEK_API_KEY: value });
-    } catch (error) {
-      message = String(error);
-    }
-    expect(message).toMatch(/WAABEK_API_KEY: is no longer used \(D-32\)/);
-    expect(message).not.toContain(value);
-    // An empty variable is treated as absent.
-    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, WAABEK_API_KEY: '' })).not.toThrow();
-  });
-
-  it('refuses the test code sender outside NODE_ENV=test', () => {
-    for (const NODE_ENV of ['production', 'development']) {
-      expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, OTP_DELIVERY: 'test-capture', NODE_ENV })).toThrow(
-        /OTP_DELIVERY/,
-      );
-    }
-    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, OTP_DELIVERY: 'test-capture', NODE_ENV: 'test' })).not.toThrow();
-  });
-
-  it('requires the three VAPID settings together', () => {
-    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, VAPID_PUBLIC_KEY: 'x' })).toThrow(/VAPID/);
-  });
-});
-
 describe('server variable classification', () => {
   it('includes the Waabek API key and the settings encryption key as server-only', () => {
     // WAABEK_API_KEY stays listed so the client-bundle guard keeps looking for its name and any value.
@@ -213,7 +209,6 @@ describe('server variable classification', () => {
     const nonSecret = new Set<string>(NON_SECRET_SERVER_ENV_NAMES);
     const allKeys = new Set([
       ...Object.keys(apiEnvSchema.shape),
-      ...Object.keys(workerEnvSchema.shape),
       ...Object.keys(migrationEnvSchema.shape),
       ...Object.keys(adminCliEnvSchema.shape),
     ]);
@@ -221,11 +216,5 @@ describe('server variable classification', () => {
       expect(secret.has(key) || nonSecret.has(key), `${key} is not classified`).toBe(true);
       expect(secret.has(key) && nonSecret.has(key), `${key} is classified twice`).toBe(false);
     }
-  });
-
-  it('rejects an invalid queue prefix', () => {
-    expect(() => loadEnv(workerEnvSchema, { ...validWorkerEnv, QUEUE_PREFIX: 'Bad Prefix' })).toThrow(
-      EnvValidationError,
-    );
   });
 });

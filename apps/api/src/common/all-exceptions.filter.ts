@@ -61,7 +61,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('Errors');
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    // HTTP only. The realtime gateway (Phase 3) gets its own filter with its own error shape.
     if (host.getType() !== 'http') {
       throw exception;
     }

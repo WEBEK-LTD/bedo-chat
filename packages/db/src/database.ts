@@ -1,5 +1,6 @@
 import { type ColumnType, type Generated, Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
+import { SUPABASE_ROOT_CA_2021 } from './supabase-ca.js';
 
 export interface AuditLogTable {
   id: Generated<string>;
@@ -377,6 +378,35 @@ export interface UserPresenceTable {
   last_seen_at: Timestamp;
 }
 
+/** Phase 3.3 (D-36): short-lived server state with an expiry (what Redis held before). */
+export interface EphemeralTable {
+  key: string;
+  value: string;
+  expires_at: Timestamp;
+}
+
+export interface RateCountersTable {
+  key: string;
+  count: number;
+  expires_at: Timestamp;
+}
+
+export interface RateEventsTable {
+  bucket: string;
+  at: Timestamp;
+}
+
+export interface PresenceDevicesTable {
+  user_id: string;
+  session_id: string;
+  expires_at: Timestamp;
+}
+
+export interface MaintenanceRunsTable {
+  name: string;
+  last_run_at: Timestamp;
+}
+
 export interface MessageRevisionsTable {
   id: Generated<string>;
   message_id: string;
@@ -445,6 +475,11 @@ export interface Database {
   'app.user_sync_state': UserSyncStateTable;
   'app.update_log': UpdateLogTable;
   'app.user_presence': UserPresenceTable;
+  'app.ephemeral': EphemeralTable;
+  'app.rate_counters': RateCountersTable;
+  'app.rate_events': RateEventsTable;
+  'app.presence_devices': PresenceDevicesTable;
+  'app.maintenance_runs': MaintenanceRunsTable;
   'audit.message_revisions': MessageRevisionsTable;
   'audit.screenshot_events': ScreenshotEventsTable;
 }
@@ -455,6 +490,8 @@ export interface CreateDbOptions {
   applicationName?: string;
   /** Server-side limit for any single statement (Postgres statement_timeout). */
   statementTimeoutMs?: number;
+  /** How long an unused pooled connection stays open (default 30 s). */
+  idleTimeoutMs?: number;
   /**
    * Called when an idle pooled connection fails (database restart, network cut, idle-connection
    * reaping by a proxy). Without a listener, Node would treat it as an unhandled error and exit.
@@ -470,20 +507,69 @@ export interface DbHandle {
   ping(timeoutMs: number): Promise<void>;
 }
 
+/**
+ * Supabase's transaction-mode pooler (Supavisor) listens on 6543: consecutive transactions of one client may
+ * run on different server connections, so no session setting can be relied on there.
+ */
+export function usesTransactionPooler(connectionString: string): boolean {
+  try {
+    return new URL(connectionString).port === '6543';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * TLS for a database connection (D-36). Every connection to a Supabase host (`*.supabase.com`, `*.supabase.co`) is
+ * encrypted and fully verified against Supabase's root certificate, including the host name, with nothing to
+ * configure. The host is read exactly as node-postgres reads it (including a `?host=` parameter, letter case, a
+ * trailing dot or percent-encoding). A Supabase connection string that sets its own TLS options keeps them only if
+ * they still verify the server; one that turns verification or TLS off is refused. Other hosts (local development,
+ * tests) are unchanged.
+ */
+export function connectionTls(connectionString: string): pg.ConnectionConfig['ssl'] {
+  const unset = { bedoNoSslOptionsInUrl: true } as unknown as pg.ConnectionConfig['ssl'];
+  let parsed: { host?: unknown; ssl?: unknown };
+  try {
+    // Parses the string the way the driver will, without connecting. Options in the URL replace `ssl` here.
+    parsed = (new pg.Client({ connectionString, ssl: unset }) as unknown as { connectionParameters: { host?: unknown; ssl?: unknown } })
+      .connectionParameters;
+  } catch {
+    return undefined;
+  }
+  const host = String(parsed.host ?? '').toLowerCase().replace(/\.+$/, '');
+  if (!host.endsWith('.supabase.com') && !host.endsWith('.supabase.co')) {
+    return undefined;
+  }
+  if (parsed.ssl === unset) {
+    return { ca: SUPABASE_ROOT_CA_2021, rejectUnauthorized: true };
+  }
+  if (parsed.ssl && typeof parsed.ssl === 'object' && (parsed.ssl as { rejectUnauthorized?: unknown }).rejectUnauthorized !== false) {
+    return undefined; // the URL's own TLS options, which verify the server (e.g. sslmode=verify-full&sslrootcert=...)
+  }
+  throw new Error('DATABASE_URL: a Supabase connection must verify the server certificate; remove its sslmode (TLS is verified automatically)');
+}
+
 export function createDb(options: CreateDbOptions): DbHandle {
   const statementTimeoutMs = options.statementTimeoutMs ?? 15_000;
+  const transactionPooler = usesTransactionPooler(options.connectionString);
   const pool = new pg.Pool({
     connectionString: options.connectionString,
+    ssl: connectionTls(options.connectionString),
     max: options.poolMax ?? 10,
     application_name: options.applicationName ?? 'bedo',
-    idleTimeoutMillis: 30_000,
+    idleTimeoutMillis: options.idleTimeoutMs ?? 30_000,
     connectionTimeoutMillis: 5_000,
     // Client-side backstop for when the server cannot even be reached to enforce statement_timeout.
     query_timeout: statementTimeoutMs + 1_000,
     // Runs, and is awaited, before a new connection is handed out. Set here rather than as a startup
-    // parameter, which some connection poolers reject. A failure discards the connection.
+    // parameter, which some connection poolers reject. A failure discards the connection. Not with the
+    // transaction pooler, where a session setting would not stay with this client (query_timeout above
+    // still bounds every query).
     onConnect: async (client) => {
-      await client.query(`set statement_timeout = ${Math.trunc(statementTimeoutMs)}`);
+      if (!transactionPooler) {
+        await client.query(`set statement_timeout = ${Math.trunc(statementTimeoutMs)}`);
+      }
     },
   });
   pool.on('error', (error: Error) => {

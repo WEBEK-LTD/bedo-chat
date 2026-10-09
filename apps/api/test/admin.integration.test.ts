@@ -20,7 +20,7 @@ import {
   webCsrf,
 } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 let counter = 0;
 const nextPhone = () => `+2011${String(Date.now() % 1e4).padStart(4, '0')}${String(++counter).padStart(4, '0')}`;
 let ipCounter = 0;
@@ -68,9 +68,9 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
   }
 
   async function studentSignIn(phone: string) {
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     await post('/v1/auth/otp/request', { phone }, {});
-    const verified = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) }, {});
+    const verified = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) }, {});
     expect(verified.statusCode, verified.body).toBe(200);
     return {
       id: verified.json().user.id as string,
@@ -105,7 +105,7 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
     it('sends no WhatsApp code for admin sign-in (D-34)', async () => {
       const admin = await createAdmin('moderator');
       expect((await adminPasswordLogin(app, admin.phone)).statusCode).toBe(200);
-      expect(await latestCode(ctx.otpQueue, admin.phone)).toBeNull();
+      expect(await latestCode(ctx.waabek, admin.phone)).toBeNull();
       expect((await post('/v1/admin/auth/otp/request', { phone: admin.phone }, adminCsrf)).statusCode).toBe(404);
       expect((await post('/v1/admin/auth/otp/verify', { phone: admin.phone, code: '123456' }, adminCsrf)).statusCode).toBe(404);
     });
@@ -250,7 +250,7 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
 
     it('on approval: deletes the account, keeps all history, ends sessions and tells the user', async () => {
       const { phone, username, student, requestId } = await studentWithRequest();
-      await ctx.pushQueue.obliterate({ force: true });
+      ctx.push.clear();
       const auditBefore = await query<{ n: number }>(
         ctx.ownerUrl,
         "select (select count(*) from audit.identity_history where user_id = $1) + (select count(*) from audit.account_events where user_id = $1) + (select count(*) from audit.security_events where subject_id = $1) as n",
@@ -289,9 +289,10 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
       const refresh = await app.inject({ method: 'POST', url: '/v1/auth/refresh', headers: { ...webCsrf, cookie: `${REFRESH_COOKIE}=${student.refresh}` } });
       expect(refresh.json().error.code).toBe('ACCOUNT_DELETED');
 
-      const push = await ctx.pushQueue.getJobs(['waiting']);
+      // D-36: sent right after the response to the subscriptions the account had (removed in the same change).
+      const push = await ctx.push.all();
       expect(push).toHaveLength(1);
-      expect(push[0]?.data.subscriptions).toEqual([{ endpoint: `https://fcm.googleapis.com/fcm/send/${student.id}`, p256dh: 'p', auth: 'a' }]);
+      expect(push[0]?.endpoint).toBe(`https://fcm.googleapis.com/fcm/send/${student.id}`);
       expect((await query(ctx.ownerUrl, 'select 1 from app.push_subscriptions where user_id = $1', [student.id])).rowCount).toBe(0);
 
       expect((await asAdmin(superCookie, 'POST', `/v1/admin/deletion-requests/${requestId}/approve`, {})).statusCode).toBe(409);
@@ -328,11 +329,11 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
       ]);
 
       // The deleted number cannot sign in again or create a new account: same neutral answer, no code.
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
-      const queuedBefore = await jobCount(ctx.otpQueue, phone);
+      await clearCooldown(ctx, phone);
+      const queuedBefore = await jobCount(ctx.waabek, phone);
       const again = await post('/v1/auth/otp/request', { phone }, {});
       expect(again.statusCode).toBe(200);
-      expect(await jobCount(ctx.otpQueue, phone)).toBe(queuedBefore);
+      expect(await jobCount(ctx.waabek, phone)).toBe(queuedBefore);
       const guess = await post('/v1/auth/otp/verify', { phone, code: '123456' }, {});
       expect(guess.json().error.code).toBe('OTP_INVALID');
       expect((await query(ctx.ownerUrl, 'select 1 from app.users where phone = $1', [phone])).rowCount).toBe(0);

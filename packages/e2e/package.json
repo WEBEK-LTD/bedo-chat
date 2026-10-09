@@ -2,7 +2,7 @@
   "name": "@bedo/e2e",
   "version": "0.1.0",
   "private": true,
-  "description": "Browser tests of the web and admin apps against the real API, Postgres and Redis",
+  "description": "Browser tests of the one Bedo Chat site (web app, Admin Dashboard and API) against real Postgres",
   "type": "module",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -15,9 +15,9 @@
     "@bedo/db": "workspace:*",
     "@bedo/server-crypto": "workspace:*",
     "@types/pg": "^8.23.1",
-    "bullmq": "^5.60.0 || ^6.0.0",
-    "ioredis": "^5.8.0 || ^6.0.0",
+    "@types/ws": "^8.18.1",
     "pg": "^8.23.0",
-    "playwright-core": "1.63.0"
+    "playwright-core": "1.63.0",
+    "ws": "^8.21.3"
   }
 }

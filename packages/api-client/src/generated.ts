@@ -87,23 +87,8 @@ export type ReadyResponseChecksDatabase = {
   latencyMs: number;
 };
 
-export type ReadyResponseChecksRedisStatus = typeof ReadyResponseChecksRedisStatus[keyof typeof ReadyResponseChecksRedisStatus];
-
-
-export const ReadyResponseChecksRedisStatus = {
-  up: 'up',
-  down: 'down',
-} as const;
-
-export type ReadyResponseChecksRedis = {
-  status: ReadyResponseChecksRedisStatus;
-  /** @minimum 0 */
-  latencyMs: number;
-};
-
 export type ReadyResponseChecks = {
   database: ReadyResponseChecksDatabase;
-  redis: ReadyResponseChecksRedis;
 };
 
 export interface ReadyResponse {
@@ -1728,6 +1713,44 @@ export interface SyncResponse {
   messages: SyncResponseMessagesItem[];
   /** @nullable */
   folders: SyncResponseFoldersItem[] | null;
+}
+
+export type RealtimeChannelResponseEvent = typeof RealtimeChannelResponseEvent[keyof typeof RealtimeChannelResponseEvent];
+
+
+export const RealtimeChannelResponseEvent = {
+  signal: 'signal',
+} as const;
+
+export interface RealtimeChannelResponse {
+  enabled: boolean;
+  /** @nullable */
+  url: string | null;
+  /** @nullable */
+  apiKey: string | null;
+  /** @nullable */
+  accessToken: string | null;
+  /** @nullable */
+  topic: string | null;
+  /** @nullable */
+  expiresAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  expiresInSeconds: number | null;
+  event: RealtimeChannelResponseEvent;
+  /** @exclusiveMinimum 0 */
+  heartbeatSeconds: number;
+}
+
+export interface RealtimeHeartbeatResponse {
+  /** @minimum 0 */
+  seq: number;
+}
+
+export interface RealtimeTypingBody {
+  chatId: string;
 }
 
 export type AdminListPhonesParams = {
@@ -4278,6 +4301,116 @@ export const sync = async (params?: SyncParams, options?: Parameters<typeof apiF
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getGetRealtimeChannelUrl = () => {
+
+
+
+
+  return `/v1/realtime/channel`
+}
+
+/**
+ * @summary This device's private realtime channel (signals only, no content)
+ */
+export const getRealtimeChannel = async ( options?: Parameters<typeof apiFetch>[1]): Promise<RealtimeChannelResponse> => {
+
+  return apiFetch<RealtimeChannelResponse>(getGetRealtimeChannelUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getRealtimeHeartbeatUrl = () => {
+
+
+
+
+  return `/v1/realtime/heartbeat`
+}
+
+/**
+ * @summary Online for the next 60 seconds (every 25 s, P-18); returns the current update seq
+ */
+export const realtimeHeartbeat = async ( options?: Parameters<typeof apiFetch>[1]): Promise<RealtimeHeartbeatResponse> => {
+
+  return apiFetch<RealtimeHeartbeatResponse>(getRealtimeHeartbeatUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export const getRealtimeTypingUrl = () => {
+
+
+
+
+  return `/v1/realtime/typing`
+}
+
+/**
+ * @summary The user is typing in a chat (shown for 6 seconds, P-18)
+ */
+export const realtimeTyping = async (realtimeTypingBody: RealtimeTypingBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getRealtimeTypingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(realtimeTypingBody)
+  }
+);}
+
+
+
+export const getRealtimeOfflineUrl = () => {
+
+
+
+
+  return `/v1/realtime/offline`
+}
+
+/**
+ * @summary This device is going away (no longer online)
+ */
+export const realtimeOffline = async ( options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+  return apiFetch<OkResponse>(getRealtimeOfflineUrl(),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

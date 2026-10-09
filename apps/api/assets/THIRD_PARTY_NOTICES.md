@@ -1,6 +1,6 @@
 # Third-party notices
 
-## common-passwords.txt
+## Common-password list (src/admin/common-passwords.list.ts)
 
 Derived from `Passwords/Common-Credentials/xato-net-10-million-passwords-1000000.txt` in SecLists
 (https://github.com/danielmiessler/SecLists): only the entries of 12 to 128 characters, lower-cased and

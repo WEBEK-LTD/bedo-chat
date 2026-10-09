@@ -1,9 +1,9 @@
 // Fails the build if anything server-only reaches files served to browsers (spec §1, D-05).
 // It scans every file in the web and admin apps' client output (static chunks, prerendered pages,
 // and public/) for:
-//   - the names of server-only environment variables (DATABASE_URL, REDIS_URL, WAABEK_API_KEY, ...)
+//   - the names of server-only environment variables (DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ...)
 //   - the values of those variables, taken from the environment running this check and from the
-//     server .env files (apps/api/.env, apps/worker/.env, packages/db/.env) when present
+//     server .env files (apps/web/.env*, apps/api/.env, packages/db/.env) when present
 //   - the Waabek API host, which only the backend may call
 // Run it after `pnpm build`. Limits: pages rendered per request are not in the build output, and
 // encoded or split values are not detected; server code must still never read secrets in components
@@ -13,7 +13,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const MIN_SECRET_VALUE_LENGTH = 8;
-const SERVER_ENV_FILES = ['apps/api/.env', 'apps/worker/.env', 'packages/db/.env'];
+// D-36: the API runs inside the website, so its secrets can also sit in the web app's local env files.
+const SERVER_ENV_FILES = ['apps/web/.env', 'apps/web/.env.local', 'apps/web/.env.production.local', 'apps/api/.env', 'packages/db/.env'];
 
 /** Minimal KEY=VALUE reader for .env files (comments and blank lines ignored, optional quotes). */
 export function parseEnvFile(content) {

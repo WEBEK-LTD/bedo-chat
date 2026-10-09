@@ -1,5 +1,5 @@
 import { refreshSession, setTransport } from '@bedo/api-client';
-import { type AuthenticatedResponse, CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
+import { API_BASE_PATH, type AuthenticatedResponse, CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
 
 /** An error answer from the API (or a network failure, code NETWORK). */
 export class ApiError extends Error {
@@ -17,10 +17,11 @@ export class ApiError extends Error {
 
 export type SignedOutReason = 'signed_out' | 'account_deleted' | 'account_blocked' | 'session_ended';
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+/** D-36: the API is served by this same site at /api (https://bedochat.com/api). */
+const API_URL = API_BASE_PATH;
 
-/** Path prefixes of requests that need the signed-in user's access token (Phase 3 added the messaging routes). */
-const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync'];
+/** Path prefixes of requests that need the signed-in user's access token (Phase 3 added messaging, D-36 realtime). */
+const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync', '/v1/realtime'];
 const isUserRoute = (path: string) => USER_ROUTES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));
 
 /**
@@ -43,25 +44,6 @@ class Session {
 
   clear(): void {
     this.accessToken = null;
-  }
-
-  /**
-   * The access token for the realtime connection's first message (Phase 3). A token that the gateway
-   * refuses is replaced with `fresh` (one refresh), and the session ends if that fails.
-   */
-  async realtimeToken(fresh = false): Promise<string> {
-    if (fresh || !this.accessToken) {
-      try {
-        await this.refresh();
-      } catch (error) {
-        // Only an answer that the session is over ends it; a network failure is retried by the caller.
-        if (error instanceof ApiError && ['UNAUTHENTICATED', 'SESSION_INVALID', 'ACCOUNT_DELETED', 'ACCOUNT_BLOCKED'].includes(error.code)) {
-          this.signedOut(error);
-        }
-        throw error;
-      }
-    }
-    return this.accessToken!;
   }
 
   async send<T>(path: string, init: RequestInit): Promise<T> {

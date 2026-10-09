@@ -1,7 +1,7 @@
 import { decryptWaabekApiKey } from '@bedo/server-crypto';
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_PASSWORD, ADMIN_URL, hotp, query, type Stack, startStack } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, hotp, launchBrowser, query, type Stack, startStack } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -10,8 +10,7 @@ async function shot(page: Page, name: string) {
   }
 }
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 const SUPER_PHONE = '+905446731942';
 // Fake keys only (D-32): a real Waabek key never appears in tests.
 const FIRST_KEY = 'fake-waabek-key-e2e-initial-0001';
@@ -64,8 +63,8 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     (await query<{ waabek_api_key_enc: string | null; version: string }>(stack.ownerUrl, 'select waabek_api_key_enc, version from app.otp_settings')).rows[0]!;
 
   beforeAll(async () => {
-    stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    stack = await startStack({ waabekKey: false });
+    browser = await launchBrowser();
     // Exactly what the owner runs in the SQL editor.
     await query(stack.ownerUrl, "insert into app.admin_accounts (phone, name, role, status) values ('+905446731942', 'Academy Admin', 'super_admin', 'active')");
     setupToken = (await query<{ setup_token: string }>(stack.ownerUrl, 'select * from app.open_admin_bootstrap()')).rows[0]!.setup_token;

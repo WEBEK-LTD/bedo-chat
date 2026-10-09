@@ -141,13 +141,18 @@ test('either Package directory builds the one site: both netlify.toml files are 
   assert.doesNotMatch(tomlValue(admin, 'build', 'command'), /@bedo\/admin/);
 });
 
-test('the one-site production build sets NEXT_PUBLIC_API_URL=https://bedochat.com/api (Phase 2.3.1, D-28)', () => {
-  const toml = read('apps/web/netlify.toml');
-  assert.equal(tomlValue(toml, 'build.environment', 'NEXT_PUBLIC_API_URL'), 'https://bedochat.com/api');
-  // Set once, in the build environment of the one site (not per context, not elsewhere).
-  assert.equal(toml.match(/NEXT_PUBLIC_API_URL\s*=/g)?.length, 1);
-  // D-28: the same value whichever copy Netlify reads.
-  assert.equal(tomlValue(read('apps/admin/netlify.toml'), 'build.environment', 'NEXT_PUBLIC_API_URL'), 'https://bedochat.com/api');
+test('the one-site build needs no API address: both apps call /api on the site itself (D-36)', () => {
+  for (const file of ['apps/web/netlify.toml', 'apps/admin/netlify.toml']) {
+    const toml = read(file);
+    assert.doesNotMatch(toml, /NEXT_PUBLIC_API_URL|API_ORIGIN|EDGE_SECRET|REDIS_URL/, file);
+  }
+  for (const file of ['apps/web/app/_lib/api.ts', 'apps/admin/app/_lib/api.ts']) {
+    const source = read(file);
+    assert.match(source, /const API_URL = API_BASE_PATH;/, file);
+    assert.doesNotMatch(source, /NEXT_PUBLIC_API_URL/, file);
+  }
+  // The API is a route handler of the web app, at the path the clients call.
+  assert.match(read('apps/web/app/api/[[...path]]/route.ts'), /handleApiRequest/);
 });
 
 function fakeExport(root, buildId = 'build-1') {

@@ -7,16 +7,15 @@ import { AppError } from '../common/app-error.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { API_ENV } from '../config/tokens.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
-import { RateLimitService } from '../redis/rate-limit.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
+import { RateLimitService } from '../state/rate-limit.service.js';
 import type { AdminContext } from './admin-auth.service.js';
 import { decryptSecret, verifyTotp } from './totp.js';
 
 /**
  * OTP delivery settings managed from the Admin Dashboard (D-32). The Waabek API key is encrypted here with
  * SETTINGS_ENCRYPTION_KEY (AES-256-GCM) before it reaches the database, and is never decrypted, returned,
- * logged or written to the audit history by the API: only the worker decrypts it, to send messages.
+ * logged or written to the audit history by the API: it is decrypted only to send a message (D-36: in the API, right before sending).
  */
 @Injectable()
 export class OtpSettingsService {
@@ -26,10 +25,9 @@ export class OtpSettingsService {
   constructor(
     @Inject(API_ENV) env: ApiEnv,
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(AuditService) private readonly audit: AuditService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
   ) {
     // Fails closed: configuration validation already refuses a missing or malformed key.
     this.settingsKey = parseAes256Key(env.SETTINGS_ENCRYPTION_KEY);
@@ -85,7 +83,7 @@ export class OtpSettingsService {
    */
   async replaceKey(admin: AdminContext, apiKey: string, totpCode: string, info: RequestInfo): Promise<{ version: number }> {
     const attempt = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:otp-settings-totp:${admin.adminId}`,
+      `rl:otp-settings-totp:${admin.adminId}`,
       ADMIN_BOOTSTRAP_RULES.testMessageWindowSeconds * 1000,
     );
     if (attempt.count > TOKEN_RULES.maxTwoStepPasswordAttempts) {
@@ -142,14 +140,14 @@ export class OtpSettingsService {
   /** Sends a WhatsApp test message to the signed-in admin's own number. */
   async sendTest(admin: AdminContext, info: RequestInfo): Promise<WaabekTestResponse> {
     const limit = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:waabek-test:${admin.adminId}`,
+      `rl:waabek-test:${admin.adminId}`,
       ADMIN_BOOTSTRAP_RULES.testMessageWindowSeconds * 1000,
     );
     if (limit.count > ADMIN_BOOTSTRAP_RULES.maxTestMessages) {
       throw new AppError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', limit.retryAfterSeconds);
     }
     const { phone } = await this.db.selectFrom('app.admin_accounts').select('phone').where('id', '=', admin.adminId).executeTakeFirstOrThrow();
-    const outcome = await this.queues.sendWaabekTest({ phone });
+    const outcome = await this.delivery.sendTest(phone);
     const result: WaabekTestResponse = {
       delivered: outcome.delivered,
       sentTo: maskPhone(phone),

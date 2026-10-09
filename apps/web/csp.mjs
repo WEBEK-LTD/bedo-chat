@@ -3,11 +3,11 @@
 // - scripts and styles only from the site itself; the web app's pages are rendered per request with a fresh
 //   nonce for Next.js's own inline scripts (proxy.ts), and the Admin Dashboard's static pages carry no inline
 //   scripts at all (scripts/bundle-admin-into-web.mjs moves them into files);
-// - the API (https://bedochat.com/api, the same origin in production) over HTTPS and its WebSocket
-//   (wss://bedochat.com/api/v1/realtime);
-// - profile pictures from the project's private Supabase Storage through short-lived signed URLs (download,
-//   and the web app's direct upload): exactly the origin in NEXT_PUBLIC_STORAGE_ORIGIN, the Supabase project URL
-//   (https://<project>.supabase.co), when profile pictures are set up; no other storage host;
+// - the API, which is this same site (D-36: https://bedochat.com/api);
+// - the Supabase project (NEXT_PUBLIC_STORAGE_ORIGIN, https://<project>.supabase.co), when set: profile
+//   pictures from its private Storage through short-lived signed URLs (download, and the web app's direct
+//   upload), and each device's realtime channel on its Realtime WebSocket (wss://<project>.supabase.co, D-36);
+//   no other storage or realtime host;
 // - the push service worker (/sw.js);
 // - no frames, plugins, other sites' scripts, fonts or forms, and the pages cannot be framed.
 // Used by apps/web/proxy.ts and by the tests in scripts/csp.test.mjs; the Admin Dashboard's value is set in
@@ -38,20 +38,17 @@ export const ADMIN_CSP =
 
 /**
  * The student web app's policy for one response.
- * @param {{ nonce: string, apiUrl?: string, storage?: string, dev?: boolean, https?: boolean }} options
+ * @param {{ nonce: string, storage?: string, dev?: boolean, https?: boolean }} options
  * @returns {string}
  */
-export function webCsp({ nonce, apiUrl, storage, dev = false, https = false }) {
+export function webCsp({ nonce, storage, dev = false, https = false }) {
   if (!/^[A-Za-z0-9+/=_-]{16,}$/.test(nonce)) {
     throw new Error('CSP nonce must be at least 16 base64 characters');
   }
-  const connect = ["'self'"];
-  if (apiUrl) {
-    const api = new URL(apiUrl);
-    connect.push(api.origin, `${api.protocol === 'https:' ? 'wss:' : 'ws:'}//${api.host}`);
-  }
   const storageSources = storage ? [storageOrigin(storage)] : [];
-  connect.push(...storageSources);
+  // The project's Realtime WebSocket is on the same host as its Storage.
+  const realtimeSources = storageSources.map((origin) => `wss://${new URL(origin).host}`);
+  const connect = ["'self'", ...storageSources, ...realtimeSources];
   const directives = [
     ['default-src', ["'none'"]],
     // 'strict-dynamic': scripts the nonce'd Next.js scripts load are allowed; nothing else is.

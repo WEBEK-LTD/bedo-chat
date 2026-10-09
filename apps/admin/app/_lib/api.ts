@@ -1,5 +1,5 @@
 import { setTransport, type WaabekTestResponse } from '@bedo/api-client';
-import { CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
+import { API_BASE_PATH, CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
 
 /** An error answer from the API (or a network failure, code NETWORK). */
 export class ApiError extends Error {
@@ -15,7 +15,8 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+/** D-36: the API is served by the same site at /api (https://bedochat.com/api). */
+const API_URL = API_BASE_PATH;
 
 /**
  * The admin app's transport for the generated API client (@bedo/api-client). The admin session is an

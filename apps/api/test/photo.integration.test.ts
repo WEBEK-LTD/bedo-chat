@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ProfilePhotoStorage, type StoredObject } from '../src/storage/profile-photo-storage.js';
 import { clearCooldown, type IntegrationEnv, latestCode, query, setupIntegrationEnv, startApp } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 /** In-memory stand-in for the private Supabase bucket: the browser "uploads" by writing into `objects`. */
 class FakeStorage extends ProfilePhotoStorage {
@@ -38,12 +38,12 @@ describe.runIf(enabled)('profile picture (P-07, P-15)', () => {
 
   async function signIn(phone: string, ip: string) {
     await query(ctx.ownerUrl, "insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())", [phone]);
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     await app.inject({ method: 'POST', url: '/v1/auth/otp/request', payload: { phone }, remoteAddress: ip });
     const verified = await app.inject({
       method: 'POST',
       url: '/v1/auth/otp/verify',
-      payload: { phone, code: await latestCode(ctx.otpQueue, phone) },
+      payload: { phone, code: await latestCode(ctx.waabek, phone) },
       remoteAddress: ip,
     });
     return verified.json() as { accessToken: string; user: { id: string } };

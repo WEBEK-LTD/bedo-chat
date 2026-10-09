@@ -1,10 +1,9 @@
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ADMIN_CSP } from '../../../apps/web/csp.mjs';
-import { ADMIN_PASSWORD, ADMIN_URL, hotp, issuePasswordSetup, query, type Stack, startStack } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, hotp, issuePasswordSetup, launchBrowser, query, type Stack, startStack } from './stack.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 const PHONE = '+201000003901';
 
 function base32Decode(input: string): Buffer {
@@ -46,8 +45,8 @@ describe.runIf(enabled)('Admin Dashboard Phase 3.1 and 3.2 screens under the Con
   const violations: string[] = [];
 
   beforeAll(async () => {
-    stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    stack = await startStack({ waabekKey: false });
+    browser = await launchBrowser();
     context = await browser.newContext();
     await reportViolations(context);
     page = await context.newPage();

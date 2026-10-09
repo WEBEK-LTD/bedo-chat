@@ -4,56 +4,40 @@ import { ConsoleLogger, type LogLevel } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import type { ApiEnv } from '@bedo/config';
-import type { IncomingMessage } from 'node:http';
 import { AppModule } from './app.module.js';
-import { registerEdgeGuard } from './security/edge-guard.js';
 
-const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{8,64}$/;
 const BODY_LIMIT_BYTES = 1024 * 1024;
 
 export function buildFastifyAdapter(env: ApiEnv): FastifyAdapter {
   return new FastifyAdapter({
-    // Trust exactly the configured number of proxy hops when deriving the client IP.
-    trustProxy: env.API_TRUST_PROXY_HOPS > 0 ? (_address: string, hop: number) => hop < env.API_TRUST_PROXY_HOPS : false,
+    // D-36: requests reach the API only from the website's /api route, in the same process, which passes the
+    // client address Netlify saw (see serverless.ts). No proxy header is trusted.
+    trustProxy: false,
     bodyLimit: BODY_LIMIT_BYTES,
-    // Reuse a well-formed request id only when it comes from a trusted proxy; otherwise mint one,
-    // so clients cannot choose the ids that appear in logs.
+    // Request ids are always minted here, so clients cannot choose the ids that appear in logs.
     requestIdHeader: false,
-    genReqId: (request: IncomingMessage) => {
-      const incoming = request.headers['x-request-id'];
-      return env.API_TRUST_PROXY_HOPS > 0 && typeof incoming === 'string' && REQUEST_ID_PATTERN.test(incoming)
-        ? incoming
-        : randomUUID();
-    },
+    genReqId: () => randomUUID(),
     logger:
       env.LOG_LEVEL === 'silent'
         ? false
         : {
             level: env.LOG_LEVEL,
             redact: {
-              paths: ['req.headers.authorization', 'req.headers.cookie', 'req.headers["x-bedo-edge-secret"]', 'res.headers["set-cookie"]'],
+              paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
               censor: '[redacted]',
             },
           },
   });
 }
 
-/** Cross-cutting HTTP behaviour shared by the real server and the tests. */
+/** Cross-cutting HTTP behaviour shared by the website's /api route and the tests. */
 export async function configureApp(app: NestFastifyApplication, env: ApiEnv): Promise<void> {
   // Cookies carry the web refresh token and the admin session (httpOnly, never readable by scripts).
   await app.register(fastifyCookie as never);
-
-  app.enableCors({
-    origin: env.CORS_ALLOWED_ORIGINS.length > 0 ? env.CORS_ALLOWED_ORIGINS : false,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['content-type', 'authorization', 'x-bedo-csrf'],
-    maxAge: 600,
-  });
+  // D-36: no CORS. The web app, the Admin Dashboard and the API share one origin (https://bedochat.com), so
+  // no other site is ever allowed to call the API from a browser.
 
   const fastify = app.getHttpAdapter().getInstance();
-  // D-25: only requests that came through the edge router reach the routes (when EDGE_SECRET is set).
-  registerEdgeGuard(fastify, env);
   fastify.addHook('onSend', async (request, reply, payload) => {
     void reply.header('x-request-id', String(request.id));
     void reply.header('x-content-type-options', 'nosniff');
@@ -86,11 +70,13 @@ export function buildLogger(env: Pick<ApiEnv, 'LOG_LEVEL' | 'NODE_ENV'>): Consol
   return new ConsoleLogger({ json: production, colors: !production, logLevels: NEST_LOG_LEVELS[env.LOG_LEVEL] });
 }
 
+/** The API application, initialised but not listening: requests are passed in by the website (serverless.ts). */
 export async function createApp(env: ApiEnv): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule.forRoot(env), buildFastifyAdapter(env), {
     logger: buildLogger(env),
   });
   await configureApp(app, env);
-  app.enableShutdownHooks();
+  await app.init();
+  await app.getHttpAdapter().getInstance().ready();
   return app;
 }

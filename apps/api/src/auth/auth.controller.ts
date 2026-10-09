@@ -24,7 +24,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { API_ENV } from '../config/tokens.js';
 import { AuditService } from '../audit/audit.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { assertCsrf, userAppOrigins } from '../security/csrf.js';
+import { assertCsrf } from '../security/csrf.js';
 import { AccountsService } from './accounts.service.js';
 import { clearRefreshCookie, setRefreshCookie } from './cookies.js';
 import { LoginService } from './login.service.js';
@@ -175,7 +175,7 @@ export class AuthController {
   @HttpCode(200)
   @ResponseSchema(authenticatedResponseSchema)
   async refresh(@Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply): Promise<AuthenticatedResponse> {
-    assertCsrf(request, userAppOrigins(this.env));
+    assertCsrf(request);
     const token = request.cookies[REFRESH_COOKIE];
     if (!token) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
@@ -205,7 +205,7 @@ export class AuthController {
   @HttpCode(200)
   @ResponseSchema(okResponseSchema)
   async logout(@Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
-    assertCsrf(request, userAppOrigins(this.env));
+    assertCsrf(request);
     const token = request.cookies[REFRESH_COOKIE];
     clearRefreshCookie(reply, this.env);
     if (token) {

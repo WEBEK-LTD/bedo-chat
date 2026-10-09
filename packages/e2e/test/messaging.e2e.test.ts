@@ -1,7 +1,7 @@
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { ADMIN_CSP } from '../../../apps/web/csp.mjs';
-import { ADMIN_URL, query, type Stack, startStack, waitForCode, WEB_URL } from './stack.js';
+import { ADMIN_URL, launchBrowser, query, type Stack, startStack, waitForCode, WEB_URL } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -10,19 +10,18 @@ async function shot(page: Page, name: string) {
   }
 }
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 const ANA = '+201000003001';
 const BEN = '+201000003002';
 
 /**
- * Phase 3 end to end in a real browser, through the local edge (same origin, /api, WebSocket upgrades) and
- * the one-site stand-in: two users and a second device, realtime delivery and statuses, catching up after a
+ * Phase 3 end to end in a real browser, on the one site (D-36: web app, Admin Dashboard and API on one origin) with
+ * realtime through the Supabase Realtime stand-in: two users and a second device, live delivery and statuses, catching up after a
  * device was closed (local cache plus sync), typing, edits and deletions, blocks with the neutral answer,
  * and the Content-Security-Policy (D-31) on every page without a single violation.
  */
-describe.runIf(enabled)('Phase 3 messaging in the browser (web + API + Postgres + Redis)', () => {
+describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, Supabase Realtime stand-in)', () => {
   let stack: Stack;
   let browser: Browser;
   let anaContext: BrowserContext;
@@ -74,7 +73,7 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (web + API + Postgres 
 
   beforeAll(async () => {
     stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    browser = await launchBrowser();
     for (const phone of [ANA, BEN]) {
       await query(stack.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [phone]);
     }
@@ -107,7 +106,8 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (web + API + Postgres 
     expect(webPolicy).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
     expect(webPolicy).toContain("default-src 'none'");
     expect(webPolicy).toContain("frame-ancestors 'none'");
-    expect(webPolicy).toContain('connect-src \'self\' http://localhost:3100 ws://localhost:3100');
+    // D-36: the API is the site itself ('self'); realtime is the Supabase project's WebSocket (here its stand-in).
+    expect(webPolicy).toContain("connect-src 'self' https://localhost:3400 wss://localhost:3400;");
     expect(webPolicy).not.toMatch(/unsafe-inline|unsafe-eval/);
     // A fresh nonce on every response.
     const again = await page.goto(`${WEB_URL}/login`);
@@ -133,10 +133,17 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (web + API + Postgres 
     await messages(anaPhone).getByText('Hello Ben, are you ready for the exam?').waitFor();
     await shot(anaPhone, '20-chat-sent');
 
-    // Ben sees the chat appear with an unread count, without reloading.
+    // Ben sees the chat appear with an unread count, without reloading. D-36: within seconds, through his
+    // realtime channel (devices not listening would only see it at the next 20-second check).
     const row = ben.getByRole('button', { name: /^Ana Lopez/ });
-    await row.waitFor();
-    await ben.getByLabel('1 unread').waitFor();
+    await row.waitFor({ timeout: 5_000 });
+    await ben.getByLabel('1 unread').waitFor({ timeout: 5_000 });
+    // The signals carry no content: the message itself only ever travels over the API.
+    expect(stack.broadcasts().length).toBeGreaterThan(0);
+    // Every signal went to a private channel (only the device holding that channel's token receives it).
+    expect(stack.broadcasts().every((broadcast) => broadcast.private)).toBe(true);
+    expect(stack.refusedJoins()).toEqual([]);
+    expect(JSON.stringify(stack.broadcasts())).not.toContain('ready for the exam');
     // Ana's other device has the chat and the message too.
     await anaLaptop.getByRole('button', { name: /^Ben Carter/ }).click();
     await messages(anaLaptop).getByText('Hello Ben, are you ready for the exam?').waitFor();
@@ -151,7 +158,7 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (web + API + Postgres 
 
   it('shows typing and catches a closed device up from its local cache and sync', async () => {
     await composer(ben).pressSequentially('Yes, almost', { delay: 20 });
-    await anaPhone.getByText('typing…').first().waitFor();
+    await anaPhone.getByText('typing…').first().waitFor({ timeout: 5_000 });
     await composer(ben).press('Enter');
     await messages(anaPhone).getByText('Yes, almost').waitFor();
     // The indicator ends when the message arrives (and in any case after 6 seconds, P-18).

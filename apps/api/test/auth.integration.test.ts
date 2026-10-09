@@ -14,7 +14,7 @@ import {
   webCsrf,
 } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 let counter = 0;
 let ipCounter = 0;
 /** A distinct client address per request, so tests are not throttled by the per-IP limit unless they mean to be. */
@@ -49,10 +49,10 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
 
   /** Full sign-in for a listed number. Returns access token and refresh cookie. */
   async function signIn(phone: string, deviceName = 'Test browser') {
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     const requested = await requestCode(phone);
     expect(requested.statusCode).toBe(200);
-    const code = await latestCode(ctx.otpQueue, phone);
+    const code = await latestCode(ctx.waabek, phone);
     expect(code).toMatch(/^\d{6}$/);
     const verified = await post('/v1/auth/otp/verify', { phone, code, deviceName });
     expect(verified.statusCode, verified.body).toBe(200);
@@ -85,8 +85,8 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       expect(b.statusCode).toBe(200);
       expect(a.body).toBe(b.body);
       expect(a.json()).toEqual({ status: 'accepted', resendAfterSeconds: 60, expiresInSeconds: 300 });
-      expect(await jobCount(ctx.otpQueue, listed)).toBe(1);
-      expect(await jobCount(ctx.otpQueue, unlisted)).toBe(0);
+      expect(await jobCount(ctx.waabek, listed)).toBe(1);
+      expect(await jobCount(ctx.waabek, unlisted)).toBe(0);
       const events = await query<{ event: string }>(ctx.ownerUrl, 'select event from audit.security_events where phone = $1', [unlisted]);
       expect(events.rows.map((row) => row.event)).toContain('otp_requested_not_eligible');
     });
@@ -120,7 +120,7 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const phone = nextPhone();
       await addToList(phone);
       await requestCode(phone);
-      expect(await latestCode(ctx.otpQueue, phone)).toMatch(/^\d{6}$/);
+      expect(await latestCode(ctx.waabek, phone)).toMatch(/^\d{6}$/);
       const row = await query<{ seconds: number }>(
         ctx.ownerUrl,
         'select extract(epoch from (expires_at - created_at))::int as seconds from app.otp_challenges where phone = $1',
@@ -147,14 +147,14 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const phone = nextPhone();
       await addToList(phone);
       for (let index = 0; index < 5; index += 1) {
-        await clearCooldown(ctx.redis, ctx.prefix, phone);
+        await clearCooldown(ctx, phone);
         expect((await requestCode(phone, `10.1.0.${index + 1}`)).statusCode).toBe(200);
       }
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       const sixth = await requestCode(phone, '10.1.0.99');
       expect(sixth.statusCode).toBe(429);
       expect(sixth.json().error.retryAfterSeconds).toBeGreaterThan(3500);
-      expect(await jobCount(ctx.otpQueue, phone)).toBe(5);
+      expect(await jobCount(ctx.waabek, phone)).toBe(5);
     });
 
     it('allows 20 codes per IP per hour', async () => {
@@ -171,13 +171,13 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const phone = nextPhone();
       await addToList(phone);
       await requestCode(phone);
-      const code = await latestCode(ctx.otpQueue, phone);
+      const code = await latestCode(ctx.waabek, phone);
       await query(ctx.ownerUrl, "update app.otp_challenges set expires_at = now() - interval '1 second' where phone = $1", [phone]);
       expect((await post('/v1/auth/otp/verify', { phone, code })).json().error.code).toBe('OTP_INVALID');
 
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       await requestCode(phone);
-      const fresh = await latestCode(ctx.otpQueue, phone);
+      const fresh = await latestCode(ctx.waabek, phone);
       expect((await post('/v1/auth/otp/verify', { phone, code: fresh })).statusCode).toBe(200);
       expect((await post('/v1/auth/otp/verify', { phone, code: fresh })).json().error.code).toBe('OTP_INVALID');
     });
@@ -186,7 +186,7 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const phone = nextPhone();
       await addToList(phone);
       await requestCode(phone);
-      const code = (await latestCode(ctx.otpQueue, phone))!;
+      const code = (await latestCode(ctx.waabek, phone))!;
       const row = await query<{ code_hash: string }>(ctx.ownerUrl, 'select code_hash from app.otp_challenges where phone = $1', [phone]);
       expect(row.rows[0]?.code_hash).toMatch(/^[0-9a-f]{64}$/);
       expect(row.rows[0]?.code_hash).not.toContain(code);
@@ -205,7 +205,8 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const cookie = String(Array.isArray(setCookie) ? setCookie[0] : setCookie);
       expect(cookie).toMatch(/HttpOnly/i);
       expect(cookie).toMatch(/SameSite=Strict/i);
-      expect(cookie).toMatch(/Path=\/v1\/auth/);
+      // D-36: the API is always under /api on the site, so the cookie is scoped there.
+      expect(cookie).toMatch(/Path=\/api\/v1\/auth(;|$)/);
       const events = await query<{ event: string }>(ctx.ownerUrl, 'select event from audit.account_events where user_id = $1', [body.user.id]);
       expect(events.rows.map((row) => row.event)).toEqual(['created']);
       const identity = await query(ctx.ownerUrl, "select * from audit.identity_history where user_id = $1 and field = 'phone'", [body.user.id]);
@@ -281,8 +282,12 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const phone = nextPhone();
       await addToList(phone);
       const laptop = await signIn(phone, 'Laptop');
-      await ctx.pushQueue.obliterate({ force: true });
+      const laptopEndpoint = `https://fcm.googleapis.com/fcm/send/laptop-${laptop.body.user.id}`;
+      await app.inject({ method: 'PUT', url: '/v1/me/push-subscription', headers: authed(laptop.accessToken), payload: { endpoint: laptopEndpoint, keys: { p256dh: 'p', auth: 'a' } } });
+      ctx.push.clear();
       const phoneSession = await signIn(phone, 'Phone');
+      const phoneEndpoint = `https://fcm.googleapis.com/fcm/send/phone-${laptop.body.user.id}`;
+      await app.inject({ method: 'PUT', url: '/v1/me/push-subscription', headers: authed(phoneSession.accessToken), payload: { endpoint: phoneEndpoint, keys: { p256dh: 'p', auth: 'a' } } });
 
       // Login alert: in-app notice for the other session, push to the other session, audit record.
       const notices = await app.inject({ method: 'GET', url: '/v1/me/security-notices', headers: authed(laptop.accessToken) });
@@ -292,10 +297,10 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       expect(JSON.stringify(notices.json())).not.toContain('Phone');
       const ownView = await app.inject({ method: 'GET', url: '/v1/me/security-notices', headers: authed(phoneSession.accessToken) });
       expect(ownView.json().notices.filter((notice: { kind: string }) => notice.kind === 'new_login')).toHaveLength(1);
-      const pushJobs = await ctx.pushQueue.getJobs(['waiting']);
-      expect(pushJobs).toHaveLength(1);
-      expect(pushJobs[0]?.data).toMatchObject({ userId: laptop.body.user.id, notification: { tag: 'new-login' } });
-      expect(pushJobs[0]?.data.excludeSessionId).not.toBeNull();
+      // D-36: delivered by the API right after the sign-in response, to the other session only.
+      const pushed = await ctx.push.all();
+      expect(pushed).toHaveLength(1);
+      expect(pushed[0]).toMatchObject({ endpoint: laptopEndpoint, payload: { tag: 'new-login', title: 'New sign-in to Bedo Chat' } });
       const logins = await query(ctx.ownerUrl, "select 1 from audit.security_events where subject_id = $1 and event = 'login_succeeded'", [laptop.body.user.id]);
       expect(logins.rowCount).toBe(2);
 
@@ -339,9 +344,9 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const me = await app.inject({ method: 'GET', url: '/v1/me', headers: authed(accessToken) });
       expect(me.statusCode).toBe(403);
       expect(me.json().error.code).toBe('ACCOUNT_BLOCKED');
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       await requestCode(phone);
-      const code = await latestCode(ctx.otpQueue, phone);
+      const code = await latestCode(ctx.waabek, phone);
       const verify = await post('/v1/auth/otp/verify', { phone, code });
       expect(verify.json().error.code).toBe('ACCOUNT_BLOCKED');
     });
@@ -362,9 +367,9 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       expect(stored.rows[0]?.password_hash).toMatch(/^\$argon2id\$v=19\$m=19456,t=2,p=1\$/);
 
       // Sign-in now needs the password.
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       await requestCode(phone);
-      const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+      const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) });
       expect(step.json()).toMatchObject({ status: 'two_step_required', hint: 'favourite animal' });
       expect(step.headers['set-cookie']).toBeUndefined();
       const token = step.json().twoStepToken;
@@ -377,9 +382,9 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
         'SESSION_INVALID',
       );
 
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       await requestCode(phone);
-      const again = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+      const again = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) });
       const ok = await post('/v1/auth/two-step/verify', { twoStepToken: again.json().twoStepToken, password: 'correct horse 1' });
       expect(ok.statusCode).toBe(200);
       expect(ok.json().user.twoStepEnabled).toBe(true);
@@ -479,13 +484,13 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       const a = await request(unlisted);
       const b = await request(target);
       expect(a.body).toBe(b.body);
-      expect(await jobCount(ctx.otpQueue, unlisted)).toBe(0);
-      expect(await jobCount(ctx.otpQueue, target)).toBe(1);
+      expect(await jobCount(ctx.waabek, unlisted)).toBe(0);
+      expect(await jobCount(ctx.waabek, target)).toBe(1);
       const verify = await app.inject({
         method: 'POST',
         url: '/v1/me/phone/verify',
         headers: authed(accessToken),
-        payload: { newPhone: target, code: await latestCode(ctx.otpQueue, target) },
+        payload: { newPhone: target, code: await latestCode(ctx.waabek, target) },
       });
       expect(verify.statusCode, verify.body).toBe(200);
       expect(verify.json().phone).toBe(target);

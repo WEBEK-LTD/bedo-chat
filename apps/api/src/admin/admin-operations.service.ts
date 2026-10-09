@@ -7,7 +7,7 @@ import type { RequestInfo } from '../common/request-info.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
+import { PushService } from '../delivery/push.service.js';
 import type { AdminContext } from './admin-auth.service.js';
 
 const PAGE_SIZE = 50;
@@ -22,7 +22,7 @@ export class AdminOperationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(SessionsService) private readonly sessions: SessionsService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   private get db() {
@@ -353,7 +353,7 @@ export class AdminOperationsService {
     });
 
     if (subscriptions.length > 0) {
-      await this.queues.enqueuePush({
+      this.push.notify({
         userId,
         excludeSessionId: null,
         subscriptions,
@@ -411,7 +411,7 @@ export class AdminOperationsService {
       });
       return request.user_id;
     });
-    await this.queues.enqueuePush({
+    this.push.notify({
       userId,
       excludeSessionId: null,
       notification: {
@@ -459,7 +459,7 @@ export class AdminOperationsService {
       });
       return user.id;
     });
-    await this.queues.enqueuePush({
+    this.push.notify({
       userId,
       excludeSessionId: null,
       notification: {

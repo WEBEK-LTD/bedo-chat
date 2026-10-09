@@ -3,9 +3,21 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ADMIN_SESSION_COOKIE } from '@bedo/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { base32Decode, currentStep, encryptSecret, generateTotpSecret, hotp } from '../src/admin/totp.js';
-import { adminCsrf, cookieValue, type IntegrationEnv, issuePasswordSetup, nextAdminIp, query, setupIntegrationEnv, startApp, TOTP_KEY } from './integration-env.js';
+import {
+  adminCsrf,
+  allShortLivedState,
+  clearState,
+  cookieValue,
+  type IntegrationEnv,
+  issuePasswordSetup,
+  nextAdminIp,
+  query,
+  setupIntegrationEnv,
+  startApp,
+  TOTP_KEY,
+} from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 /** The owner script exactly as delivered (D-35). Tests only replace the three input values. */
 const SCRIPT = readFileSync(new URL('../../../docs/owner-sql/set-super-admin.sql', import.meta.url), 'utf8');
@@ -63,7 +75,7 @@ describe.runIf(enabled)('D-35 owner SQL password (real Postgres + Redis, runtime
     const results = (await owner(ownerScript(input))) as unknown as Array<{ rows: Record<string, unknown>[] }> | { rows: Record<string, unknown>[] };
     return { rows: Array.isArray(results) ? results.at(-1)!.rows : results.rows };
   };
-  const clearLimits = (phone: string) => ctx.redis.del(`${ctx.prefix}:rl:admin-password-lock:${phone}`, `${ctx.prefix}:rl:admin-password-fail:${phone}`);
+  const clearLimits = (phone: string) => clearState(ctx, `rl:admin-password-lock:${phone}`, `rl:admin-password-fail:${phone}`);
 
   /** Sets up the authenticator at the first sign-in and returns the secret and the session cookie. */
   async function firstSignIn(phone: string, password: string) {
@@ -287,17 +299,16 @@ describe.runIf(enabled)('D-35 owner SQL password (real Postgres + Redis, runtime
     });
   });
 
-  it('never writes a password to the audit or security history, Redis or a response', async () => {
+  it('never writes a password to the audit or security history, the short-lived state or a response', async () => {
     const history = JSON.stringify([
       (await owner('select * from app.audit_log')).rows,
       (await owner('select * from audit.security_events')).rows,
       (await owner('select * from app.admin_password_setup')).rows,
     ]);
-    const keys = await ctx.redis.keys(`${ctx.prefix}:*`);
-    const redisValues = JSON.stringify(await Promise.all(keys.map(async (key) => ((await ctx.redis.type(key)) === 'string' ? ctx.redis.get(key) : null))));
+    const stateValues = await allShortLivedState(ctx);
     for (const password of PASSWORDS) {
       expect(history.includes(password), password).toBe(false);
-      expect(redisValues.includes(password), password).toBe(false);
+      expect(stateValues.includes(password), password).toBe(false);
       expect(responses.some((body) => body.includes(password)), password).toBe(false);
     }
   });

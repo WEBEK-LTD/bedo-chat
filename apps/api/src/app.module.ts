@@ -6,11 +6,12 @@ import { ResponseSchemaInterceptor } from './common/response-schema.js';
 import { API_ENV } from './config/tokens.js';
 import { DatabaseModule } from './database/database.module.js';
 import { HealthModule } from './health/health.module.js';
-import { RedisModule } from './redis/redis.module.js';
+import { StateModule } from './state/state.module.js';
+import { RuntimeModule } from './runtime/runtime.module.js';
+import { DeliveryModule } from './delivery/delivery.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { AdminModule } from './admin/admin.module.js';
-import { QueuesModule } from './queues/queues.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { MessagingModule } from './messaging/messaging.module.js';
 
@@ -20,7 +21,7 @@ export class AppModule {
     return {
       module: AppModule,
       global: true,
-      imports: [DatabaseModule, RedisModule, QueuesModule, AuditModule, StorageModule, HealthModule, AuthModule, AdminModule, MessagingModule],
+      imports: [DatabaseModule, RuntimeModule, StateModule, AuditModule, DeliveryModule, StorageModule, HealthModule, AuthModule, AdminModule, MessagingModule],
       providers: [
         { provide: API_ENV, useValue: env },
         { provide: APP_FILTER, useClass: AllExceptionsFilter },

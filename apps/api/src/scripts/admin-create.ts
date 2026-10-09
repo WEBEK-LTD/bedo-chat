@@ -10,7 +10,7 @@
  */
 import { parseArgs } from 'node:util';
 import { adminCliEnvSchema, loadEnv } from '@bedo/config';
-import { createDb } from '@bedo/db';
+import { createDb } from '@bedo/db/runtime';
 import { createAdmin } from '../admin/create-admin.js';
 
 const USAGE = 'Usage: admin-create --phone <+international number> --name <1-64 chars> --role <super_admin|moderator>';

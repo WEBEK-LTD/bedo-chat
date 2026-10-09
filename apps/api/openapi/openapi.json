@@ -158,31 +158,10 @@
                   "status",
                   "latencyMs"
                 ]
-              },
-              "redis": {
-                "type": "object",
-                "properties": {
-                  "status": {
-                    "type": "string",
-                    "enum": [
-                      "up",
-                      "down"
-                    ]
-                  },
-                  "latencyMs": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": [
-                  "status",
-                  "latencyMs"
-                ]
               }
             },
             "required": [
-              "database",
-              "redis"
+              "database"
             ]
           }
         },
@@ -3614,6 +3593,96 @@
           "messages",
           "folders"
         ]
+      },
+      "RealtimeChannelResponse": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "apiKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accessToken": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "topic": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expiresInSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "signal"
+            ]
+          },
+          "heartbeatSeconds": {
+            "type": "integer",
+            "exclusiveMinimum": 0
+          }
+        },
+        "required": [
+          "enabled",
+          "url",
+          "apiKey",
+          "accessToken",
+          "topic",
+          "expiresAt",
+          "expiresInSeconds",
+          "event",
+          "heartbeatSeconds"
+        ]
+      },
+      "RealtimeHeartbeatResponse": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "seq"
+        ]
+      },
+      "RealtimeTypingBody": {
+        "type": "object",
+        "properties": {
+          "chatId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "chatId"
+        ]
       }
     },
     "parameters": {}
@@ -3649,7 +3718,7 @@
         "summary": "Readiness of the API and its dependencies",
         "responses": {
           "200": {
-            "description": "Postgres and Redis are reachable.",
+            "description": "Postgres is reachable (D-36: the only dependency).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3669,7 +3738,7 @@
             }
           },
           "503": {
-            "description": "At least one dependency is unreachable.",
+            "description": "Postgres is unreachable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -7851,6 +7920,200 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/SyncResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/realtime/channel": {
+      "get": {
+        "operationId": "getRealtimeChannel",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "This device's private realtime channel (signals only, no content)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeChannelResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/realtime/heartbeat": {
+      "post": {
+        "operationId": "realtimeHeartbeat",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "Online for the next 60 seconds (every 25 s, P-18); returns the current update seq",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeHeartbeatResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/realtime/typing": {
+      "post": {
+        "operationId": "realtimeTyping",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "The user is typing in a chat (shown for 6 seconds, P-18)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RealtimeTypingBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/realtime/offline": {
+      "post": {
+        "operationId": "realtimeOffline",
+        "tags": [
+          "Sync"
+        ],
+        "summary": "This device is going away (no longer online)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
                 }
               }
             }

@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+/**
+ * Where the API is on the site (D-36): the student web app, the Admin Dashboard and the API are one Netlify
+ * site, so browsers call the API at this same-origin path (https://bedochat.com/api in production).
+ */
+export const API_BASE_PATH = '/api';
+
 /** Machine-readable error codes returned by every Bedo Chat API endpoint. */
 export const ERROR_CODES = [
   'VALIDATION_FAILED',

@@ -1,10 +1,10 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { ADMIN_SESSION_COOKIE, OTP_DELIVERY_ERRORS, OTP_JOB_NAMES, QUEUE_NAMES } from '@bedo/contracts';
+import { ADMIN_SESSION_COOKIE, OTP_DELIVERY_ERRORS, WAABEK_TEST_MESSAGE } from '@bedo/contracts';
 import { decryptWaabekApiKey } from '@bedo/server-crypto';
-import { Worker } from 'bullmq';
-import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { base32Decode, currentStep, decryptSecret, encryptSecret, generateTotpSecret, hotp } from '../src/admin/totp.js';
+import { WaabekError } from '../src/delivery/waabek.client.js';
+import { OtpConfigurationError } from '../src/delivery/waabek-key.provider.js';
 import {
   adminCsrf,
   adminPasswordLogin,
@@ -18,7 +18,7 @@ import {
   TOTP_KEY,
 } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 // Fake keys only: a real Waabek key never appears in tests (D-32).
 const FIRST_KEY = 'fake-waabek-key-initial-setup-0001';
@@ -28,18 +28,23 @@ let ipCounter = 0;
 const nextIp = () => `10.71.${Math.floor(++ipCounter / 250)}.${(ipCounter % 250) + 1}`;
 
 /**
- * Phase 3.1 end to end against real Postgres and Redis, with the API connected as the least-privilege
- * runtime role: SQL-created Super Admin, one-time setup token, first Waabek key, first-time authenticator
- * setup, permanent closure, and the Super Admin OTP settings. A stand-in consumer takes the worker's place
- * on the OTP queue (the real worker's delivery path is covered in apps/worker).
+ * Phase 3.1 end to end against real Postgres, with the API connected as the least-privilege runtime role:
+ * SQL-created Super Admin, one-time setup token, first Waabek key, first-time authenticator setup, permanent
+ * closure, and the Super Admin OTP settings. D-36: messages are sent by the API itself with the stored key; a
+ * stand-in records what would reach Waabek's HTTP API (the real client is covered in waabek.test.ts).
  */
-describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgres + Redis, runtime role)', () => {
+describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgres, runtime role)', () => {
   let ctx: IntegrationEnv;
   let app: NestFastifyApplication;
-  let consumer: Worker;
-  const adminCodes: string[] = [];
-  const testMessages: string[] = [];
-  let testOutcome: 'ok' | Error = 'ok';
+  /** Numbers that received the test message, in order. */
+  const testMessages = async () => {
+    await ctx.settle();
+    return ctx.waabek.messages.filter((message) => message.text === WAABEK_TEST_MESSAGE).map((message) => message.phone);
+  };
+  const adminCodes = () => ctx.waabek.messages.filter((message) => message.text !== WAABEK_TEST_MESSAGE).map((message) => message.phone);
+  const setTestOutcome = (outcome: 'ok' | Error) => {
+    ctx.waabek.failWith = outcome === 'ok' ? null : outcome;
+  };
   let superCookie = '';
   let superSecret: Buffer;
   let setupToken = '';
@@ -78,30 +83,12 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
   }
 
   beforeAll(async () => {
-    ctx = await setupIntegrationEnv();
+    // No Waabek key yet: the initial setup stores the first one.
+    ctx = await setupIntegrationEnv({}, { waabekKey: false });
     app = await startApp(ctx.env);
-    consumer = new Worker(
-      QUEUE_NAMES.otp,
-      async (job) => {
-        if (job.name === OTP_JOB_NAMES.send) {
-          // Admin sign-in sends no WhatsApp code (D-34).
-          adminCodes.push(job.data.phone);
-          return undefined;
-        }
-        testMessages.push(job.data.phone);
-        if (testOutcome !== 'ok') {
-          throw testOutcome;
-        }
-        return { delivered: true };
-      },
-      { connection: new Redis(ctx.redisUrl, { maxRetriesPerRequest: null }), prefix: ctx.prefix },
-    );
-    await consumer.waitUntilReady();
   });
 
   afterAll(async () => {
-    await consumer?.close();
-    await (consumer?.opts.connection as Redis | undefined)?.quit().catch(() => undefined);
     await app?.close();
     await ctx?.teardown();
   });
@@ -217,20 +204,22 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     });
 
     it('sends a test message to the waiting Super Admin and reports Waabek refusals', async () => {
-      testOutcome = 'ok';
+      setTestOutcome('ok');
       const ok = await post('/v1/admin/bootstrap/test-message', { setupToken });
       expect(ok.json()).toEqual({ delivered: true, sentTo: '+905******942', reason: null, httpStatus: null });
-      expect(testMessages).toEqual([SUPER_PHONE]);
-      testOutcome = new Error('Waabek send failed: HTTP 401');
+      expect(await testMessages()).toEqual([SUPER_PHONE]);
+      // Sent with the key just stored (decrypted in the API right before sending, D-32).
+      expect(ctx.waabek.messages.at(-1)!.apiKey).toBe(FIRST_KEY);
+      setTestOutcome(new WaabekError(401, 'HTTP 401', false));
       expect((await post('/v1/admin/bootstrap/test-message', { setupToken })).json()).toEqual({
         delivered: false,
         sentTo: '+905******942',
         reason: 'rejected',
         httpStatus: 401,
       });
-      testOutcome = new Error(OTP_DELIVERY_ERRORS.keyUnreadable);
+      setTestOutcome(new OtpConfigurationError(OTP_DELIVERY_ERRORS.keyUnreadable));
       expect((await post('/v1/admin/bootstrap/test-message', { setupToken })).json().reason).toBe('key_unreadable');
-      testOutcome = 'ok';
+      setTestOutcome('ok');
       const recorded = await owner<{ metadata: Record<string, unknown> }>("select metadata from app.audit_log where action = 'otp_settings.test_message' order by id");
       expect(recorded.rows.map((row) => row.metadata.delivered)).toEqual([true, false, false]);
     });
@@ -301,10 +290,10 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       expect(superSecret).toHaveLength(20);
       // The same secret for the whole attempt, and kept encrypted until it is confirmed.
       expect((await post('/v1/admin/auth/totp/setup', { pendingToken: pending.pendingToken })).json().setupKey).toBe(setupKey);
-      const redisValues = await Promise.all((await ctx.redis.keys(`${ctx.prefix}:admin-pending-enrolment:*`)).map((key) => ctx.redis.get(key)));
-      expect(redisValues).toHaveLength(1);
-      expect(decryptSecret(TOTP_KEY, redisValues[0]!).equals(superSecret)).toBe(true);
-      expect(redisValues[0]).not.toContain(setupKey);
+      const pendingSecrets = (await owner<{ value: string }>("select value from app.ephemeral where key like 'admin-pending-enrolment:%'")).rows.map((row) => row.value);
+      expect(pendingSecrets).toHaveLength(1);
+      expect(decryptSecret(TOTP_KEY, pendingSecrets[0]!).equals(superSecret)).toBe(true);
+      expect(pendingSecrets[0]).not.toContain(setupKey);
       const unconfirmed = (await owner<{ totp_secret_enc: string | null; totp_confirmed_at: Date | null }>('select * from app.admin_accounts where phone = $1', [SUPER_PHONE])).rows[0]!;
       expect(unconfirmed).toMatchObject({ totp_secret_enc: null, totp_confirmed_at: null });
 
@@ -320,7 +309,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       expect(account.totp_confirmed_at).not.toBeNull();
       expect(account.totp_secret_enc).not.toContain(setupKey);
       expect(decryptSecret(TOTP_KEY, account.totp_secret_enc).equals(superSecret)).toBe(true);
-      expect(await ctx.redis.keys(`${ctx.prefix}:admin-pending-enrolment:*`)).toEqual([]);
+      expect((await owner("select 1 from app.ephemeral where key like 'admin-pending-enrolment:%'")).rowCount).toBe(0);
 
       const closed = await bootstrapRow();
       expect(closed.closed_at).not.toBeNull();
@@ -330,7 +319,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       expect((await owner("select 1 from audit.security_events where event = 'admin_totp_enrolled' and subject_id = $1", [account.id])).rowCount).toBe(1);
       expect(await allHistory()).not.toContain(setupKey);
       // Admin sign-in sent no WhatsApp code (D-34).
-      expect(adminCodes).toEqual([]);
+      expect(adminCodes()).toEqual([]);
     });
 
     it('stays closed: no token works, the owner cannot reopen it, and the row cannot be changed back', async () => {
@@ -436,16 +425,17 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     });
 
     it('sends a test message to the Super Admin\'s own number and records the result', async () => {
-      testMessages.length = 0;
-      testOutcome = 'ok';
+      ctx.waabek.messages.length = 0;
+      setTestOutcome('ok');
       const ok = await asAdmin(superCookie, 'POST', '/v1/admin/settings/otp/test-message', {});
       expect(ok.json()).toEqual({ delivered: true, sentTo: '+905******942', reason: null, httpStatus: null });
-      expect(testMessages).toEqual([SUPER_PHONE]);
-      testOutcome = new Error(OTP_DELIVERY_ERRORS.notConfigured);
+      expect(await testMessages()).toEqual([SUPER_PHONE]);
+      expect(ctx.waabek.messages.at(-1)!.apiKey).toBe(SECOND_KEY);
+      setTestOutcome(new OtpConfigurationError(OTP_DELIVERY_ERRORS.notConfigured));
       expect((await asAdmin(superCookie, 'POST', '/v1/admin/settings/otp/test-message', {})).json()).toMatchObject({ delivered: false, reason: 'not_configured' });
-      testOutcome = new Error('Waabek send failed: network error');
+      setTestOutcome(new WaabekError(null, 'network error', true));
       expect((await asAdmin(superCookie, 'POST', '/v1/admin/settings/otp/test-message', {})).json()).toMatchObject({ delivered: false, reason: 'unreachable' });
-      testOutcome = 'ok';
+      setTestOutcome('ok');
       const recorded = await owner("select 1 from app.audit_log where action = 'otp_settings.test_message' and actor_type = 'admin'");
       expect(recorded.rowCount).toBe(3);
     });
@@ -544,11 +534,12 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
     });
 
     it('sends a test message to the first Super Admin with the recovery token', async () => {
-      testMessages.length = 0;
-      testOutcome = 'ok';
+      ctx.waabek.messages.length = 0;
+      setTestOutcome('ok');
       const ok = await post('/v1/admin/otp-recovery/test-message', { recoveryToken });
       expect(ok.json()).toEqual({ delivered: true, sentTo: '+905******942', reason: null, httpStatus: null });
-      expect(testMessages).toEqual([SUPER_PHONE]);
+      expect(await testMessages()).toEqual([SUPER_PHONE]);
+      expect(ctx.waabek.messages.at(-1)!.apiKey).toBe(RECOVERED_KEY);
       expect(ok.headers['set-cookie']).toBeUndefined();
       const recorded = await owner<{ metadata: Record<string, unknown> }>(
         "select metadata from app.audit_log where action = 'otp_settings.test_message' order by id desc limit 1",

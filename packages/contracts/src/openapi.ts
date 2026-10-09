@@ -51,11 +51,11 @@ export function buildOpenApiDocument(options: OpenApiDocumentOptions): OpenApiDo
     summary: 'Readiness of the API and its dependencies',
     responses: {
       200: {
-        description: 'Postgres and Redis are reachable.',
+        description: 'Postgres is reachable (D-36: the only dependency).',
         content: { 'application/json': { schema: readyResponse } },
       },
       503: {
-        description: 'At least one dependency is unreachable.',
+        description: 'Postgres is unreachable.',
         content: { 'application/json': { schema: readyResponse } },
       },
       500: { description: 'Unexpected error.', content: { 'application/json': { schema: errorEnvelope } } },
@@ -211,6 +211,11 @@ export function buildOpenApiDocument(options: OpenApiDocumentOptions): OpenApiDo
     { method: 'post', path: '/v1/reports', operationId: 'reportUser', tag: 'Safety', summary: 'Report a user or a message (P-27)', access: 'user', body: ['ReportBody', msg.reportBodySchema], response: ['OkResponse', okResponseSchema] },
     { method: 'post', path: '/v1/screenshot-events', operationId: 'recordScreenshot', tag: 'Safety', summary: 'Screenshot event from the iOS or Android app (P-28)', access: 'user', body: ['ScreenshotEventBody', msg.screenshotEventBodySchema], response: ['OkResponse', okResponseSchema] },
     { method: 'get', path: '/v1/sync', operationId: 'sync', tag: 'Sync', summary: 'Updates since a seq (P-17)', access: 'user', query: msg.syncQuerySchema, response: ['SyncResponse', msg.syncResponseSchema] },
+    // Realtime (D-36): the device listens on Supabase Realtime and talks to the API over HTTP
+    { method: 'get', path: '/v1/realtime/channel', operationId: 'getRealtimeChannel', tag: 'Sync', summary: "This device's private realtime channel (signals only, no content)", access: 'user', response: ['RealtimeChannelResponse', msg.realtimeChannelResponseSchema] },
+    { method: 'post', path: '/v1/realtime/heartbeat', operationId: 'realtimeHeartbeat', tag: 'Sync', summary: 'Online for the next 60 seconds (every 25 s, P-18); returns the current update seq', access: 'user', response: ['RealtimeHeartbeatResponse', msg.realtimeHeartbeatResponseSchema] },
+    { method: 'post', path: '/v1/realtime/typing', operationId: 'realtimeTyping', tag: 'Sync', summary: 'The user is typing in a chat (shown for 6 seconds, P-18)', access: 'user', body: ['RealtimeTypingBody', msg.realtimeTypingBodySchema], response: ['OkResponse', okResponseSchema] },
+    { method: 'post', path: '/v1/realtime/offline', operationId: 'realtimeOffline', tag: 'Sync', summary: 'This device is going away (no longer online)', access: 'user', response: ['OkResponse', okResponseSchema] },
   ];
 
   for (const route of routes) {

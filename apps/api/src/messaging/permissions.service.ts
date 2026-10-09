@@ -48,7 +48,7 @@ export interface PrivateChatAccess {
 
 /**
  * The one permission service for messaging (blueprint: Security, permissions; D-07). HTTP routes, the
- * realtime gateway and user search all ask it, so a rule is written once:
+ * realtime signals and user search all ask it, so a rule is written once:
  *  - membership: only members see or change a conversation;
  *  - sending: the sender's account may send, the recipient is not deleted, neither has blocked the other
  *    and the recipient accepts messages (P-26, P-30);

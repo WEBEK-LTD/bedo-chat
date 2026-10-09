@@ -4,8 +4,8 @@ import type { Platform } from '@bedo/db';
 import { type Algorithm, hash, verify } from '@node-rs/argon2';
 import { AppError } from '../common/app-error.js';
 import { hashToken, randomToken } from '../common/crypto.js';
-import { RateLimitService } from '../redis/rate-limit.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { EphemeralStore } from '../state/ephemeral.store.js';
+import { RateLimitService } from '../state/rate-limit.service.js';
 
 /** OWASP-recommended Argon2id parameters (19 MiB memory, 2 iterations, 1 lane). */
 // algorithm 2 = Algorithm.Argon2id (a const enum, which isolated modules cannot import by name).
@@ -21,7 +21,7 @@ export interface PendingTwoStepLogin {
 @Injectable()
 export class TwoStepService {
   constructor(
-    @Inject(RedisService) private readonly redis: RedisService,
+    @Inject(EphemeralStore) private readonly store: EphemeralStore,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
   ) {}
 
@@ -38,7 +38,7 @@ export class TwoStepService {
   }
 
   private failKey(userId: string): string {
-    return `${this.redis.prefix}:two-step-fail:${userId}`;
+    return `two-step-fail:${userId}`;
   }
 
   /**
@@ -55,25 +55,25 @@ export class TwoStepService {
   }
 
   async clearFailures(userId: string): Promise<void> {
-    await this.redis.client.del(this.failKey(userId));
+    await this.rateLimit.reset(this.failKey(userId));
   }
 
   private key(token: string): string {
-    return `${this.redis.prefix}:two-step:${hashToken(token)}`;
+    return `two-step:${hashToken(token)}`;
   }
 
   private attemptsKey(token: string): string {
-    return `${this.redis.prefix}:two-step-attempts:${hashToken(token)}`;
+    return `two-step-attempts:${hashToken(token)}`;
   }
 
   async startLogin(pending: PendingTwoStepLogin): Promise<string> {
     const token = randomToken();
-    await this.redis.client.set(this.key(token), JSON.stringify(pending), 'EX', TOKEN_RULES.twoStepTokenSeconds);
+    await this.store.set(this.key(token), JSON.stringify(pending), TOKEN_RULES.twoStepTokenSeconds * 1000);
     return token;
   }
 
   async getLogin(token: string): Promise<PendingTwoStepLogin> {
-    const raw = await this.redis.client.get(this.key(token));
+    const raw = await this.store.get(this.key(token));
     if (!raw) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
@@ -87,7 +87,7 @@ export class TwoStepService {
   async reserveLoginAttempt(token: string): Promise<{ last: boolean }> {
     const attempt = await this.rateLimit.reserveAttempt(this.attemptsKey(token), TOKEN_RULES.twoStepTokenSeconds * 1000);
     if (attempt.count > TOKEN_RULES.maxTwoStepPasswordAttempts) {
-      await this.redis.client.del(this.key(token));
+      await this.store.delete(this.key(token));
       throw new AppError(HttpStatus.UNAUTHORIZED, 'SESSION_INVALID');
     }
     return { last: attempt.count === TOKEN_RULES.maxTwoStepPasswordAttempts };
@@ -95,8 +95,8 @@ export class TwoStepService {
 
   /** Ends the sign-in step. Returns false if another request already used it (only one may succeed). */
   async endLogin(token: string): Promise<boolean> {
-    const removed = await this.redis.client.del(this.key(token));
-    await this.redis.client.del(this.attemptsKey(token));
+    const removed = await this.store.delete(this.key(token));
+    await this.rateLimit.reset(this.attemptsKey(token));
     return removed === 1;
   }
 }

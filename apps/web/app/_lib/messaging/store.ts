@@ -14,6 +14,7 @@ import {
   markChatRead,
   openChat,
   pinMessage,
+  realtimeTyping,
   reportUser,
   searchChat,
   searchUsers,
@@ -31,7 +32,7 @@ import {
   MESSAGING_RULES,
   type Peer,
   type Presence,
-  type RealtimeServerMessage,
+  type RealtimeSignal,
   type ReportBody,
   type SyncResponse,
 } from '@bedo/contracts';
@@ -75,7 +76,7 @@ const PAGE = MESSAGING_RULES.refetchPageSize;
 const TYPING_MS = MESSAGING_RULES.typingSeconds * 1000;
 /** Typing is sent at most this often while the user keeps typing (the indicator lasts 6 s). */
 const TYPING_SEND_MS = 3_000;
-/** Without a realtime connection, sync over HTTP this often. */
+/** While not listening on the realtime channel, sync over HTTP this often. */
 const POLL_MS = 20_000;
 /** After a reconnect or re-fetch, only the most recently active chats get their newest page again. */
 const REFETCH_CHATS = 20;
@@ -105,7 +106,7 @@ export function sortedChats(chats: readonly Chat[]): Chat[] {
 
 /**
  * The web app's messaging state: chats, messages, folders and the outbox, kept in step with the server by
- * the realtime connection and sync (P-17), cached locally for a fast start and offline reading. Every change
+ * realtime signals, heartbeats and sync (P-17, D-36), cached locally for a fast start and offline reading. Every change
  * goes through the API, which decides what is allowed; this store never assumes a permission.
  */
 export class MessagingStore {
@@ -118,14 +119,18 @@ export class MessagingStore {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private httpSyncing = false;
+  /** A sync was asked for while one was running: run once more after it. */
+  private syncAgain = false;
+  private outboxFlushed = false;
   private readonly lastTypingSent = new Map<string, number>();
   private readonly sending = new Set<string>();
   private stopped = false;
 
   constructor() {
     this.realtime = new RealtimeClient({
-      onReady: (serverSeq) => void this.onReady(serverSeq),
-      onMessage: (message) => this.onRealtime(message),
+      onHeartbeat: (serverSeq) => void this.onHeartbeat(serverSeq),
+      onListening: () => void this.httpSync(),
+      onSignal: (signal) => this.onSignal(signal),
       onState: (connection) => this.onConnection(connection),
     });
   }
@@ -150,6 +155,7 @@ export class MessagingStore {
   async start(userId: string): Promise<void> {
     this.userId = userId;
     this.stopped = false;
+    this.outboxFlushed = false;
     const cached = await loadCache(userId);
     if (this.stopped) return;
     if (cached) {
@@ -170,10 +176,10 @@ export class MessagingStore {
     }
     this.realtime.start();
     this.pollTimer = setInterval(() => {
-      if (this.snapshot.connection !== 'online') void this.httpSync();
+      if (!this.realtime.live) void this.httpSync();
     }, POLL_MS);
     if (!cached) {
-      // Without a cache, show the chat list as soon as possible, even before the socket is up.
+      // Without a cache, show the chat list as soon as possible, even before the first heartbeat.
       void this.fullFetch(null).catch(() => undefined);
     }
   }
@@ -217,12 +223,17 @@ export class MessagingStore {
     this.set({ connection }, false);
   }
 
-  private async onReady(serverSeq: number): Promise<void> {
+  /** Every heartbeat (25 s) returns the server's update seq: catch up when this device is behind. */
+  private async onHeartbeat(serverSeq: number): Promise<void> {
     if (!this.initialized) {
       await this.fullFetch(serverSeq).catch(() => undefined);
+    } else if (serverSeq !== this.seq) {
+      await this.httpSync();
     }
-    this.realtime.send({ type: 'sync', since: this.seq });
-    this.flushOutbox();
+    if (!this.outboxFlushed) {
+      this.outboxFlushed = true;
+      this.flushOutbox();
+    }
   }
 
   // ------------------------------------------------------------------------------ sync
@@ -254,10 +265,10 @@ export class MessagingStore {
     });
   }
 
-  private onRealtime(message: RealtimeServerMessage): void {
+  private onSignal(message: RealtimeSignal): void {
     switch (message.type) {
       case 'updates':
-        void this.applySync(message.sync);
+        void this.httpSync();
         return;
       case 'typing': {
         const until = Date.now() + TYPING_MS;
@@ -279,18 +290,28 @@ export class MessagingStore {
     }
   }
 
-  /** Sync over HTTP, used while the realtime connection is down. */
+  /**
+   * Fetches the updates after this device's seq (P-17), page by page. Signals, heartbeats and the poll ask for
+   * it; requests that arrive while one runs collapse into one more round.
+   */
   private async httpSync(): Promise<void> {
-    if (this.httpSyncing || !this.initialized) return;
+    if (!this.initialized) return;
+    if (this.httpSyncing) {
+      this.syncAgain = true;
+      return;
+    }
     this.httpSyncing = true;
     try {
-      for (let page = 0; page < 20; page += 1) {
-        const result = cast<SyncResponse>(await fetchSync({ since: this.seq }));
-        const more = await this.applySync(result);
-        if (!more) break;
-      }
+      do {
+        this.syncAgain = false;
+        for (let page = 0; page < 20; page += 1) {
+          const result = cast<SyncResponse>(await fetchSync({ since: this.seq }));
+          const more = await this.applySync(result);
+          if (!more) break;
+        }
+      } while (this.syncAgain && !this.stopped);
     } catch {
-      // Offline: try again on the next tick.
+      // Offline: try again on the next heartbeat or poll.
     } finally {
       this.httpSyncing = false;
     }
@@ -364,9 +385,7 @@ export class MessagingStore {
 
   /** Tells the sender this device received their messages (status "delivered"). */
   private acknowledge(chatId: string, seq: number): void {
-    if (!this.realtime.send({ type: 'delivered', chatId, seq })) {
-      void markChatDelivered(chatId, { seq }).catch(() => undefined);
-    }
+    void markChatDelivered(chatId, { seq }).catch(() => undefined);
   }
 
   // ------------------------------------------------------------------------------ chats
@@ -494,7 +513,7 @@ export class MessagingStore {
     const now = Date.now();
     if (now - (this.lastTypingSent.get(chatId) ?? 0) < TYPING_SEND_MS) return;
     this.lastTypingSent.set(chatId, now);
-    this.realtime.send({ type: 'typing', chatId });
+    void realtimeTyping({ chatId }).catch(() => undefined);
   }
 
   // ------------------------------------------------------------------------------ message actions

@@ -21,7 +21,7 @@ import {
   webCsrf,
 } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 let counter = 0;
 const nextPhone = () => `+2012${String(Date.now() % 1e4).padStart(4, '0')}${String(++counter).padStart(4, '0')}`;
 let ipCounter = 0;
@@ -46,9 +46,9 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     query(ctx.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [phone]);
 
   async function signIn(phone: string) {
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     await post('/v1/auth/otp/request', { phone });
-    const verified = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+    const verified = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) });
     return { body: verified.json(), refresh: cookieValue(verified.headers['set-cookie'], REFRESH_COOKIE) };
   }
 
@@ -71,9 +71,9 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     const account = await signIn(phone);
     await app.inject({ method: 'PUT', url: '/v1/me/two-step', headers: authed(account.body.accessToken), payload: { newPassword: 'correct horse 1' } });
 
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     await post('/v1/auth/otp/request', { phone });
-    const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+    const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) });
     const token = step.json().twoStepToken as string;
     const results = await Promise.all(
       Array.from({ length: 30 }, (_, index) => post('/v1/auth/two-step/verify', { twoStepToken: token, password: `wrong ${index}` })),
@@ -91,9 +91,9 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     await addToList(phone);
     const account = await signIn(phone);
     await app.inject({ method: 'PUT', url: '/v1/me/two-step', headers: authed(account.body.accessToken), payload: { newPassword: 'correct horse 2' } });
-    await clearCooldown(ctx.redis, ctx.prefix, phone);
+    await clearCooldown(ctx, phone);
     await post('/v1/auth/otp/request', { phone });
-    const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.otpQueue, phone) });
+    const step = await post('/v1/auth/otp/verify', { phone, code: await latestCode(ctx.waabek, phone) });
     const token = step.json().twoStepToken as string;
     const results = await Promise.all([0, 1, 2].map(() => post('/v1/auth/two-step/verify', { twoStepToken: token, password: 'correct horse 2' })));
     expect(results.filter((result) => result.statusCode === 200)).toHaveLength(1);
@@ -167,14 +167,14 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
       await query(ctx.ownerUrl, "update app.otp_challenges set expires_at = now() - interval '1 second' where phone = $1", [phone]);
       for (let index = 0; index < 5; index += 1) sequence.push(await wrong());
       // A new code, then five wrong attempts: locked in both cases.
-      await clearCooldown(ctx.redis, ctx.prefix, phone);
+      await clearCooldown(ctx, phone);
       await post('/v1/auth/otp/request', { phone });
       for (let index = 0; index < 6; index += 1) sequence.push(await wrong());
       sequences[phone === listed ? 'listed' : 'unlisted'] = sequence;
     }
     expect(sequences.unlisted).toEqual(sequences.listed);
     expect(sequences.listed?.slice(-2)).toEqual(['OTP_LOCKED', 'OTP_LOCKED']);
-    expect(await latestCode(ctx.otpQueue, unlisted)).toBeNull();
+    expect(await latestCode(ctx.waabek, unlisted)).toBeNull();
   });
 
   it('never signs in or moves a phone number to a number off the list, even if its never-sent code is guessed', async () => {
@@ -209,20 +209,27 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     expect((await query<{ phone: string }>(ctx.ownerUrl, 'select phone from app.users where id = $1', [account.body.user.id])).rows[0]?.phone).toBe(member);
   });
 
-  it('keeps the two apps apart: admin routes refuse the web origin, user cookie routes refuse the admin origin', async () => {
-    const fromWeb = { origin: WEB_ORIGIN, 'x-bedo-csrf': '1' };
-    expect((await post('/v1/admin/auth/password/login', { phone: nextPhone(), password: 'x' }, fromWeb)).json().error.code).toBe('CSRF_REJECTED');
-    expect((await post('/v1/admin/auth/password/setup', { phone: nextPhone(), setupToken: 'x'.repeat(43), password: 'y'.repeat(16) }, fromWeb)).json().error.code).toBe(
-      'CSRF_REJECTED',
-    );
-    const read = await app.inject({ method: 'GET', url: '/v1/admin/phone-list', headers: { ...fromWeb, cookie: `${ADMIN_SESSION_COOKIE}=anything` } });
-    expect(read.json().error.code).toBe('CSRF_REJECTED');
+  it('accepts cookie-authenticated requests only from this site itself (D-36: one origin, nothing to configure)', async () => {
+    // Another port or host, a look-alike host, a sandboxed page ("null") and a cross-site fetch are all refused.
+    const foreign = ['http://localhost:3000', 'http://localhost.evil.example', 'https://evil.example', 'null'];
+    for (const origin of foreign) {
+      const headers = { origin, 'x-bedo-csrf': '1' };
+      expect((await post('/v1/admin/auth/password/login', { phone: nextPhone(), password: 'x' }, headers)).json().error.code, origin).toBe('CSRF_REJECTED');
+      const read = await app.inject({ method: 'GET', url: '/v1/admin/phone-list', headers: { ...headers, cookie: `${ADMIN_SESSION_COOKIE}=anything` } });
+      expect(read.json().error.code, origin).toBe('CSRF_REJECTED');
+    }
+    const crossSite = await app.inject({ method: 'GET', url: '/v1/admin/phone-list', headers: { 'sec-fetch-site': 'cross-site', 'x-bedo-csrf': '1', cookie: `${ADMIN_SESSION_COOKIE}=anything` } });
+    expect(crossSite.json().error.code).toBe('CSRF_REJECTED');
+    // The same site, with or without an Origin header (Fetch Metadata), passes the CSRF check.
+    const sameSite = await app.inject({ method: 'GET', url: '/v1/admin/phone-list', headers: { 'sec-fetch-site': 'same-origin', 'x-bedo-csrf': '1', cookie: `${ADMIN_SESSION_COOKIE}=anything` } });
+    expect(sameSite.json().error.code).toBe('UNAUTHENTICATED');
 
     const phone = nextPhone();
     await addToList(phone);
     const account = await signIn(phone);
-    expect((await refresh(account.refresh!, ADMIN_ORIGIN)).json().error.code).toBe('CSRF_REJECTED');
+    expect((await refresh(account.refresh!, 'https://evil.example')).json().error.code).toBe('CSRF_REJECTED');
     expect((await refresh(account.refresh!, WEB_ORIGIN)).statusCode).toBe(200);
+    expect(ADMIN_ORIGIN).toBe(WEB_ORIGIN);
   });
 
   it('accepts only browser push services as push endpoints and never takes over another user\'s live subscription', async () => {
@@ -254,7 +261,7 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     const userA = await signIn(a);
     const userB = await signIn(b);
     await app.inject({ method: 'POST', url: '/v1/me/phone/request', headers: authed(userA.body.accessToken), payload: { newPhone: target } });
-    const code = await latestCode(ctx.otpQueue, target);
+    const code = await latestCode(ctx.waabek, target);
     const stolen = await app.inject({ method: 'POST', url: '/v1/me/phone/verify', headers: authed(userB.body.accessToken), payload: { newPhone: target, code } });
     expect(stolen.json().error.code).toBe('OTP_INVALID');
     const own = await app.inject({ method: 'POST', url: '/v1/me/phone/verify', headers: authed(userA.body.accessToken), payload: { newPhone: target, code } });
@@ -278,10 +285,10 @@ describe.runIf(enabled)('Phase 2 security hardening (real Postgres + Redis, runt
     );
     expect(history.rows).toEqual([{ old_value: a, new_value: target }]);
 
-    await clearCooldown(ctx.redis, ctx.prefix, a);
-    const queuedBefore = await jobCount(ctx.otpQueue, a);
+    await clearCooldown(ctx, a);
+    const queuedBefore = await jobCount(ctx.waabek, a);
     expect((await post('/v1/auth/otp/request', { phone: a })).statusCode).toBe(200);
-    expect(await jobCount(ctx.otpQueue, a)).toBe(queuedBefore);
+    expect(await jobCount(ctx.waabek, a)).toBe(queuedBefore);
     // The account signs in with its new number.
     const next = await signIn(target);
     expect(next.body.user.id).toBe(userA.body.user.id);

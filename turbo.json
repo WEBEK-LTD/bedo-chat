@@ -22,15 +22,14 @@
       ],
       "passThroughEnv": [
         "DATABASE_URL",
-        "REDIS_URL",
         "WAABEK_API_KEY",
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "VAPID_PRIVATE_KEY",
-        "EDGE_SECRET"
+        "SUPABASE_JWT_SECRET",
+        "VAPID_PRIVATE_KEY"
       ]
     },
     "@bedo/admin#build": {
@@ -42,15 +41,14 @@
       ],
       "passThroughEnv": [
         "DATABASE_URL",
-        "REDIS_URL",
         "WAABEK_API_KEY",
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "VAPID_PRIVATE_KEY",
-        "EDGE_SECRET"
+        "SUPABASE_JWT_SECRET",
+        "VAPID_PRIVATE_KEY"
       ],
       "cache": false
     },
@@ -64,15 +62,14 @@
       ],
       "passThroughEnv": [
         "DATABASE_URL",
-        "REDIS_URL",
         "WAABEK_API_KEY",
         "ACCESS_TOKEN_SECRET",
         "OTP_HMAC_SECRET",
         "ADMIN_TOTP_KEY",
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
-        "VAPID_PRIVATE_KEY",
-        "EDGE_SECRET"
+        "SUPABASE_JWT_SECRET",
+        "VAPID_PRIVATE_KEY"
       ],
       "cache": false
     },
@@ -98,7 +95,6 @@
       "cache": false,
       "passThroughEnv": [
         "DATABASE_URL",
-        "REDIS_URL",
         "TEST_DATABASE_URL"
       ]
     }

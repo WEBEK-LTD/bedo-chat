@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type IntegrationEnv, query, setupIntegrationEnv, startApp } from './integration-env.js';
 import { client, createUser, resetMessageLimit, type TestUser } from './messaging-helpers.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 /**
  * Phase 3 messaging core against real Postgres and Redis, with the API connected as the least-privilege

@@ -6,9 +6,8 @@ import { AppError } from '../common/app-error.js';
 import { hashToken, safeEqualHex } from '../common/crypto.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
-import { ipBucket, RateLimitService } from '../redis/rate-limit.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
+import { ipBucket, RateLimitService } from '../state/rate-limit.service.js';
 import { OtpSettingsService } from './otp-settings.service.js';
 
 type BootstrapRow = {
@@ -40,11 +39,10 @@ function isOpen(row: BootstrapRow | undefined, now = Date.now()): row is Bootstr
 export class AdminBootstrapService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OtpSettingsService) private readonly settings: OtpSettingsService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
   ) {}
 
   private get db() {
@@ -101,13 +99,13 @@ export class AdminBootstrapService {
       throw new AppError(HttpStatus.FORBIDDEN, 'SETUP_UNAVAILABLE');
     }
     const limit = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:waabek-test:bootstrap`,
+      `rl:waabek-test:bootstrap`,
       ADMIN_BOOTSTRAP_RULES.testMessageWindowSeconds * 1000,
     );
     if (limit.count > ADMIN_BOOTSTRAP_RULES.maxTestMessages) {
       throw new AppError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', limit.retryAfterSeconds);
     }
-    const outcome = await this.queues.sendWaabekTest({ phone: target.phone });
+    const outcome = await this.delivery.sendTest(target.phone);
     const result: WaabekTestResponse = {
       delivered: outcome.delivered,
       sentTo: maskPhone(target.phone),
@@ -140,7 +138,7 @@ export class AdminBootstrapService {
 
   private async limitIp(info: RequestInfo): Promise<void> {
     const attempt = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:admin-bootstrap:ip:${ipBucket(info.ip ?? 'unknown')}`,
+      `rl:admin-bootstrap:ip:${ipBucket(info.ip ?? 'unknown')}`,
       ADMIN_BOOTSTRAP_RULES.ipWindowSeconds * 1000,
     );
     if (attempt.count > ADMIN_BOOTSTRAP_RULES.maxRequestsPerIp) {

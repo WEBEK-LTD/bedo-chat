@@ -3,20 +3,32 @@ import { randomBytes } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { type ApiEnv, apiEnvSchema, loadEnv } from '@bedo/config';
-import { CSRF_HEADER, CSRF_HEADER_VALUE, type OtpJobData, QUEUE_NAMES, type PushJobData } from '@bedo/contracts';
+import { CSRF_HEADER, CSRF_HEADER_VALUE } from '@bedo/contracts';
 import { defaultMigrationsDir, runMigrations } from '@bedo/db';
-import { Queue } from 'bullmq';
-import { Redis } from 'ioredis';
+import { encryptWaabekApiKey } from '@bedo/server-crypto';
 import pg from 'pg';
 import { AppModule } from '../src/app.module.js';
 import { buildFastifyAdapter, configureApp } from '../src/app.js';
+import { PushSender, type PushTarget } from '../src/delivery/push.service.js';
+import { WaabekSender } from '../src/delivery/waabek.client.js';
+import { type BroadcastMessage, RealtimeBroadcaster } from '../src/messaging/realtime-broadcaster.js';
+import { signRealtimeToken } from '../src/messaging/realtime-token.js';
+import { DeferredTasks } from '../src/runtime/deferred-tasks.service.js';
 import { ProfilePhotoStorage } from '../src/storage/profile-photo-storage.js';
 
-export const WEB_ORIGIN = 'https://chat.bedo.test';
-export const ADMIN_ORIGIN = 'https://admin.bedo.test';
+/**
+ * D-36: one origin for everything. app.inject() sends "host: localhost:80", so a browser page on the site has
+ * this origin.
+ */
+export const SITE_ORIGIN = 'http://localhost';
+/** Kept as names for readability: the web app and the Admin Dashboard are the same site. */
+export const WEB_ORIGIN = SITE_ORIGIN;
+export const ADMIN_ORIGIN = SITE_ORIGIN;
 export const TOTP_KEY = Buffer.alloc(32, 5);
 /** SETTINGS_ENCRYPTION_KEY for tests (D-32): random per run, never a real key. */
 export const SETTINGS_KEY = randomBytes(32);
+/** The Waabek key tests store in the settings (fake: a real key never appears in tests). */
+export const TEST_WAABEK_KEY = 'fake-waabek-key-integration-tests-0001';
 
 export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(url: string, sql: string, params: unknown[] = []) {
   const client = new pg.Client({ connectionString: url });
@@ -28,27 +40,124 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(url
   }
 }
 
+/** Waits for the work every started app runs after its responses (code delivery, push, realtime signals). */
+class Background {
+  readonly apps = new Set<DeferredTasks>();
+
+  async settle(): Promise<void> {
+    await Promise.all([...this.apps].map((tasks) => tasks.drain()));
+  }
+}
+
 /**
- * A fresh, migrated database plus a least-privilege login (member of bedo_runtime) for the API, and a
- * unique Redis key prefix. Everything is removed by `teardown`.
+ * Stands in for Waabek's HTTP API (the real client is tested in waabek.test.ts): records every WhatsApp message
+ * with the key it was sent with, or fails like Waabek would when told to.
+ */
+export class FakeWaabek extends WaabekSender {
+  readonly messages: Array<{ apiKey: string; phone: string; text: string }> = [];
+  failWith: Error | null = null;
+
+  constructor(readonly background: Background) {
+    super();
+  }
+
+  async send(apiKey: string, phone: string, text: string): Promise<void> {
+    if (this.failWith) {
+      throw this.failWith;
+    }
+    this.messages.push({ apiKey, phone, text });
+  }
+
+  /** Every message sent to this number so far (after waiting for deliveries in progress). */
+  async to(phone: string): Promise<string[]> {
+    await this.background.settle();
+    return this.messages.filter((message) => message.phone === phone).map((message) => message.text);
+  }
+}
+
+/** Records Web Push deliveries instead of contacting browser push services. */
+export class FakePush extends PushSender {
+  readonly enabled = true;
+  readonly sent: Array<{ endpoint: string; payload: Record<string, unknown> }> = [];
+  /** Push service answers to simulate, by endpoint (e.g. 410 for an expired subscription). */
+  readonly statusFor = new Map<string, number>();
+
+  constructor(readonly background: Background) {
+    super();
+  }
+
+  async send(target: PushTarget, payload: string): Promise<void> {
+    const status = this.statusFor.get(target.endpoint);
+    if (status) {
+      throw Object.assign(new Error(`push failed ${status}`), { statusCode: status });
+    }
+    this.sent.push({ endpoint: target.endpoint, payload: JSON.parse(payload) as Record<string, unknown> });
+  }
+
+  async all(): Promise<Array<{ endpoint: string; payload: Record<string, unknown> }>> {
+    await this.background.settle();
+    return this.sent;
+  }
+
+  clear(): void {
+    this.sent.length = 0;
+  }
+}
+
+/** The JWT secret the fake signs device tokens with (Supabase's project JWT secret in production). */
+export const TEST_REALTIME_JWT_SECRET = 'test-realtime-jwt-secret-0123456789abcdef';
+
+/** Records realtime signals instead of sending them to Supabase Realtime. */
+export class FakeRealtime extends RealtimeBroadcaster {
+  readonly enabled = true;
+  readonly client = { url: 'https://realtime.bedo.test', apiKey: 'public-anon-key-for-tests' };
+  readonly sent: BroadcastMessage[] = [];
+
+  constructor(readonly background: Background) {
+    super();
+  }
+
+  deviceToken(input: { userId: string; topic: string; expiresAt: Date }): string {
+    return signRealtimeToken(TEST_REALTIME_JWT_SECRET, input);
+  }
+
+  async send(messages: BroadcastMessage[]): Promise<void> {
+    this.sent.push(...messages);
+  }
+
+  /** Signals sent to one channel so far. */
+  async on(topic: string): Promise<Array<Record<string, unknown>>> {
+    await this.background.settle();
+    return this.sent.filter((message) => message.topic === topic).map((message) => message.payload);
+  }
+
+  clear(): void {
+    this.sent.length = 0;
+  }
+}
+
+/**
+ * A fresh, migrated database plus a least-privilege login (member of bedo_runtime) for the API. Waabek, Web Push
+ * and Supabase Realtime are replaced by recording fakes inside the app. Everything is removed by `teardown`.
  */
 export interface IntegrationEnv {
   ownerUrl: string;
   runtimeUrl: string;
-  redisUrl: string;
-  prefix: string;
   env: ApiEnv;
-  redis: Redis;
-  otpQueue: Queue<OtpJobData>;
-  pushQueue: Queue<PushJobData>;
+  waabek: FakeWaabek;
+  push: FakePush;
+  realtime: FakeRealtime;
+  /** Waits until every started app has finished its work after responses. */
+  settle(): Promise<void>;
   teardown(): Promise<void>;
 }
 
-export async function setupIntegrationEnv(overrides: Record<string, string> = {}): Promise<IntegrationEnv> {
+const fakesByEnv = new WeakMap<ApiEnv, { waabek: FakeWaabek; push: FakePush; realtime: FakeRealtime; background: Background }>();
+
+export async function setupIntegrationEnv(overrides: Record<string, string> = {}, options: { waabekKey?: boolean } = {}): Promise<IntegrationEnv> {
   const adminUrl = process.env.TEST_DATABASE_URL;
-  const redisUrl = process.env.REDIS_URL;
-  if (!adminUrl || !redisUrl) {
-    throw new Error('TEST_DATABASE_URL and REDIS_URL are required for integration tests');
+  if (!adminUrl) {
+    throw new Error('TEST_DATABASE_URL is required for integration tests');
   }
   const suffix = randomBytes(5).toString('hex');
   const dbName = `bedo_api_test_${suffix}`;
@@ -61,57 +170,60 @@ export async function setupIntegrationEnv(overrides: Record<string, string> = {}
   const runtime = new URL(ownerUrl);
   runtime.username = login;
   runtime.password = password;
-  const prefix = `bedo-test-${suffix}`;
+  if (options.waabekKey !== false) {
+    // As if a Super Admin had saved it in the Admin Dashboard (D-32): one-time codes can be delivered.
+    await query(ownerUrl, 'update app.otp_settings set waabek_api_key_enc = $1', [encryptWaabekApiKey(SETTINGS_KEY, TEST_WAABEK_KEY)]);
+  }
 
   const env = loadEnv(apiEnvSchema, {
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL: runtime.toString(),
-    REDIS_URL: redisUrl,
-    QUEUE_PREFIX: prefix,
-    CORS_ALLOWED_ORIGINS: `${WEB_ORIGIN},${ADMIN_ORIGIN}`,
-    ADMIN_ORIGINS: ADMIN_ORIGIN,
     ACCESS_TOKEN_SECRET: randomBytes(32).toString('base64'),
     OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
     ADMIN_TOTP_KEY: TOTP_KEY.toString('base64'),
     SETTINGS_ENCRYPTION_KEY: SETTINGS_KEY.toString('base64'),
     VAPID_PUBLIC_KEY: 'BPublicKeyForTests',
+    VAPID_PRIVATE_KEY: 'private-key-for-tests',
+    VAPID_SUBJECT: 'mailto:tests@bedo.test',
     ...overrides,
   });
-
-  const redis = new Redis(redisUrl);
-  const otpQueue = new Queue<OtpJobData>(QUEUE_NAMES.otp, { connection: new Redis(redisUrl, { maxRetriesPerRequest: null }), prefix });
-  const pushQueue = new Queue<PushJobData>(QUEUE_NAMES.push, { connection: new Redis(redisUrl, { maxRetriesPerRequest: null }), prefix });
+  const background = new Background();
+  const fakes = { waabek: new FakeWaabek(background), push: new FakePush(background), realtime: new FakeRealtime(background), background };
+  fakesByEnv.set(env, fakes);
 
   return {
     ownerUrl,
     runtimeUrl: runtime.toString(),
-    redisUrl,
-    prefix,
     env,
-    redis,
-    otpQueue,
-    pushQueue,
+    waabek: fakes.waabek,
+    push: fakes.push,
+    realtime: fakes.realtime,
+    settle: () => background.settle(),
     async teardown() {
-      for (const queue of [otpQueue, pushQueue]) {
-        await queue.obliterate({ force: true }).catch(() => undefined);
-        await queue.close();
-        await (queue.opts.connection as Redis).quit().catch(() => undefined);
-      }
-      const keys = await redis.keys(`${prefix}:*`);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-      await redis.quit();
+      await background.settle();
       await query(adminUrl, `drop database if exists ${dbName} with (force)`);
       await query(adminUrl, `drop role if exists ${login}`);
     },
   };
 }
 
-/** The real application (all modules), optionally with a fake profile-photo storage. */
+/**
+ * The real application (all modules), with the env's fakes for Waabek, Web Push and Realtime, and optionally a
+ * fake profile-photo storage.
+ */
 export async function startApp(env: ApiEnv, storage?: ProfilePhotoStorage): Promise<NestFastifyApplication> {
+  const fakes = fakesByEnv.get(env);
   let builder = Test.createTestingModule({ imports: [AppModule.forRoot(env)] });
+  if (fakes) {
+    builder = builder
+      .overrideProvider(WaabekSender)
+      .useValue(fakes.waabek)
+      .overrideProvider(PushSender)
+      .useValue(fakes.push)
+      .overrideProvider(RealtimeBroadcaster)
+      .useValue(fakes.realtime);
+  }
   if (storage) {
     builder = builder.overrideProvider(ProfilePhotoStorage).useValue(storage);
   }
@@ -120,23 +232,29 @@ export async function startApp(env: ApiEnv, storage?: ProfilePhotoStorage): Prom
   await configureApp(app, env);
   await app.init();
   await app.getHttpAdapter().getInstance().ready();
+  fakes?.background.apps.add(app.get(DeferredTasks));
   return app;
 }
 
-/** Headers a browser on the web app sends with cookie-authenticated requests. */
+/** Headers a browser page on the site sends with cookie-authenticated requests. */
 export const webCsrf = { origin: WEB_ORIGIN, [CSRF_HEADER]: CSRF_HEADER_VALUE };
 export const adminCsrf = { origin: ADMIN_ORIGIN, [CSRF_HEADER]: CSRF_HEADER_VALUE };
 
-/** Reads the code that the worker would send through Waabek, straight from the job queue. */
-export async function latestCode(queue: Queue<OtpJobData>, phone: string): Promise<string | null> {
-  const jobs = await queue.getJobs(['waiting', 'delayed', 'active', 'prioritized']);
-  const matching = jobs.filter((job) => job?.name === 'send' && job.data.phone === phone).sort((a, b) => b.timestamp - a.timestamp);
-  return matching[0]?.data.code ?? null;
+/** The newest code sent through Waabek to this number (what the person receives on WhatsApp), or null. */
+export async function latestCode(waabek: FakeWaabek, phone: string): Promise<string | null> {
+  const texts = await waabek.to(phone);
+  for (let index = texts.length - 1; index >= 0; index -= 1) {
+    const code = /verification code is: (\d{6})$/.exec(texts[index]!)?.[1];
+    if (code) {
+      return code;
+    }
+  }
+  return null;
 }
 
-export async function jobCount(queue: Queue<OtpJobData>, phone: string): Promise<number> {
-  const jobs = await queue.getJobs(['waiting', 'delayed', 'active', 'prioritized']);
-  return jobs.filter((job) => job?.name === 'send' && job.data.phone === phone).length;
+/** How many codes were sent through Waabek to this number. */
+export async function jobCount(waabek: FakeWaabek, phone: string): Promise<number> {
+  return (await waabek.to(phone)).filter((text) => /verification code is: \d{6}$/.test(text)).length;
 }
 
 /** Extracts a cookie value from a Set-Cookie response header. */
@@ -153,8 +271,21 @@ export function cookieValue(setCookie: string | string[] | undefined, name: stri
 }
 
 /** Clears the resend cooldown so a test can request several codes for one number without waiting 60s. */
-export async function clearCooldown(redis: Redis, prefix: string, phone: string, scope = 'otp'): Promise<void> {
-  await redis.del(`${prefix}:rl:${scope}:cooldown:${phone}`);
+export async function clearCooldown(ctx: Pick<IntegrationEnv, 'ownerUrl'>, phone: string, scope = 'otp'): Promise<void> {
+  await query(ctx.ownerUrl, 'delete from app.ephemeral where key = $1', [`rl:${scope}:cooldown:${phone}`]);
+}
+
+/** Forgets rate-limit counters and short-lived state by key (D-36: in Postgres). */
+export async function clearState(ctx: Pick<IntegrationEnv, 'ownerUrl'>, ...keys: string[]): Promise<void> {
+  await query(ctx.ownerUrl, 'delete from app.rate_counters where key = any($1)', [keys]);
+  await query(ctx.ownerUrl, 'delete from app.ephemeral where key = any($1)', [keys]);
+}
+
+/** Everything short-lived the API holds (pending sign-ins, setup secrets, counters, presence), as text. */
+export async function allShortLivedState(ctx: Pick<IntegrationEnv, 'ownerUrl'>): Promise<string> {
+  const tables = ['app.ephemeral', 'app.rate_counters', 'app.rate_events', 'app.presence_devices', 'app.maintenance_runs'];
+  const rows = await Promise.all(tables.map(async (table) => (await query(ctx.ownerUrl, `select * from ${table}`)).rows));
+  return JSON.stringify(rows);
 }
 
 let adminIpCounter = 0;

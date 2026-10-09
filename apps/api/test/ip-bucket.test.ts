@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ipBucket } from '../src/redis/rate-limit.service.js';
+import { ipBucket } from '../src/state/rate-limit.service.js';
 
 describe('per-IP limit buckets', () => {
   it('counts IPv4 addresses individually, including IPv4-mapped IPv6', () => {

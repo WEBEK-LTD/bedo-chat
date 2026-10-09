@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import pg from 'pg';
+import { connectionTls } from './database.js';
 
 /** File names follow the Supabase convention: <14-digit timestamp>_<snake_case_name>.sql */
 const MIGRATION_FILE_PATTERN = /^(\d{14})_([a-z0-9_]+)\.sql$/;
@@ -222,7 +223,7 @@ async function acquireLock(client: pg.Client, waitMs: number): Promise<void> {
 }
 
 async function withClient<T>(connectionString: string, work: (client: pg.Client) => Promise<T>): Promise<T> {
-  const client = new pg.Client({ connectionString, application_name: 'bedo-migrations' });
+  const client = new pg.Client({ connectionString, ssl: connectionTls(connectionString), application_name: 'bedo-migrations' });
   await client.connect();
   try {
     return await work(client);

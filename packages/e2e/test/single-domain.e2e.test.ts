@@ -1,34 +1,16 @@
-import { createHash } from 'node:crypto';
-import http from 'node:http';
-import type net from 'node:net';
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  ADMIN_PASSWORD,
-  ADMIN_URL,
-  API_URL,
-  createAdmin,
-  NETLIFY_SITE_URL,
-  query,
-  SITE_URL,
-  type Stack,
-  startEdge,
-  startStack,
-  totpNow,
-  waitForCode,
-  WEB_URL,
-} from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, API_URL, createAdmin, launchBrowser, query, SERVICES_URL, SITE_URL, type Stack, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 const STUDENT = '+201000002001';
 const ADMIN = '+201000002901';
 
 /**
- * D-25 in a real browser: student app at /, Admin Dashboard at /admin, API at /api, all on one origin
- * behind an edge that routes exactly like the production Cloudflare Worker.
+ * D-36 in a real browser: student app at /, Admin Dashboard at /admin, API at /api, all served by the one
+ * Netlify site (its web app, with the API in its own /api route). No separate API host, edge router or worker.
  */
-describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /api (D-25)', () => {
+describe.runIf(enabled)('one site: /, /login, /admin, /admin/login, /api (D-36)', () => {
   let stack: Stack;
   let browser: Browser;
   const contexts: BrowserContext[] = [];
@@ -41,7 +23,7 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
 
   beforeAll(async () => {
     stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    browser = await launchBrowser();
     await query(stack.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [STUDENT]);
   });
 
@@ -78,10 +60,15 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
     const me = await fetch(`${API_URL}/v1/me`);
     expect(me.status).toBe(401);
     expect((await me.json()).error.code).toBe('UNAUTHENTICATED');
-    // The API host refuses requests that did not come through the edge (D-25 edge secret).
-    const direct = await fetch('http://127.0.0.1:4100/v1/me');
-    expect(direct.status).toBe(403);
-    expect((await fetch('http://127.0.0.1:4100/health/live')).status).toBe(200);
+    expect(me.headers.get('cache-control')).toBe('no-store');
+    // Unknown API paths are the API's own 404, never a web page.
+    const unknown = await fetch(`${API_URL}/v1/nothing-here`);
+    expect(unknown.status).toBe(404);
+    expect((await unknown.json()).error.code).toBe('NOT_FOUND');
+    // Nothing else is listening: the API exists only inside the site (D-36).
+    for (const port of [4000, 4100]) {
+      await expect(fetch(`http://127.0.0.1:${port}/health/live`)).rejects.toThrow();
+    }
     // Paths that look like other hosts never leave the configured origins.
     for (const path of ['//example.com/x', '/api//example.com/x', '/admin//example.com/x']) {
       const response = await fetch(`${SITE_URL}${path}`, { redirect: 'manual' });
@@ -100,8 +87,8 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
       const body = await response.text();
       return { status: response.status, headers: response.headers, body, title: /<title>([^<]*)<\/title>/.exec(body)?.[1] };
     };
-    // The same answers through the public domain and from the Netlify site itself: one site, one deploy.
-    for (const base of [SITE_URL, NETLIFY_SITE_URL]) {
+    // One site, one deploy.
+    for (const base of [SITE_URL]) {
       expect(await get(base, '/'), `${base}/`).toMatchObject({ status: 200, title: 'Bedo Chat' });
       expect(await get(base, '/login'), `${base}/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Chat' });
       expect(await get(base, '/admin'), `${base}/admin`).toMatchObject({ status: 200, title: 'Bedo Chat Admin' });
@@ -236,56 +223,60 @@ describe.runIf(enabled)('one public domain: /, /login, /admin, /admin/login, /ap
   });
 });
 
-/** Minimal WebSocket server: echoes text frames and records the path it was asked for. */
-function startEchoServer(): Promise<{ server: http.Server; port: number; paths: string[] }> {
-  const paths: string[] = [];
-  const server = http.createServer((_request, response) => response.writeHead(426).end());
-  server.on('upgrade', (request: http.IncomingMessage, socket: net.Socket) => {
-    paths.push(request.url ?? '');
-    const accept = createHash('sha1').update(`${request.headers['sec-websocket-key']}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
-    socket.on('data', (frame: Buffer) => {
-      const opcode = frame[0]! & 0x0f;
-      if (opcode === 0x8) {
-        socket.end(Buffer.from([0x88, 0x00]));
-        return;
-      }
-      const length = frame[1]! & 0x7f;
-      const mask = frame.subarray(2, 6);
-      const text = Buffer.from(frame.subarray(6, 6 + length).map((byte, index) => byte ^ mask[index % 4]!)).toString();
-      const reply = Buffer.from(`echo:${text}`);
-      socket.write(Buffer.concat([Buffer.from([0x81, reply.length]), reply]));
-    });
-  });
-  return new Promise((resolve) =>
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: (server.address() as net.AddressInfo).port, paths })),
-  );
-}
+describe.runIf(enabled)('realtime without a WebSocket on the site (D-36)', () => {
+  let stack: Stack;
+  let browser: Browser;
 
-describe('WebSocket connections through /api (Phase 3 compatibility, D-25)', () => {
-  it('passes a WebSocket upgrade on /api/* to the API origin with the prefix removed, in both directions', async () => {
-    const echo = await startEchoServer();
-    const edge = await startEdge(3110, {
-      WEB_ORIGIN: 'http://127.0.0.1:9',
-      ADMIN_ORIGIN: 'http://127.0.0.1:9',
-      API_ORIGIN: `http://127.0.0.1:${echo.port}`,
+  beforeAll(async () => {
+    stack = await startStack();
+    browser = await launchBrowser();
+    await query(stack.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [STUDENT]);
+  });
+
+  afterAll(async () => {
+    await browser?.close();
+    await stack?.stop();
+  });
+
+  it('listens on its own private Supabase Realtime channel, opens no socket to the site, and stays online by heartbeat', async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    const sockets: string[] = [];
+    page.on('websocket', (socket) => sockets.push(socket.url()));
+    const heartbeats: number[] = [];
+    page.on('response', (response) => {
+      if (response.url() === `${API_URL}/v1/realtime/heartbeat`) heartbeats.push(response.status());
     });
-    try {
-      const socket = new WebSocket('ws://127.0.0.1:3110/api/v1/realtime?client=web');
-      const reply = await new Promise<string>((resolve, reject) => {
-        socket.addEventListener('open', () => socket.send('ping'));
-        socket.addEventListener('message', (event) => resolve(String(event.data)));
-        socket.addEventListener('error', () => reject(new Error('WebSocket failed')));
-        setTimeout(() => reject(new Error('timed out')), 5_000);
-      });
-      socket.close();
-      expect(reply).toBe('echo:ping');
-      expect(echo.paths).toEqual(['/v1/realtime?client=web']);
-    } finally {
-      edge.closeAllConnections();
-      await new Promise((resolve) => edge.close(resolve));
-      echo.server.closeAllConnections();
-      await new Promise((resolve) => echo.server.close(resolve));
+    await page.goto(`${WEB_URL}/login`);
+    await page.getByLabel('Phone number').fill(STUDENT);
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByLabel('Verification code').fill(await waitForCode(stack, STUDENT));
+    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByLabel('Name').fill('Realtime Student');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.waitForURL(`${WEB_URL}/`);
+    await page.getByText('No chats yet.').waitFor();
+
+    const channel = (await page.evaluate(async () => {
+      const refreshed = await fetch('/api/v1/auth/refresh', { method: 'POST', headers: { 'x-bedo-csrf': '1' } });
+      const { accessToken } = (await refreshed.json()) as { accessToken: string };
+      return (await fetch('/api/v1/realtime/channel', { headers: { 'x-bedo-csrf': '1', authorization: `Bearer ${accessToken}` } })).json();
+    })) as { enabled: boolean; url: string; topic: string };
+    expect(channel).toMatchObject({ enabled: true, url: SERVICES_URL });
+    for (let attempt = 0; attempt < 50 && !stack.listeningTopics().includes(`realtime:${channel.topic}`); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
+    expect(stack.listeningTopics()).toContain(`realtime:${channel.topic}`);
+    // The browser joined its private channel with its own token: the stand-in refused nothing (it refuses public
+    // joins and joins without a token for exactly that channel, as Supabase does with public access off).
+    expect(stack.refusedJoins()).toEqual([]);
+    expect(sockets.length).toBeGreaterThan(0);
+    for (const url of sockets) {
+      expect(url.startsWith(`${SERVICES_URL.replace('https:', 'wss:')}/realtime/v1/websocket`), url).toBe(true);
+    }
+    expect(heartbeats).toContain(200);
+    const devices = await query<{ n: string }>(stack.ownerUrl, 'select count(*) as n from app.presence_devices where expires_at > now()');
+    expect(Number(devices.rows[0]!.n)).toBe(1);
+    await context.close();
   });
 });

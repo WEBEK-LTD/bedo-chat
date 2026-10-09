@@ -33,17 +33,10 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U postgres -d bedo"
           --health-interval 2s --health-timeout 3s --health-retries 30
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 2s --health-timeout 3s --health-retries 30
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bedo
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-      REDIS_URL: redis://localhost:6379
       # Placeholder present during the build as well, so the bundle guard proves that a server-only
       # value available at build time still never reaches browser files.
       WAABEK_API_KEY: ci-placeholder-not-a-real-key
@@ -52,7 +45,6 @@ jobs:
       OTP_HMAC_SECRET: ci-placeholder-otp-hmac-secret-not-real
       SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-supabase-service-role-not-real
       VAPID_PRIVATE_KEY: ci-placeholder-vapid-private-not-real
-      EDGE_SECRET: ci-placeholder-edge-secret-not-a-real-value
 
     steps:
       - uses: actions/checkout@v5
@@ -94,7 +86,7 @@ jobs:
       - name: Re-running migrations is a no-op
         run: pnpm db:migrate
 
-      - name: Integration tests (real Postgres and Redis)
+      - name: Integration tests (real Postgres)
         run: pnpm test:integration
 
   secret-scan:

@@ -10,8 +10,8 @@ import type { RequestInfo } from '../common/request-info.js';
 import { API_ENV } from '../config/tokens.js';
 import { AuditService, type SecurityEventInput } from '../audit/audit.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
-import { RateLimitService } from '../redis/rate-limit.service.js';
+import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
+import { RateLimitService } from '../state/rate-limit.service.js';
 
 export interface OtpIssueInput {
   purpose: OtpPurpose;
@@ -48,7 +48,7 @@ export class OtpService {
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
@@ -102,7 +102,7 @@ export class OtpService {
       });
     });
     if (input.eligible) {
-      await this.queues.enqueueOtp({ phone: input.phone, code, purpose: input.purpose });
+      this.delivery.sendCode(input.phone, code, input.purpose);
     }
 
     return {

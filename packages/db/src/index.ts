@@ -1,4 +1,5 @@
 export * from './database.js';
+export { SUPABASE_ROOT_CA_2021, SUPABASE_ROOT_CA_2021_SHA256 } from './supabase-ca.js';
 export {
   assertMigrationConnection,
   checksumOf,

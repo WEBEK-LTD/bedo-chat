@@ -11,8 +11,8 @@ import { hashToken, safeEqualHex } from '../common/crypto.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { API_ENV } from '../config/tokens.js';
 import { DatabaseService } from '../database/database.service.js';
-import { ipBucket, RateLimitService } from '../redis/rate-limit.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { EphemeralStore } from '../state/ephemeral.store.js';
+import { ipBucket, RateLimitService } from '../state/rate-limit.service.js';
 import { type AdminContext, AdminAuthService, type AdminPendingSignIn } from './admin-auth.service.js';
 import { isOwnerSqlHash, verifyOwnerSqlHash } from './owner-sql-hash.js';
 import { isCommonPassword, isPhoneNumberPassword, loadCommonPasswords } from './password-policy.js';
@@ -42,7 +42,7 @@ export class AdminPasswordService {
   constructor(
     @Inject(API_ENV) env: ApiEnv,
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService,
+    @Inject(EphemeralStore) private readonly store: EphemeralStore,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(TwoStepService) private readonly hasher: TwoStepService,
@@ -68,8 +68,8 @@ export class AdminPasswordService {
   async login(phone: string, password: string, info: RequestInfo): Promise<AdminPendingSignIn> {
     await this.limitIp('admin-password', info);
     const lockKey = this.lockKey(phone);
-    const lockedFor = await this.redis.client.pttl(lockKey);
-    if (lockedFor > 0) {
+    const lockedFor = await this.store.ttlMs(lockKey);
+    if (lockedFor !== null) {
       await this.audit.security(this.db, {
         subjectType: 'phone',
         phone,
@@ -112,7 +112,7 @@ export class AdminPasswordService {
 
     // D-35: a password set by the owner's SQL script is checked against the full rules and moved to Argon2id now.
     const account = isOwnerSqlHash(admin.password_hash!) ? await this.upgradeOwnerSqlHash(admin, password, info) : admin;
-    await this.redis.client.del(this.failKey(phone));
+    await this.rateLimit.reset(this.failKey(phone));
     await this.audit.security(this.db, {
       subjectType: 'admin',
       subjectId: admin.id,
@@ -267,7 +267,8 @@ export class AdminPasswordService {
     }
     this.refuseRule(result);
     // The owner's reset also lifts a password-login lock on that number.
-    await this.redis.client.del(this.lockKey(phone), this.failKey(phone));
+    await this.store.delete(this.lockKey(phone));
+    await this.rateLimit.reset(this.failKey(phone));
   }
 
   /**
@@ -276,7 +277,7 @@ export class AdminPasswordService {
    */
   async change(admin: AdminContext, currentPassword: string, newPassword: string, totpCode: string, info: RequestInfo): Promise<{ otherSessionsEnded: number }> {
     const attempt = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:admin-password-change:${admin.adminId}`,
+      `rl:admin-password-change:${admin.adminId}`,
       ADMIN_PASSWORD_RULES.failureWindowMinutes * 60_000,
     );
     if (attempt.count > ADMIN_PASSWORD_RULES.maxChangeAttempts) {
@@ -334,7 +335,7 @@ export class AdminPasswordService {
     if (!result) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'CREDENTIALS_INVALID');
     }
-    await this.redis.client.del(`${this.redis.prefix}:rl:admin-password-change:${admin.adminId}`);
+    await this.rateLimit.reset(`rl:admin-password-change:${admin.adminId}`);
     return result;
   }
 
@@ -368,8 +369,8 @@ export class AdminPasswordService {
   }
 
   private async lock(phone: string, info: RequestInfo): Promise<void> {
-    const created = await this.redis.client.set(this.lockKey(phone), '1', 'EX', ADMIN_PASSWORD_RULES.lockMinutes * 60, 'NX');
-    if (created === 'OK') {
+    const created = await this.store.setIfAbsent(this.lockKey(phone), '1', ADMIN_PASSWORD_RULES.lockMinutes * 60_000);
+    if (created) {
       await this.audit.security(this.db, {
         subjectType: 'phone',
         phone,
@@ -383,7 +384,7 @@ export class AdminPasswordService {
 
   private async limitIp(scope: string, info: RequestInfo): Promise<void> {
     const attempt = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:${scope}:ip:${ipBucket(info.ip ?? 'unknown')}`,
+      `rl:${scope}:ip:${ipBucket(info.ip ?? 'unknown')}`,
       ADMIN_PASSWORD_RULES.ipWindowMinutes * 60_000,
     );
     if (attempt.count > ADMIN_PASSWORD_RULES.maxAttemptsPerIp) {
@@ -392,10 +393,10 @@ export class AdminPasswordService {
   }
 
   private failKey(phone: string): string {
-    return `${this.redis.prefix}:rl:admin-password-fail:${phone}`;
+    return `rl:admin-password-fail:${phone}`;
   }
 
   private lockKey(phone: string): string {
-    return `${this.redis.prefix}:rl:admin-password-lock:${phone}`;
+    return `rl:admin-password-lock:${phone}`;
   }
 }

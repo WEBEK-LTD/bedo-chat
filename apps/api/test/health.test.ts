@@ -11,7 +11,7 @@ afterEach(async () => {
 
 describe('GET /health/live', () => {
   it('returns ok without touching dependencies', async () => {
-    app = await buildTestApp({ database: down, redis: down });
+    app = await buildTestApp({ database: down });
     const response = await app.inject({ method: 'GET', url: '/health/live' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
@@ -19,24 +19,21 @@ describe('GET /health/live', () => {
 });
 
 describe('GET /health/ready', () => {
-  it('returns 200 when Postgres and Redis are up', async () => {
+  it('returns 200 when Postgres is up (D-36: the only dependency)', async () => {
     app = await buildTestApp();
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body.status).toBe('ok');
     expect(body.checks.database.status).toBe('up');
-    expect(body.checks.redis.status).toBe('up');
+    expect(Object.keys(body.checks)).toEqual(['database']);
   });
 
-  it('returns 503 and names the failing dependency', async () => {
-    app = await buildTestApp({ redis: down });
+  it('returns 503 when Postgres is down', async () => {
+    app = await buildTestApp({ database: down });
     const response = await app.inject({ method: 'GET', url: '/health/ready' });
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toMatchObject({
-      status: 'unavailable',
-      checks: { database: { status: 'up' }, redis: { status: 'down' } },
-    });
+    expect(response.json()).toEqual({ status: 'unavailable', checks: { database: { status: 'down', latencyMs: expect.any(Number) } } });
   });
 
   it('treats a dependency that does not answer in time as down', async () => {

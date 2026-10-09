@@ -1,10 +1,9 @@
 import { readFileSync } from 'node:fs';
-import { type Browser, chromium, type Page } from 'playwright-core';
+import { type Browser, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_URL, hotp, query, type Stack, startStack } from './stack.js';
+import { ADMIN_URL, hotp, launchBrowser, query, type Stack, startStack } from './stack.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 const PHONE = '+905446731942';
 const PASSWORD = ['harbour', 'violet', 'compass', '8826'].join('-');
 const SCRIPT = readFileSync(new URL('../../../docs/owner-sql/set-super-admin.sql', import.meta.url), 'utf8');
@@ -40,7 +39,7 @@ describe.runIf(enabled)('D-35 owner SQL password in the browser', () => {
 
   beforeAll(async () => {
     stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    browser = await launchBrowser();
     page = await (await browser.newContext()).newPage();
   });
 
