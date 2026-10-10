@@ -60,6 +60,7 @@ export class UsersService {
   }
 
   async profile(viewerId: string, userId: string): Promise<Peer> {
+    await this.limits.profiles(viewerId);
     const peer = userId === viewerId ? null : await this.views.peer(this.database.db, viewerId, userId);
     if (!peer) {
       throw new AppError(HttpStatus.NOT_FOUND, 'NOT_FOUND');

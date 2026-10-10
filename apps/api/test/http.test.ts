@@ -121,17 +121,13 @@ describe('request ids and headers', () => {
     expect(response.headers['x-request-id']).not.toBe('edge-req-12345');
   });
 
-  it('reuses a well-formed request id from a trusted proxy', async () => {
-    app = await buildTestApp({ env: testEnv({ API_TRUST_PROXY_HOPS: '1' }) });
-    const response = await app.inject({ method: 'GET', url: '/health/live', headers: { 'x-request-id': 'edge-req-12345' } });
-    expect(response.headers['x-request-id']).toBe('edge-req-12345');
-  });
-
-  it('replaces a malformed request id even from a trusted proxy', async () => {
-    app = await buildTestApp({ env: testEnv({ API_TRUST_PROXY_HOPS: '1' }) });
-    const response = await app.inject({ method: 'GET', url: '/health/live', headers: { 'x-request-id': 'bad id\n' } });
-    expect(response.headers['x-request-id']).not.toBe('bad id\n');
-    expect(response.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+  it('always mints its own request id (D-36: no proxy is trusted)', async () => {
+    app = await buildTestApp();
+    for (const incoming of ['edge-req-12345', 'bad id\n']) {
+      const response = await app.inject({ method: 'GET', url: '/health/live', headers: { 'x-request-id': incoming } });
+      expect(response.headers['x-request-id']).not.toBe(incoming);
+      expect(response.headers['x-request-id']).toMatch(/^[0-9a-f-]{36}$/);
+    }
   });
 
   it('sets security headers on every response', async () => {
@@ -150,19 +146,8 @@ describe('request ids and headers', () => {
   });
 });
 
-describe('CORS', () => {
-  it('allows configured origins', async () => {
-    app = await buildTestApp();
-    const response = await app.inject({
-      method: 'OPTIONS',
-      url: '/health/live',
-      headers: { origin: 'https://chat.example.test', 'access-control-request-method': 'GET' },
-    });
-    expect(response.headers['access-control-allow-origin']).toBe('https://chat.example.test');
-    expect(response.headers['access-control-allow-credentials']).toBe('true');
-  });
-
-  it('does not allow other origins', async () => {
+describe('CORS (D-36: one origin, so no other site is ever allowed)', () => {
+  it('does not allow any other origin', async () => {
     app = await buildTestApp();
     const response = await app.inject({
       method: 'OPTIONS',

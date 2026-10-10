@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -7,43 +8,34 @@ import { z } from 'zod';
  */
 export const SERVER_ONLY_ENV_NAMES = [
   'DATABASE_URL',
-  'REDIS_URL',
   'WAABEK_API_KEY',
   'ACCESS_TOKEN_SECRET',
   'OTP_HMAC_SECRET',
   'ADMIN_TOTP_KEY',
   'SETTINGS_ENCRYPTION_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
+  'SUPABASE_JWT_SECRET',
   'VAPID_PRIVATE_KEY',
-  'EDGE_SECRET',
 ] as const;
 
 /**
- * Server variables that are not secret (ports, limits, log levels). Every variable in a server
+ * Server variables that are not secret (limits, log levels, public keys and URLs). Every variable in a server
  * schema must appear in exactly one of the two lists; a test enforces this, so a new secret can
  * never be added without the bundle guard learning about it.
  */
 export const NON_SECRET_SERVER_ENV_NAMES = [
   'NODE_ENV',
   'LOG_LEVEL',
-  'API_HOST',
-  'API_PORT',
-  'API_TRUST_PROXY_HOPS',
-  'CORS_ALLOWED_ORIGINS',
-  'ADMIN_ORIGINS',
-  'WEB_ORIGINS',
-  'API_PUBLIC_PATH',
   'DATABASE_POOL_MAX',
   'DATABASE_STATEMENT_TIMEOUT_MS',
   'HEALTH_CHECK_TIMEOUT_MS',
-  'QUEUE_PREFIX',
-  'WORKER_CONCURRENCY',
-  'WORKER_HEARTBEAT_INTERVAL_MS',
   'SUPABASE_URL',
+  // The project's public (anon) key: browsers receive it to listen for realtime signals (D-36).
+  'SUPABASE_ANON_KEY',
   'VAPID_PUBLIC_KEY',
   'VAPID_SUBJECT',
-  'OTP_DELIVERY',
   'WAABEK_API_URL',
+  'GIPHY_API_URL',
 ] as const;
 
 const nodeEnv = z.enum(['development', 'test', 'production']).default('development');
@@ -55,17 +47,12 @@ const postgresUrl = z
   .refine((value) => /^postgres(ql)?:\/\//.test(value), 'must be a postgres:// or postgresql:// URL');
 
 /**
- * Long-running services keep session state on each connection (statement timeout), which Supabase's
- * transaction-mode pooler on port 6543 does not preserve. Use the direct connection or the
- * session-mode pooler (port 5432).
+ * The API's connection (D-36). On the website's server functions, Supabase's transaction pooler (port 6543)
+ * is the recommended one: many short-lived instances share a few database connections. The session pooler
+ * (port 5432) and the direct connection work too. The API keeps no session state on a connection (only
+ * transaction-scoped locks; with the transaction pooler the statement timeout is enforced client-side).
  */
-const runtimePostgresUrl = postgresUrl.refine((value) => {
-  try {
-    return new URL(value).port !== '6543';
-  } catch {
-    return false;
-  }
-}, 'must not use the transaction pooler (port 6543); use the direct connection or the session pooler (port 5432)');
+const runtimePostgresUrl = postgresUrl;
 
 /** A random server secret: at least 32 characters (generate with `openssl rand -base64 48`). */
 const serverSecret = z.string().min(32, 'must be at least 32 characters (generate with: openssl rand -base64 48)');
@@ -84,173 +71,148 @@ const optionalString = z
   .optional()
   .transform((value) => (value && value.trim().length > 0 ? value.trim() : undefined));
 
-const redisUrl = z
-  .string()
-  .min(1)
-  .refine((value) => /^rediss?:\/\//.test(value), 'must be a redis:// or rediss:// URL');
+/**
+ * The API, which runs inside the website's server functions on the one Netlify site (D-36): there is no
+ * separate API host, port, proxy, edge secret or origin list. It answers at https://bedochat.com/api.
+ */
+/**
+ * What a Supabase API key grants, from the key itself: a legacy JWT key's `role` claim (`anon` or
+ * `service_role`), or a newer key's prefix (`sb_publishable_` or `sb_secret_`). `unknown` when it cannot tell.
+ */
+export function supabaseKeyKind(key: string): 'public' | 'secret' | 'unknown' {
+  if (key.startsWith('sb_publishable_')) return 'public';
+  if (key.startsWith('sb_secret_')) return 'secret';
+  const parts = key.split('.');
+  if (parts.length !== 3) return 'unknown';
+  try {
+    const claims = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as { role?: unknown };
+    if (claims.role === 'anon') return 'public';
+    if (claims.role === 'service_role') return 'secret';
+  } catch {
+    // not a JWT
+  }
+  return 'unknown';
+}
 
-const port = z.coerce.number().int().min(1).max(65535);
+/**
+ * Whether a legacy Supabase key (an HS256 JWT such as the anon key) is signed with this JWT secret. `null` when the
+ * key is not such a JWT (newer `sb_publishable_` keys), so nothing can be checked.
+ */
+export function supabaseKeySignedWith(key: string, jwtSecret: string): boolean | null {
+  const parts = key.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const header = JSON.parse(Buffer.from(parts[0]!, 'base64url').toString('utf8')) as { alg?: unknown };
+    if (header.alg !== 'HS256') return null;
+  } catch {
+    return null;
+  }
+  const expected = createHmac('sha256', jwtSecret).update(`${parts[0]}.${parts[1]}`).digest();
+  const actual = Buffer.from(parts[2]!, 'base64url');
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
 
-const commaSeparatedOrigins = z
-  .string()
-  .default('')
-  .transform((value) =>
-    value
-      .split(',')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0),
-  )
-  .pipe(z.array(z.url({ protocol: /^https?$/ })));
-
-/** BullMQ key prefix; lets several environments share one Redis without touching each other's queues. */
-const queuePrefix = z
-  .string()
-  .regex(/^[a-z0-9][a-z0-9:_-]{0,39}$/, 'must be 1-40 lowercase letters, digits, ":", "_" or "-"')
-  .default('bedo');
-
-export const apiEnvSchema = z.object({
-  NODE_ENV: nodeEnv,
-  LOG_LEVEL: logLevel,
-  API_HOST: z.string().min(1).default('0.0.0.0'),
-  API_PORT: port.default(4000),
-  /**
-   * Number of reverse proxies / load balancers in front of the API that append to X-Forwarded-For.
-   * 0 (default) trusts no proxy: the client IP is the socket address and X-Request-Id from the
-   * client is ignored. Never set it higher than the real number of hops.
-   */
-  API_TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
-  /** Exact origins of the user web app and admin app allowed to call the API from a browser. */
-  CORS_ALLOWED_ORIGINS: commaSeparatedOrigins,
-  /**
-   * The Admin Dashboard's origins (also listed in CORS_ALLOWED_ORIGINS). Admin routes accept only these,
-   * and the user's session cookie routes accept every other allowed origin, so the two apps cannot act
-   * for each other.
-   */
-  ADMIN_ORIGINS: commaSeparatedOrigins,
-  /**
-   * The user web app's origins (also listed in CORS_ALLOWED_ORIGINS); the user's session cookie routes
-   * accept only these. Optional: when empty it is every allowed origin that is not an admin origin. Set it
-   * when both apps share one origin (D-25: everything on https://bedochat.com).
-   */
-  WEB_ORIGINS: commaSeparatedOrigins,
-  /**
-   * Shared secret the edge router (Cloudflare Worker) sends with every request (D-25). When set, the API
-   * refuses requests without it, so nobody can reach the API host around the edge. Required in production
-   * when API_PUBLIC_PATH is set.
-   */
-  EDGE_SECRET: optionalString.pipe(z.string().min(32, 'must be at least 32 characters').optional()),
-  /**
-   * Public path prefix in front of the API (D-25: "/api"; the edge removes it before forwarding). Session
-   * cookies are scoped under it so the browser sends them only to the API. Empty when the API has its own
-   * host name.
-   */
-  API_PUBLIC_PATH: z
-    .string()
-    .trim()
-    .regex(/^(\/[a-z0-9-]+)*$/, 'must be empty or a path like /api')
-    .default(''),
-  DATABASE_URL: runtimePostgresUrl,
-  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
-  /** Server-side limit for any single statement; protects the pool from runaway or hung queries. */
-  DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(15_000),
-  REDIS_URL: redisUrl,
-  QUEUE_PREFIX: queuePrefix,
-  /** Upper bound for each dependency check in /health/ready. */
-  HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(10_000).default(2_000),
-  /** Signs access tokens (P-01). */
-  ACCESS_TOKEN_SECRET: serverSecret,
-  /** Keys the hash under which one-time codes are stored. */
-  OTP_HMAC_SECRET: serverSecret,
-  /** Encrypts admin authenticator-app secrets at rest (D-19). */
-  ADMIN_TOTP_KEY: aes256Key,
-  /**
-   * Encrypts Admin Dashboard-managed secrets at rest, the Waabek API key (D-32). Infrastructure only:
-   * never stored in the database, never sent to a browser, never set from the Admin Dashboard. Must
-   * differ from ADMIN_TOTP_KEY. Required: the API does not start without a valid key.
-   */
-  SETTINGS_ENCRYPTION_KEY: aes256Key,
-  /** Supabase project URL and service key for private profile pictures (P-15). Both or neither. */
-  SUPABASE_URL: optionalString.pipe(z.url({ protocol: /^https?$/ }).optional()),
-  SUPABASE_SERVICE_ROLE_KEY: optionalString,
-  /** Public half of the Web Push key pair, handed to browsers (D-21). Optional: push is off without it. */
-  VAPID_PUBLIC_KEY: optionalString,
-}).superRefine((env, ctx) => {
-  // Compared as key bytes, so the same key written another way (padding, base64url) is caught too.
-  if (Buffer.from(env.SETTINGS_ENCRYPTION_KEY, 'base64').equals(Buffer.from(env.ADMIN_TOTP_KEY, 'base64'))) {
-    ctx.addIssue({ code: 'custom', path: ['SETTINGS_ENCRYPTION_KEY'], message: 'must be a different key from ADMIN_TOTP_KEY' });
-  }
-  if (env.NODE_ENV === 'production' && env.ADMIN_ORIGINS.length === 0) {
-    ctx.addIssue({ code: 'custom', path: ['ADMIN_ORIGINS'], message: "is required in production (the Admin Dashboard's origin)" });
-  }
-  for (const origin of env.ADMIN_ORIGINS) {
-    if (!env.CORS_ALLOWED_ORIGINS.includes(origin)) {
-      ctx.addIssue({ code: 'custom', path: ['ADMIN_ORIGINS'], message: 'every admin origin must also be in CORS_ALLOWED_ORIGINS' });
-    }
-  }
-  for (const origin of env.WEB_ORIGINS) {
-    if (!env.CORS_ALLOWED_ORIGINS.includes(origin)) {
-      ctx.addIssue({ code: 'custom', path: ['WEB_ORIGINS'], message: 'every web origin must also be in CORS_ALLOWED_ORIGINS' });
-    }
-  }
-  if (env.NODE_ENV === 'production' && env.API_PUBLIC_PATH && !env.EDGE_SECRET) {
-    ctx.addIssue({ code: 'custom', path: ['EDGE_SECRET'], message: 'is required in production when the API is served behind the edge (API_PUBLIC_PATH)' });
-  }
-  const webOrigins = env.WEB_ORIGINS.length > 0 ? env.WEB_ORIGINS : env.CORS_ALLOWED_ORIGINS.filter((origin) => !env.ADMIN_ORIGINS.includes(origin));
-  if (env.NODE_ENV === 'production' && webOrigins.length === 0) {
-    ctx.addIssue({
-      code: 'custom',
-      path: ['WEB_ORIGINS'],
-      message: "is required in production when the web app shares the Admin Dashboard's origin",
-    });
-  }
-  if (Boolean(env.SUPABASE_URL) !== Boolean(env.SUPABASE_SERVICE_ROLE_KEY)) {
-    ctx.addIssue({
-      code: 'custom',
-      path: [env.SUPABASE_URL ? 'SUPABASE_SERVICE_ROLE_KEY' : 'SUPABASE_URL'],
-      message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set together',
-    });
-  }
-});
-export type ApiEnv = z.infer<typeof apiEnvSchema>;
-
-export const workerEnvSchema = z
+export const apiEnvSchema = z
   .object({
     NODE_ENV: nodeEnv,
     LOG_LEVEL: logLevel,
-    REDIS_URL: redisUrl,
-    QUEUE_PREFIX: queuePrefix,
-    WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
-    WORKER_HEARTBEAT_INTERVAL_MS: z.coerce.number().int().min(1_000).max(300_000).default(15_000),
     DATABASE_URL: runtimePostgresUrl,
-    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
-    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(15_000),
     /**
-     * How one-time codes are delivered. "waabek" (default) sends real WhatsApp messages (D-05, D-22).
-     * "test-capture" stores codes in Redis for automated tests only; it is refused unless NODE_ENV=test.
+     * Connections per server-function instance. Each instance serves one request at a time, so a small pool is
+     * enough; many instances can run at once, so keep it small to stay within the database's connection limit.
      */
-    OTP_DELIVERY: z.enum(['waabek', 'test-capture']).default('waabek'),
-    WAABEK_API_URL: z.url({ protocol: /^https$/ }).default('https://waabek.com/api/v1/send'),
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(20).default(3),
+    /** Server-side limit for any single statement; protects the pool from runaway or hung queries. */
+    DATABASE_STATEMENT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(600_000).default(15_000),
+    /** Upper bound for the database check in /health/ready. */
+    HEALTH_CHECK_TIMEOUT_MS: z.coerce.number().int().min(100).max(10_000).default(2_000),
+    /** Signs access tokens (P-01); also derives each device's private realtime channel name (D-36). */
+    ACCESS_TOKEN_SECRET: serverSecret,
+    /** Keys the hash under which one-time codes are stored. */
+    OTP_HMAC_SECRET: serverSecret,
+    /** Encrypts admin authenticator-app secrets at rest (D-19). */
+    ADMIN_TOTP_KEY: aes256Key,
     /**
-     * Decrypts the Waabek API key, which Super Admins set from the Admin Dashboard and which is stored
-     * encrypted in the database (D-32). The same value as the API's SETTINGS_ENCRYPTION_KEY. Required.
+     * Encrypts Admin Dashboard-managed secrets at rest, the Waabek API key (D-32). Infrastructure only:
+     * never stored in the database, never sent to a browser, never set from the Admin Dashboard. Must
+     * differ from ADMIN_TOTP_KEY. Required: the API does not start without a valid key.
      */
     SETTINGS_ENCRYPTION_KEY: aes256Key,
+    /** Waabek's send endpoint (D-05, D-22). */
+    WAABEK_API_URL: z.url({ protocol: /^https$/ }).default('https://waabek.com/api/v1/send'),
+    /** GIPHY's API (O-09); the key is set from the Admin Dashboard. */
+    GIPHY_API_URL: z.url({ protocol: /^https$/ }).default('https://api.giphy.com/v1'),
     /**
      * No longer used (D-32): the key is set from the Admin Dashboard. Refused when present, so no copy of
      * the key stays in the server environment.
      */
     WAABEK_API_KEY: optionalString,
+    /**
+     * Supabase project URL and service key: private profile pictures (P-15) and sending realtime signals
+     * (D-36). Both or neither.
+     */
+    SUPABASE_URL: optionalString.pipe(z.url({ protocol: /^https?$/ }).optional()),
+    SUPABASE_SERVICE_ROLE_KEY: optionalString,
+    /**
+     * The project's public (anon) key, handed to signed-in browsers so they can listen on their private
+     * realtime channel (D-36). Without it devices still get every change, by checking every 20 seconds.
+     */
+    SUPABASE_ANON_KEY: optionalString,
+    /**
+     * The project's JWT secret (Supabase: Project Settings -> JWT Keys -> Legacy JWT Secret). The API signs each
+     * device's short-lived realtime token with it, which lets that device receive on its own private channel and
+     * nowhere else (D-36: Realtime Authorization). Required with SUPABASE_ANON_KEY; never sent to a browser.
+     */
+    SUPABASE_JWT_SECRET: optionalString.pipe(z.string().min(32, 'must be the project\'s JWT secret (at least 32 characters)').optional()),
+    /** Web Push key pair and contact (D-21). All three or none: push is off without them. */
     VAPID_PUBLIC_KEY: optionalString,
     VAPID_PRIVATE_KEY: optionalString,
     VAPID_SUBJECT: optionalString,
   })
   .superRefine((env, ctx) => {
-    if (env.OTP_DELIVERY === 'test-capture' && env.NODE_ENV !== 'test') {
+    // Compared as key bytes, so the same key written another way (padding, base64url) is caught too.
+    if (Buffer.from(env.SETTINGS_ENCRYPTION_KEY, 'base64').equals(Buffer.from(env.ADMIN_TOTP_KEY, 'base64'))) {
+      ctx.addIssue({ code: 'custom', path: ['SETTINGS_ENCRYPTION_KEY'], message: 'must be a different key from ADMIN_TOTP_KEY' });
+    }
+    if (Boolean(env.SUPABASE_URL) !== Boolean(env.SUPABASE_SERVICE_ROLE_KEY)) {
       ctx.addIssue({
         code: 'custom',
-        path: ['OTP_DELIVERY'],
-        message: 'test-capture is only allowed when NODE_ENV=test; use waabek',
+        path: [env.SUPABASE_URL ? 'SUPABASE_SERVICE_ROLE_KEY' : 'SUPABASE_URL'],
+        message: 'SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set together',
       });
+    }
+    if (env.SUPABASE_ANON_KEY && !env.SUPABASE_URL) {
+      ctx.addIssue({ code: 'custom', path: ['SUPABASE_URL'], message: 'is required when SUPABASE_ANON_KEY is set' });
+    }
+    // The anon key is handed to every signed-in browser (D-36): a service key there would give browsers full
+    // access to the project. Checked from the key's own claims (legacy JWT keys) or prefix (newer keys).
+    if (env.SUPABASE_ANON_KEY && (env.SUPABASE_ANON_KEY === env.SUPABASE_SERVICE_ROLE_KEY || supabaseKeyKind(env.SUPABASE_ANON_KEY) === 'secret')) {
+      ctx.addIssue({ code: 'custom', path: ['SUPABASE_ANON_KEY'], message: 'must be the public anon key, not the service role key' });
+    }
+    if (env.SUPABASE_SERVICE_ROLE_KEY && supabaseKeyKind(env.SUPABASE_SERVICE_ROLE_KEY) === 'public') {
+      ctx.addIssue({ code: 'custom', path: ['SUPABASE_SERVICE_ROLE_KEY'], message: 'must be the service role key, not the public anon key' });
+    }
+    // A value still holding the template's placeholder (docs/netlify-production.env): named, never echoed.
+    for (const [name, value] of Object.entries(env)) {
+      if (typeof value === 'string' && value.includes('PASTE_')) {
+        ctx.addIssue({ code: 'custom', path: [name], message: 'still holds the template placeholder (PASTE_...): replace it with the real value' });
+      }
+    }
+    // Realtime channels are private (D-36): a device listens only with a token the API signs with the JWT secret.
+    if (Boolean(env.SUPABASE_ANON_KEY) !== Boolean(env.SUPABASE_JWT_SECRET)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [env.SUPABASE_ANON_KEY ? 'SUPABASE_JWT_SECRET' : 'SUPABASE_ANON_KEY'],
+        message: 'SUPABASE_ANON_KEY and SUPABASE_JWT_SECRET must be set together (private realtime channels)',
+      });
+    }
+    if (env.SUPABASE_JWT_SECRET && env.SUPABASE_JWT_SECRET === env.SUPABASE_SERVICE_ROLE_KEY) {
+      ctx.addIssue({ code: 'custom', path: ['SUPABASE_JWT_SECRET'], message: 'must be the JWT secret, not the service role key' });
+    }
+    // The legacy anon key is itself signed with the project's JWT secret: a mismatch means a secret from another
+    // project, or a mistyped one, with which every device would be refused.
+    if (env.SUPABASE_ANON_KEY && env.SUPABASE_JWT_SECRET && supabaseKeySignedWith(env.SUPABASE_ANON_KEY, env.SUPABASE_JWT_SECRET) === false) {
+      ctx.addIssue({ code: 'custom', path: ['SUPABASE_JWT_SECRET'], message: "is not this project's JWT secret (the anon key is not signed with it)" });
     }
     if (env.WAABEK_API_KEY !== undefined) {
       ctx.addIssue({
@@ -268,7 +230,7 @@ export const workerEnvSchema = z
       });
     }
   });
-export type WorkerEnv = z.infer<typeof workerEnvSchema>;
+export type ApiEnv = z.infer<typeof apiEnvSchema>;
 
 export const migrationEnvSchema = z.object({
   DATABASE_URL: postgresUrl,

@@ -5,17 +5,13 @@ import { type ApiEnv, apiEnvSchema, loadEnv } from '@bedo/config';
 import { AppModule } from '../src/app.module.js';
 import { buildFastifyAdapter, configureApp } from '../src/app.js';
 import { DatabaseService } from '../src/database/database.service.js';
-import { RedisService } from '../src/redis/redis.service.js';
 
 export function testEnv(overrides: Record<string, string> = {}): ApiEnv {
   return loadEnv(apiEnvSchema, {
     NODE_ENV: 'test',
     LOG_LEVEL: 'silent',
     DATABASE_URL: 'postgresql://unused:unused@127.0.0.1:1/unused',
-    REDIS_URL: 'redis://127.0.0.1:1',
     HEALTH_CHECK_TIMEOUT_MS: '200',
-    CORS_ALLOWED_ORIGINS: 'https://chat.example.test,https://admin.example.test',
-    ADMIN_ORIGINS: 'https://admin.example.test',
     ACCESS_TOKEN_SECRET: 'test-access-token-secret-0123456789abcdef',
     OTP_HMAC_SECRET: 'test-otp-hmac-secret-0123456789abcdef-xyz',
     ADMIN_TOTP_KEY: Buffer.alloc(32, 9).toString('base64'),
@@ -36,12 +32,11 @@ export const down: FakeDependency = {
 };
 export const hanging: FakeDependency = { ping: () => new Promise<void>(() => undefined) };
 
-/** Builds the real application with Postgres and Redis replaced by fakes. */
+/** Builds the real application with Postgres replaced by a fake. */
 export async function buildTestApp(
   options: {
     env?: ApiEnv;
     database?: FakeDependency;
-    redis?: FakeDependency;
     extraControllers?: Array<new (...args: never[]) => unknown>;
     /** Sees every route as Fastify registers it. */
     onRoute?: (route: { method: string | string[]; url: string }) => void;
@@ -54,8 +49,6 @@ export async function buildTestApp(
   })
     .overrideProvider(DatabaseService)
     .useValue({ ...(options.database ?? up), onApplicationShutdown: async () => undefined })
-    .overrideProvider(RedisService)
-    .useValue({ ...(options.redis ?? up), onApplicationShutdown: async () => undefined })
     .compile();
 
   const adapter = buildFastifyAdapter(env);

@@ -8,12 +8,12 @@ import {
 } from '@bedo/contracts';
 import type { IdentityField } from '@bedo/db';
 import { AppError } from '../common/app-error.js';
-import { randomToken } from '../common/crypto.js';
+import { hashToken, randomToken } from '../common/crypto.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { AuditService } from '../audit/audit.service.js';
 import { AccountsService } from '../auth/accounts.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { EphemeralStore } from '../state/ephemeral.store.js';
 import { detectImageType, ProfilePhotoStorage } from '../storage/profile-photo-storage.js';
 import { PROFILE_RULES } from '@bedo/contracts';
 
@@ -41,7 +41,7 @@ export class ProfileService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AccountsService) private readonly accounts: AccountsService,
     @Inject(AuditService) private readonly audit: AuditService,
-    @Inject(RedisService) private readonly redis: RedisService,
+    @Inject(EphemeralStore) private readonly store: EphemeralStore,
     @Inject(ProfilePhotoStorage) private readonly storage: ProfilePhotoStorage,
   ) {}
 
@@ -94,7 +94,6 @@ export class ProfileService {
       lastSeenVisibility: row.last_seen_visibility,
       photoVisibility: row.photo_visibility,
       messagesFrom: row.messages_from,
-      callsFrom: row.calls_from,
     };
   }
 
@@ -108,7 +107,6 @@ export class ProfileService {
           ...(body.lastSeenVisibility ? { last_seen_visibility: body.lastSeenVisibility } : {}),
           ...(body.photoVisibility ? { photo_visibility: body.photoVisibility } : {}),
           ...(body.messagesFrom ? { messages_from: body.messagesFrom } : {}),
-          ...(body.callsFrom ? { calls_from: body.callsFrom } : {}),
         })
         .where('user_id', '=', userId)
         .execute();
@@ -133,7 +131,7 @@ export class ProfileService {
     const upload = await this.storage.createUpload(key, contentType);
     const uploadId = randomToken();
     const pending: PendingUpload = { userId, key, contentType };
-    await this.redis.client.set(this.uploadKey(uploadId), JSON.stringify(pending), 'EX', UPLOAD_TTL_SECONDS);
+    await this.store.set(this.uploadKey(uploadId), JSON.stringify(pending), UPLOAD_TTL_SECONDS * 1000);
     return { uploadId, uploadUrl: upload.url, method: 'PUT', headers: upload.headers };
   }
 
@@ -142,7 +140,7 @@ export class ProfileService {
     if (!this.storage.enabled) {
       throw new AppError(HttpStatus.SERVICE_UNAVAILABLE, 'SERVICE_UNAVAILABLE');
     }
-    const raw = await this.redis.client.getdel(this.uploadKey(uploadId));
+    const raw = await this.store.take(this.uploadKey(uploadId));
     const pending = raw ? (JSON.parse(raw) as PendingUpload) : null;
     if (!pending || pending.userId !== userId) {
       throw new AppError(HttpStatus.NOT_FOUND, 'NOT_FOUND');
@@ -181,6 +179,7 @@ export class ProfileService {
   }
 
   private uploadKey(uploadId: string): string {
-    return `${this.redis.prefix}:photo-upload:${uploadId}`;
+    // Only a hash of the ticket is stored, like every other token.
+    return `photo-upload:${hashToken(uploadId)}`;
   }
 }

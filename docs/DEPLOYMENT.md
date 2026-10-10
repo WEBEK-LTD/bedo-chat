@@ -1,222 +1,220 @@
 # Deploying Bedo Chat
 
-How each part of Bedo Chat is deployed (D-15). Provider, region, plan and domains for production are
-confirmed with the owner before the production deployment (D-10); everything below is configured only
-through environment variables.
+Bedo Chat is **one Netlify site** (D-36). The site serves the student web app, the Admin Dashboard and the API;
+Supabase provides the database, file storage and realtime. There is no API server, worker, Redis, Cloudflare
+Worker or any other host to deploy.
 
 | Part | Runs on | Defined by |
 | --- | --- | --- |
-| Public domain `https://bedochat.com` (D-25) | Cloudflare, with the routing Worker | `deploy/cloudflare/` |
-| Web app (`apps/web`), served at `/` and `/login` | One Netlify site, `bedochat.netlify.app` (D-26) | `apps/web/netlify.toml` |
-| Admin Dashboard (`apps/admin`), served at `/admin` and `/admin/login` | The same Netlify site: its static export is part of the web app's deploy (D-26) | `apps/web/netlify.toml`, `apps/admin/next.config.ts` |
-| API, later also the WebSocket gateway (`apps/api`), served at `/api` | Persistent container hosting (not Netlify functions) | `apps/api/Dockerfile` |
-| Worker (`apps/worker`) | Persistent container hosting | `apps/worker/Dockerfile` |
-| Database and files | Supabase Postgres and Supabase Storage | `supabase/migrations` |
-| Queues | Managed Redis | — |
-
-Recommended order: Supabase → migrations → runtime database role → Redis → API → worker → Netlify site →
-Cloudflare and the routing Worker → first Super Admin and Waabek key (section 4a) → academy phone list.
-
-**One public domain (D-25).** Everything is served from `https://bedochat.com`:
+| Student web app (`apps/web`): `/`, `/login` | The Netlify site `bedochat` (Next.js on Netlify's Next.js runtime) | `apps/web/netlify.toml` |
+| Admin Dashboard (`apps/admin`): `/admin`, `/admin/login` | The same site: its static export is part of the web app's deploy (D-26) | `apps/web/netlify.toml`, `apps/admin/next.config.ts` |
+| API (`apps/api`): `/api/*` | The same site: the web app's route `app/api/[[...path]]` runs the API in the site's server function (D-36) | `apps/web/app/api/[[...path]]/route.ts`, `apps/api/src/serverless.ts` |
+| Database, short-lived state and rate limits | Supabase Postgres | `supabase/migrations` |
+| Profile pictures | Supabase Storage (private bucket) | `supabase/migrations` |
+| Realtime signals (new messages, typing, online) | Supabase Realtime (broadcast) | `apps/api/src/messaging/realtime*.ts` |
+| WhatsApp codes, Web Push | Sent by the API right after the response that needs them | `apps/api/src/delivery` |
 
 | Public URL | Served by |
 | --- | --- |
-| `https://bedochat.com/` | Student chat (web app) |
-| `https://bedochat.com/login` | Student sign-in (web app) |
-| `https://bedochat.com/admin` | Admin Dashboard (admin app) |
-| `https://bedochat.com/admin/login` | Admin sign-in (admin app) |
-| `https://bedochat.com/api/...` | API, and in Phase 3 its WebSocket connections |
+| `https://bedochat.com/` | Student chat |
+| `https://bedochat.com/login` | Student sign-in |
+| `https://bedochat.com/admin` | Admin Dashboard |
+| `https://bedochat.com/admin/login` | Admin sign-in |
+| `https://bedochat.com/api/...` | API (the same site, the same origin) |
 
-There are no `chat.`, `admin.` or `api.` subdomains. Cloudflare holds the domain, and a small Worker
-(`deploy/cloudflare/worker.js`) sends each path to its origin: `/api/*` to the API host with `/api` removed
-(WebSockets passed through), `/admin*` to the admin origin, everything else to the web origin. Since D-26 both
-of those are the same Netlify site, which serves the student app and the Admin Dashboard.
-Netlify alone cannot do this: its proxy does not carry WebSockets. Because the apps and the API share one
-origin, the session cookies are first-party (P-14 is met) and scoped under `/api`.
+Because everything is one origin, the session cookies are first-party and scoped under `/api` (P-14), the API
+accepts cookie-authenticated requests only from pages of that same site (no origin list to configure), and no
+CORS is needed.
 
-## 0. Production deployment from the dashboards (D-37)
+## 0. Go live (owner steps)
 
-The production setup is written into the repository, so nothing below needs a terminal, Docker, pnpm or Wrangler:
+For the Bedo Chat project as it stands: Supabase in Sydney with migrations 1-6 and the login `bedo_api` already
+created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing at Netlify. No terminal is needed.
 
-| File | What it sets up |
-| --- | --- |
-| `render.yaml` | Render Blueprint: Key Value `bedochat-redis` (noeviction, persistent, private only), Docker web service `bedochat-api` (health check `/health/ready`) and background worker `bedochat-worker`, all in **Singapore** (Render's closest region to the Supabase project in **Sydney**; Render has no Australian region). Every setting is in the file; Render generates the secrets. Automatic deploys are off. |
-| `deploy/supabase/prod-ca-2021.crt` | Supabase's CA certificate (public). Both images carry it at `/app/certs/supabase-ca.crt`, so the database connection is verified in full (`sslmode=verify-full`). A build without it stops. |
-| `deploy/cloudflare/wrangler.toml`, `package.json` | The routing Worker `bedochat-router` with its origins filled in and Wrangler pinned; Cloudflare builds and deploys it from GitHub. |
+1. **GitHub** (GitHub Desktop, repository `WEBEK-LTD/bedo-chat`, branch `main`): *Fetch origin*, then
+   *Repository → Show in Explorer/Finder*. Delete everything in that folder **except the hidden `.git` folder**,
+   copy in everything inside the unzipped `bedo-chat` folder, then *Commit to main* and *Push origin*. (Deleting
+   first matters: Phase 3.3 removes earlier files, such as `apps/worker`, which would otherwise stay and break the
+   build.) Netlify starts a deploy; it cannot sign anyone in until steps 2-4 are done.
+2. **Netlify plan and region**: the site's team on **Pro**, then Site configuration → **Functions** → **Region** →
+   **Asia Pacific (Sydney)** → Save. The API runs in the functions, next to the database in Sydney; in another
+   region every request waits for several round trips across the Pacific. (Choosing the region needs Pro.)
+3. **Netlify variables**: fill in the 8 `PASTE_` values in [`docs/netlify-production.env`](netlify-production.env)
+   (it says where each comes from), then Site configuration → **Environment variables** → **Add a variable** →
+   **Import from a .env file** → paste → **Import**. Then Deploys → **Trigger deploy** → **Deploy site**.
+4. **Supabase SQL Editor** (role `postgres`):
+   1. Paste the whole of [`docs/owner-sql/apply-updates.sql`](owner-sql/apply-updates.sql) → **Run** once.
+      Every line of the result says `ok`. It applies every migration after the first six, in order (D-35 admin
+      password, the tables that replace Redis, the private realtime policy, then each later phase: media, ...;
+      the file lists them), sets the limits of `bedo_api` and records them; if anything is not as expected it stops
+      and keeps nothing. The file is generated from `supabase/migrations` (`node scripts/build-owner-sql.mjs`).
+   2. Paste [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql), change the three values at the
+      top (section 4d) → **Run** → delete the query afterwards (it holds the password).
+5. **Supabase settings**: Project Settings → **Realtime** → turn **off** "Allow public access" (only devices with a
+   token from the API can then listen, each on its own channel). Authentication → Sign In / Providers → turn off
+   **Allow new users to sign up** (Bedo Chat never uses Supabase Auth).
+6. **Cloudflare** → `bedochat.com` → **DNS**: set both records (`bedochat.com` A and `www` CNAME) to **DNS only**
+   (click the orange cloud so it turns grey). Values unchanged. Behind Cloudflare's proxy every visitor would reach
+   the API as one of a few Cloudflare addresses and share their sign-in limits; it also injects a script the
+   site's security policy blocks. Then Netlify → Domain management → **HTTPS**: the certificate for `bedochat.com`
+   is issued within minutes (*Verify DNS configuration* / *Provision certificate* if it asks).
+7. **Check**: `https://bedochat.com/api/health/ready` → `{"status":"ok", ...}` with the database `up`; then
+   `https://bedochat.com/admin/login` → phone and password → set up the authenticator app → the dashboard opens.
+8. **Admin Dashboard**: OTP / WhatsApp → save the Waabek API key and send a test message; Academy phone list → add
+   the students' numbers (or import them).
+9. **On a phone**: open `https://bedochat.com` → sign in with a number from the list (the code comes by WhatsApp) →
+   add the site to the Home Screen (iPhone: Safari → Share → **Add to Home Screen**; Android: Chrome → menu →
+   **Install app**) → open it from the Home Screen → Settings → **Notifications** → **Turn on notifications**.
 
-`scripts/deployment-files.test.mjs` checks these files: the Blueprint passes the API's and the worker's own start-up
-validation, it asks only for the database password, and the certificate and Worker settings are complete.
-
-Already done once in Supabase (section 1): the runtime login `bedo_api` exists, member of `bedo_runtime`, and its
-password is in your password manager. Migrations 1–6 are applied; migration 7 (D-35) is applied in step 3 below.
-
-1. **GitHub.** Push this repository to `main` of `WEBEK-LTD/bedo-chat` (GitHub Desktop). Netlify rebuilds the same
-   site; nothing else deploys by itself.
-2. **Render.** Dashboard → **New** → **Blueprint** → repository `WEBEK-LTD/bedo-chat`, branch `main` → Render
-   lists `bedochat-redis`, `bedochat-api`, `bedochat-worker` and the group `bedochat-shared`. It asks for
-   `PGPASSWORD` twice (API and worker): paste the `bedo_api` password in both. **Apply**. The first build takes
-   about 10 minutes. Expected: `bedochat-redis` *Available*; `bedochat-api` *Live*, its log ends with
-   `Bedo Chat API listening on 0.0.0.0:4000`; `bedochat-worker` *Live*, its log shows `Bedo Chat worker started`.
-   The API's address must be `https://bedochat-api.onrender.com` (the Worker points there). If Render shows a
-   different address because the name is taken, stop: `API_ORIGIN` in `deploy/cloudflare/wrangler.toml` must be
-   changed to it first.
-   Then copy `ADMIN_TOTP_KEY` and `SETTINGS_ENCRYPTION_KEY` (*bedochat-api* → *Environment*; the second is in the
-   group *bedochat-shared*) into your password manager: authenticator setups and the saved Waabek key depend on
-   them, and Render keeps them only while the service and group exist.
-3. **Supabase SQL Editor** (role `postgres`): run [`docs/owner-sql/apply-20261006120000.sql`](owner-sql/apply-20261006120000.sql)
-   once (migration 7, D-35), then [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql) with
-   the three values at the top filled in (section 4d). Delete that query afterwards.
-4. **Cloudflare** (`bedochat.com` must be an *Active* zone in your Cloudflare account):
-   1. If `bedochat.com` is listed in Netlify → site `bedochat` → *Domain management*, remove it there (otherwise
-      Netlify redirects its own address to `bedochat.com` and the Worker would loop).
-   2. Cloudflare → `bedochat.com` → **DNS** → delete the **A, AAAA or CNAME** records named `bedochat.com` (`@`).
-      Keep MX and TXT records.
-   3. **Workers & Pages** → **Create application** → **Import a repository** → `WEBEK-LTD/bedo-chat`. Project name
-      `bedochat-router` (must match `wrangler.toml`), **Root directory** `deploy/cloudflare`, build command empty,
-      deploy command `npx wrangler deploy` (the default) → **Save and Deploy**. The deploy attaches
-      `bedochat.com` as the Worker's Custom Domain. If the log says the custom domain could not be attached, add it
-      by hand: Worker → *Settings* → *Domains & Routes* → *Add* → *Custom domain* → `bedochat.com`.
-   4. Worker → *Settings* → *Variables and Secrets* → *Add* → type **Secret**, name `EDGE_SECRET`, value: Render →
-      *bedochat-api* → *Environment* → `EDGE_SECRET` → **Deploy**. Until then the Worker answers "router is not
-      configured".
-   5. `bedochat.com` → *SSL/TLS* → *Edge Certificates* → **Always Use HTTPS** on. Leave Rocket Loader, Zaraz and
-      Bot Fight Mode off (section 5a).
-5. **Check.**
-   - `https://bedochat-api.onrender.com/health/ready` and `https://bedochat.com/api/health/ready`: `{"status":"ok",…}`
-     with `database` and `redis` both `up`.
-   - `https://bedochat.com/api/v1/admin/bootstrap` opened in the browser answers `CSRF_REJECTED` (the Worker's secret
-     was accepted); `https://bedochat-api.onrender.com/v1/admin/bootstrap` answers `FORBIDDEN` (no direct access).
-   - `https://bedochat.com/` goes to `/login`, `https://bedochat.com/admin` to `/admin/login`.
-   - Client address (`API_TRUST_PROXY_HOPS`): the `ip=` line of `https://bedochat.com/cdn-cgi/trace` must equal
-     `"remoteAddress"` in the *bedochat-api* log line for your last `/api/health/ready` request. If it differs, change
-     `API_TRUST_PROXY_HOPS` in `render.yaml` before students sign in.
-6. **Admin sign-in.** `https://bedochat.com/admin/login` (a browser profile without a student sign-in): phone and
-   password → set up the authenticator app (QR code) → code → the dashboard opens. Then the Waabek key in
-   *OTP / WhatsApp* (section 4a) and the academy phone list.
-
-Later changes: push to `main`, then *Manual Deploy* → *Deploy latest commit* on `bedochat-api` and
-`bedochat-worker`. Render applies changes to `render.yaml` itself (Blueprint sync), and Cloudflare rebuilds the
-Worker on every push to `main`. Do not put `PGPASSWORD` or any other server secret on the Netlify site.
-
-Sections 1–5a below describe each part in detail; with the files above, their command-line steps (Docker,
-`pnpm db:migrate`, `wrangler`) are not needed.
+Nothing else is deployed: no API server, worker, Redis or Cloudflare Worker. A Render account or Cloudflare Worker
+is not needed.
 
 ## 1. Supabase
 
-1. Create a project in the region closest to the academy's students.
-2. Find two connection strings under *Connect*:
-   - **Direct connection** (`db.<ref>.supabase.co:5432`) — IPv6 only unless the IPv4 add-on is enabled.
-   - **Session pooler** (`<pooler-host>:5432`) — works over IPv4. Use it when your container host has no IPv6.
-   - **Never use the transaction pooler (port 6543)** for Bedo Chat: the migration runner and the API both refuse it.
-3. Apply migrations as the table owner (`postgres`), from the API image:
+1. **Project.** One Supabase project (Bedo Chat: `cspnnzoyuyxjiyhwzgqj`, region Sydney `ap-southeast-2`).
+2. **Migrations.** Applied as the table owner (`postgres`), either from a checkout with
+   `DATABASE_URL=<session-pooler URL> pnpm db:migrate`, or, for a database whose migrations were applied by hand in
+   the SQL Editor (as Bedo Chat's were), with [`docs/owner-sql/apply-updates.sql`](owner-sql/apply-updates.sql)
+   (every later migration in one run from 1-6; it refuses any other starting point and a second run). The migration
+   runner never uses the transaction pooler (port 6543): migrations take a session lock.
+3. **The API's login role** `bedo_api` (member of `bedo_runtime`), with `statement_timeout = '15s'` and
+   `idle_in_transaction_session_timeout = '30s'` set on the role (the apply script sets both): through the
+   transaction pooler the API cannot set them per connection itself. The API connects as this role, never as the
+   table owner.
+4. **The API's connection string** (`DATABASE_URL`): the **transaction pooler**, port **6543**, user
+   `bedo_api.<project-ref>` (already filled in, apart from the password, in `docs/netlify-production.env`). The
+   site's server functions start and stop with traffic, and the transaction pooler shares a few database
+   connections among all of them. **TLS is automatic**: every connection to a Supabase host is encrypted and fully
+   verified against Supabase's root certificate (`Supabase Root 2021 CA`, built into `packages/db`), including the
+   host name; a server Supabase did not sign is refused. Nothing to configure, and no `sslmode` is needed.
+5. **Keys** (Project Settings → **API Keys** → *Legacy API keys*): the **anon** (public) key and the
+   **service_role** key; and Project Settings → **JWT Keys** → *Legacy JWT Secret*. The service_role key and the
+   JWT secret are secrets: only in the site's server variables, never in a page. The API checks at start-up that
+   the anon key is signed with the JWT secret (a secret from another project is refused by name).
+6. **Realtime: private channels** (D-36, Realtime Authorization). Each signed-in device listens on its own
+   channel, named on the server from its session and the current hour. The API gives the device a short-lived
+   token (signed with the JWT secret, role `authenticated`) naming that one channel; the policy
+   `bedo_device_receives_own_channel` on `realtime.messages` (migration 9) lets a device **receive** broadcasts on
+   the channel its token names and nothing else, and no policy lets a device send. The API sends with the
+   service_role key. Turn **off** Project Settings → Realtime → **Allow public access**, so that no channel can be
+   used without such a token. Turn off **Authentication → Allow new users to sign up**: Bedo Chat never uses
+   Supabase Auth (D-08), and the baseline migration keeps the `anon` role out of the `app` schema.
+7. **Storage**: the Phase 2 migration created the private bucket `profile-photos`; nothing to do by hand.
 
-   ```bash
-   docker run --rm -e DATABASE_URL='postgresql://postgres:<password>@<host>:5432/postgres' \
-     bedo-api node node_modules/@bedo/db/dist/cli.js migrate
-   ```
+## 2. Netlify site (one site, D-26, D-36)
 
-   or from a checkout: `DATABASE_URL=... pnpm db:migrate`. Re-running is safe; it applies only new migrations.
-4. Create the login role the API and worker use (once per environment, password from your secret store):
+The site `bedochat` (`https://bedochat.netlify.app`) is the whole of Bedo Chat. Do not create a second site.
 
-   ```sql
-   create role bedo_api login password '<generated password>' in role bedo_runtime;
-   ```
-
-   On the session pooler the user name becomes `bedo_api.<project-ref>`.
-5. The Phase 2 migration creates the private Storage bucket `profile-photos` (JPEG, PNG or WebP, 5 MB) on
-   Supabase; nothing to do by hand. Copy the project URL and the **service_role** key (*Project settings →
-   API*) for the API's `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The service_role key is a secret: API
-   only, never a Netlify site.
-
-## 2. Redis
-
-Use a managed Redis 7+ that keeps data on restart. BullMQ needs the eviction policy **`noeviction`**;
-with any other policy Redis may silently drop queued jobs. Use the `rediss://` (TLS) URL when offered.
-
-## 3. API container
-
-```bash
-docker build -f apps/api/Dockerfile -t bedo-api .     # from the repository root
-```
-
-| Variable | Production value |
+| Path on the site | Served by |
 | --- | --- |
-| `NODE_ENV` | `production` (set in the image) |
-| `API_PORT` | `4000` unless the host assigns a port |
-| `API_TRUST_PROXY_HOPS` | `1` for the Cloudflare Worker, plus any proxy or load balancer your container host puts in front of the API (usually `2` in total). It decides which address the per-IP code limits count |
-| `CORS_ALLOWED_ORIGINS` | `https://bedochat.com` |
-| `ADMIN_ORIGINS` | `https://bedochat.com` (the Admin Dashboard's origin) |
-| `WEB_ORIGINS` | `https://bedochat.com` (the web app's origin; required because both apps share it) |
-| `API_PUBLIC_PATH` | `/api` (the path in front of the API; session cookies are scoped under it) |
-| `EDGE_SECRET` | Secret, at least 32 characters (`openssl rand -base64 32`); the same value is set as the Worker's secret (section 5a). The API answers only requests that carry it |
-| `DATABASE_URL` | `bedo_api` login (step 1.4), direct connection or session pooler |
-| `DATABASE_POOL_MAX` | `10` per instance; keep total connections within the Supabase plan |
-| `DATABASE_STATEMENT_TIMEOUT_MS` | `15000` |
-| `REDIS_URL` | Managed Redis URL |
-| `QUEUE_PREFIX` | `bedo` (must match the worker); use a different value per environment sharing one Redis |
-| `LOG_LEVEL` | `info` |
-| `ACCESS_TOKEN_SECRET` | Secret, at least 32 characters (`openssl rand -base64 32`) |
+| `/`, `/login` | Student web app (`apps/web`, Next.js on Netlify's Next.js runtime) |
+| `/sw.js` | Student web app (its notifications service worker) |
+| `/admin`, `/admin/login`, `/admin/_next/...` | Admin Dashboard (`apps/admin`), static files from the same deploy |
+| `/api/*` | The API, inside the site's Next.js server function (route `apps/web/app/api/[[...path]]`) |
+
+### Exact site settings
+
+| Netlify setting | `bedochat` |
+| --- | --- |
+| Base directory | *(empty)* |
+| Package directory | `apps/web` (`apps/admin` builds the identical site, D-28) |
+| Build command | *(empty: taken from netlify.toml)* |
+| Publish directory | *(empty: taken from netlify.toml)* |
+| Functions → Region | **Asia Pacific (Sydney)**, next to the Supabase project (Netlify Pro). It applies to the Next.js server function that runs the API |
+
+`apps/web/netlify.toml` (and its byte-identical copy `apps/admin/netlify.toml`) sets the build command
+`pnpm turbo run build --filter=@bedo/web`, `publish = "apps/web/.next"`, `NODE_VERSION = "24"`,
+`NEXT_PUBLIC_STORAGE_ORIGIN = "https://cspnnzoyuyxjiyhwzgqj.supabase.co"` (public: the pages' Content-Security-Policy
+allows profile pictures and the realtime WebSocket from this exact origin only, D-31, D-36) and the Admin Dashboard's
+security headers. No API address is configured anywhere: both apps call `/api` on the site itself.
+
+### Environment variables
+
+Site configuration → **Environment variables**, imported in one go from
+[`docs/netlify-production.env`](netlify-production.env) with its 8 `PASTE_` values filled in (section 0, step 3).
+After adding or changing a variable, run a new deploy (Deploys → Trigger deploy → Deploy site). The API refuses to
+start, naming the variable, while any value is missing, malformed or still a `PASTE_` placeholder.
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | Section 1.4 (transaction pooler, `bedo_api.<project-ref>`, its password). Secret |
+| `ACCESS_TOKEN_SECRET` | Secret, at least 32 characters. Also names each device's realtime channel |
 | `OTP_HMAC_SECRET` | Secret, at least 32 characters, different from the one above |
-| `ADMIN_TOTP_KEY` | Secret, exactly 32 bytes base64 (`openssl rand -base64 32`); keep a copy in your secret store — admin authenticator setups depend on it |
-| `SETTINGS_ENCRYPTION_KEY` | Secret, exactly 32 bytes base64 (`openssl rand -base64 32`), different from `ADMIN_TOTP_KEY`; the same value on the worker. Encrypts the Waabek API key that Super Admins set from the Admin Dashboard (D-32). Infrastructure only: never in the database, never in a browser, never set from the dashboard. Keep a copy in your secret store — if it changes, the saved Waabek key must be entered again |
-| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | From step 1.5 (profile pictures) |
-| `VAPID_PUBLIC_KEY` | Public half of the Web Push key pair (see the worker) |
+| `ADMIN_TOTP_KEY` | Secret, exactly 32 bytes base64; keep a copy — admin authenticator setups depend on it |
+| `SETTINGS_ENCRYPTION_KEY` | Secret, exactly 32 bytes base64, different from `ADMIN_TOTP_KEY`. Encrypts the Waabek API key that Super Admins set from the dashboard (D-32). Keep a copy |
+| `SUPABASE_URL` | `https://cspnnzoyuyxjiyhwzgqj.supabase.co` |
+| `SUPABASE_ANON_KEY` | The anon key (section 1.5). Public; handed to signed-in browsers, which can only use it with their own channel token |
+| `SUPABASE_SERVICE_ROLE_KEY` | The service_role key (section 1.5). Secret |
+| `SUPABASE_JWT_SECRET` | The legacy JWT secret (section 1.5). Secret: signs each device's realtime token. It can sign any Supabase token, so keep it only here. Rotating or revoking the legacy JWT secret in Supabase also changes the legacy anon and service_role keys: update all three here together, or devices fall back to checking every 20 seconds |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | **Leave unset.** Since Phase 13 (D-46) the API makes the Web Push keys itself and keeps them in the database. Setting all three replaces them, and every browser must then turn notifications on again |
 
-**Phase 3: realtime (WebSocket).** The same container serves the WebSocket gateway at `/v1/realtime`
-(publicly `wss://bedochat.com/api/v1/realtime`, through the Worker). No new variables: it accepts only
-upgrades that carry the Worker's `EDGE_SECRET` and come from a `WEB_ORIGINS` page, and authenticates with the
-access token in its first message. Requirements for the container host:
+Optional tuning: `LOG_LEVEL` (default `info`), `DATABASE_POOL_MAX` (default `3` per function instance),
+`DATABASE_STATEMENT_TIMEOUT_MS` (default `15000`), `WAABEK_API_URL` (default `https://waabek.com/api/v1/send`).
+`WAABEK_API_KEY` must not be set: the API refuses to start with it (D-32); the key is set from the Admin Dashboard
+(section 4a the first time, then *OTP / WhatsApp*).
 
-- WebSocket upgrades must reach the container (most hosts pass them through; check any load balancer in front).
-- Idle timeout of any proxy in front of the API: more than 60 seconds (the apps send a heartbeat every 25
-  seconds, P-18).
-- Several API instances work together through Redis (pub/sub channel `<QUEUE_PREFIX>:realtime`); Redis must
-  allow `PUBLISH`/`SUBSCRIBE` (managed Redis does by default).
-- On deploys, give the container a stop timeout of at least 10 seconds: open connections are closed with
-  code 1001 and each device's last seen is saved; devices reconnect and catch up through sync on their own.
-- `API_TRUST_PROXY_HOPS` must be right (see above): the gateway allows at most 20 connections that have not
-  signed in yet per client address, and with too few hops every visitor would share the Worker's address.
+**Previews.** Every deploy of the site runs the API. Do not open pull requests or branch deploys against this site
+while the variables apply to all deploy contexts: a preview would be a second, unreviewed API on the production
+database. If previews are wanted later, give the server variables a value for the **Production** context only.
 
-Health checks: liveness `GET /health/live`, readiness `GET /health/ready` (returns 503 while Postgres or Redis
-is unreachable); publicly `https://bedochat.com/api/health/ready`. The image runs as a non-root user and includes
-its own `HEALTHCHECK`.
+### What runs where, at run time
 
-**Only your Worker reaches the API.** Browsers use `https://bedochat.com/api`; the API's own host name is the
-Worker's target, not a public address. With `EDGE_SECRET` set, the API refuses every request that does not
-carry the Worker's secret header (the health checks excepted), so nobody can call it directly and supply their
-own `X-Forwarded-For` to get around the per-IP code limits. Allowing only Cloudflare's IP ranges is not
-enough on its own: any Cloudflare customer's Worker comes from those ranges.
+- **Every API request** runs in the site's server function (Sydney): the API application is created on the first
+  request of an instance and kept for the next ones. Postgres is its only dependency.
+- **Work after the response** (WhatsApp codes, Web Push, realtime signals, housekeeping) runs in the same
+  invocation right after the response is sent (Next.js `after()`, kept alive by Netlify with `waitUntil`), within
+  Netlify's 60-second limit for a function; a one-time code is given at most 9 seconds. A code therefore never
+  delays the answer, and a number that may not sign in gets the same answer in the same time. A code that Waabek
+  refuses is tried once more when the failure is temporary, then recorded in the security history
+  (`otp_delivery_failed`).
+- **Housekeeping** (message partitions three months ahead, pruning the 30-day update log, retired refresh tokens
+  and expired short-lived state) runs at most once an hour, started by ordinary requests. With no traffic nothing
+  needs doing; a missing message partition is also created on the spot.
+- **Scheduled messages and channel posts** (Phase 6, D-40) go out on time without a worker: the site's scheduled
+  function `scheduler` (in `apps/web/netlify/functions`, set by `[functions] directory` in `netlify.toml`) runs every
+  minute and asks `/api/v1/internal/dispatch` to send what is due; ordinary requests also send due messages within
+  seconds. It needs `ACCESS_TOKEN_SECRET` to be available to **Functions** (the default "All scopes" when the
+  variables are imported) and uses Netlify's own `URL`. Netlify runs scheduled functions on the **published
+  production deploy** only. Logs → Functions → `scheduler` shows each run ("Scheduled messages: {"sent":…}").
+- **Broadcast notifications** (Phase 10, O-20) from the Admin Dashboard start right after the admin sends them and
+  continue on each run of the same `scheduler` function until every device is reached (200 devices a batch). They
+  are Web Push messages. Nothing to set up.
+- **Notifications** (Phase 7, D-41) are Web Push messages sent by the API right after the message that causes them;
+  need nothing to set up: the API makes its Web Push keys the first time they are needed (Phase 13, D-46). Each
+  person turns them on per browser in Settings → Notifications; on iPhone and iPad after adding the site to the Home
+  Screen (Safari → Share → **Add to Home Screen**, iOS 16.4+), which the site's manifest and icons allow.
+- **Realtime.** Signed-in browsers listen on their private Supabase Realtime channel and send a heartbeat to `/api`
+  every 25 seconds (online for 60 seconds each, P-18). Each heartbeat also returns the device's update position,
+  so a device that missed a signal catches up within 25 seconds.
+- **Client address.** Per-address limits (one-time codes, admin passwords) count the address Netlify reports in
+  `x-nf-client-connection-ip`. Nothing may proxy in front of the site (section 3).
+- **Cost.** Netlify bills requests and function time; every open tab sends a heartbeat every 25 seconds. Watch
+  the team's usage page in the first weeks.
 
-## 4. Worker container
+Health: `https://bedochat.com/api/health/ready` returns `{"status":"ok","checks":{"database":{"status":"up",…}}}`.
 
-```bash
-docker build -f apps/worker/Dockerfile -t bedo-worker .
-```
+## 3. Domain: bedochat.com straight to Netlify
 
-Variables: `NODE_ENV` (set in the image), `REDIS_URL`, `QUEUE_PREFIX` (same as the API), `WORKER_CONCURRENCY`,
-`WORKER_HEARTBEAT_INTERVAL_MS`, `LOG_LEVEL`, and from Phase 2:
+`bedochat.com`'s DNS is on Cloudflare; its records point at Netlify (`bedochat.com` A `75.2.60.5`, `www` CNAME
+`bedochat.netlify.app`). Both must be **DNS only** (grey cloud), not proxied: a proxied record puts Cloudflare in front
+of Netlify, so every visitor would reach the API as one of a few Cloudflare addresses and share their per-address
+limits, and Cloudflare would inject scripts the pages' security policy blocks. Netlify issues and renews the HTTPS
+certificate itself (Domain management → HTTPS). No Cloudflare Worker, Render service or Redis is used (D-36).
 
-| Variable | Production value |
-| --- | --- |
-| `DATABASE_URL` | The same `bedo_api` login as the API (or a second `bedo_runtime` member) |
-| `DATABASE_POOL_MAX` | `5` |
-| `OTP_DELIVERY` | `waabek` (the default; the only value allowed in production) |
-| `SETTINGS_ENCRYPTION_KEY` | The same value as the API's. The worker decrypts the Dashboard-managed Waabek key with it |
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Generate once with `npx web-push generate-vapid-keys`; subject `mailto:<academy address>`. The private key is a secret |
+Notes kept from earlier phases:
+- **Browsers**: the Admin Dashboard needs a browser that sends Fetch Metadata headers (Chrome, Edge,
+  Firefox 90+, Safari 16.4+). Older browsers are refused, not let through.
+- **Admins**: the student app and the Admin Dashboard share one origin, so sign in to the dashboard in a
+  separate browser profile from any student account.
+- **Content-Security-Policy (D-31)**: the student app's pages send a strict policy with a fresh nonce per
+  response (`apps/web/proxy.ts`, run by Netlify as an edge function), the Admin Dashboard's pages the fixed
+  policy in `netlify.toml`. Scripts and styles come from the site only; data from the site itself (which
+  includes the API) and, with `NEXT_PUBLIC_STORAGE_ORIGIN`, from the Supabase project (pictures and the
+  realtime WebSocket).
+- **Service worker**: `/sw.js` (notifications only) has the scope `/`, which also covers `/admin`. It has no
+  fetch handler and caches nothing; keep it that way.
 
-No port. Give it a stop timeout of at least 30 seconds so jobs in progress finish on deploys.
-
-**The Waabek API key is not an environment variable (D-32).** A Super Admin sets it from the Admin Dashboard
-(section 4a for the first time, then *OTP / WhatsApp*); it is stored encrypted in `app.otp_settings`. The
-worker refuses to start if `WAABEK_API_KEY` is still set: remove it from the host's settings. Before every
-message the worker checks the stored settings' version and uses a changed key from the next message on, on
-every worker instance, without a restart. If no key is saved or it cannot be decrypted, nothing is sent and the
-failure is recorded in the security history (`otp_delivery_failed`, without the key).
-
-Phase 3: the worker also keeps the monthly message partitions created three months ahead (at start-up and
-every hour) and removes update-log entries and idempotency keys older than 30 days (P-17). Messages and the
-audit history are never removed. Keep at least one worker running: without it, sending would stop once the
-prepared partitions run out (more than three months later).
+## 4. Admins and the Waabek key
 
 ## 4a. First Super Admin (Phase 3.1, sign-in as amended by D-34)
 
@@ -286,8 +284,8 @@ passwords, roles, authenticator secrets or sessions. The initial setup stays clo
    opening is recorded in the audit log. Running it again replaces the token (needed after it expires or after
    5 wrong tokens lock it). It is refused before the initial setup is complete (use section 4a instead).
 2. Open `https://bedochat.com/admin/login`. The page shows **WhatsApp settings recovery**: enter the recovery
-   token and the new Waabek API key, then **Save key**. The API encrypts it with `SETTINGS_ENCRYPTION_KEY`; every
-   worker uses it from the next message on. Each token saves one key only; to save a different key, run the
+   token and the new Waabek API key, then **Save key**. The API encrypts it with `SETTINGS_ENCRYPTION_KEY` and
+   uses it from the next message on. Each token saves one key only; to save a different key, run the
    SQL again for a new token.
 3. **Send test message** sends a WhatsApp test to the first Super Admin's number.
 4. Sign in as usual (phone + password, then authenticator code). *OTP / WhatsApp* shows the key as changed "by
@@ -338,8 +336,8 @@ The key is never typed into SQL: it goes only through the sign-in page to the AP
 
 The owner can create or update an admin and set the password in one step, from the Supabase SQL Editor,
 without a setup token. Requires migration `20261006120000_d35_admin_password_owner_sql.sql` (`pnpm db:migrate`,
-or, for a database whose migrations were applied by hand in the SQL Editor,
-[`docs/owner-sql/apply-20261006120000.sql`](owner-sql/apply-20261006120000.sql) run once).
+or, for Bedo Chat's database, [`docs/owner-sql/apply-updates.sql`](owner-sql/apply-updates.sql), which applies it
+with every later migration).
 
 1. Supabase → **SQL Editor** → **New query**. Paste the whole of
    [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql).
@@ -364,186 +362,23 @@ never confirms a guessed password); the reason is recorded in the security histo
 wrong passwords) is not lifted by the script; it ends by itself within 15 minutes. Until that first sign-in, checking this account's password takes about 250 ms instead of
 about 11 ms.
 
-Signing in needs the API (section 3); running the script does not.
+Signing in needs the site (section 2) and migration `20261006180000` (section 1); running the script does not.
 
-## 5. Netlify site (one site for both apps, D-26)
+## 5. Check the deployment
 
-Bedo Chat uses **one** Netlify site, `bedochat` (`https://bedochat.netlify.app`). It serves the student web app
-and, under `/admin`, the Admin Dashboard. Do not create a second site.
-
-| Path on the site | Served by |
-| --- | --- |
-| `/`, `/login` | Student web app (`apps/web`, Next.js on Netlify's Next.js runtime) |
-| `/sw.js` | Student web app (its notifications service worker) |
-| `/admin`, `/admin/login` | Admin Dashboard (`apps/admin`), static files |
-| `/admin/_next/...` | Admin Dashboard scripts, styles and page data |
-
-`apps/web` and `apps/admin` stay separate applications. They are combined only at build time:
-
-1. Turborepo builds the Admin Dashboard first (`turbo.json`: `@bedo/web#build` depends on `@bedo/admin#build`).
-   The admin app is a static export (`output: 'export'` in `apps/admin/next.config.ts`) under its `/admin`
-   base path, written to `apps/admin/out`.
-2. The web app's build (`apps/web/package.json`) starts with `scripts/bundle-admin-into-web.mjs`, which checks
-   that the export is complete and from the latest admin build, then replaces `apps/web/public/admin` with it.
-   That folder is generated, never committed (`.gitignore`).
-3. `next build` builds the web app. Netlify's Next.js runtime publishes the web app's `public/` folder as
-   static files, so the Admin Dashboard goes out in the same deploy.
-4. No routing rules are needed. Netlify answers a request with a matching static file before it runs the
-   Next.js server function, and its static file matching finds `admin/index.html` for `/admin` and
-   `admin/login.html` for `/admin/login` (with or without a trailing slash). Everything else goes to the web
-   app's Next.js server, so other `/admin/...` paths answer 404 (no catch-all).
-5. `apps/web/netlify.toml` sets the Admin Dashboard's security headers for `/admin` and everything under it
-   (`X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, and a `Permissions-Policy` that turns off camera,
-   microphone, screen capture and location). On Netlify, headers in `next.config` do not apply to files from
-   `public/`, so they live in `netlify.toml`.
-
-Both builds always run in full (`"cache": false` in `turbo.json`): a build replayed from Turborepo's cache adds
-files but never removes old ones, which could leave files from an earlier build in the deploy. Always build
-through Turborepo (`pnpm turbo run build --filter=@bedo/web`, as Netlify does); running only the web app's
-own build script would add whatever admin export was built last.
-
-### How Netlify reads this monorepo
-
-- The site's settings live in `apps/web/netlify.toml`. Netlify finds that file through the site's
-  **Package directory** (`apps/web`). Netlify only allows the package directory to be set in its UI; there is
-  no `netlify.toml` property for it.
-- The **Base directory** stays empty (repository root). Netlify installs dependencies and runs the build
-  command there, so pnpm sees the whole workspace.
-- Every path inside `netlify.toml`, including `publish`, is resolved from the base directory (the repository
-  root), not from the app's folder. That is why `publish` names the app folder (`apps/web/.next`).
-  Phase 1.1 used `publish = ".next"`, which Netlify resolved to `<repo>/.next`, so the Next.js plugin
-  failed with "publish directory was not found" after a successful build. Fixed in Phase 1.2;
-  `scripts/checks.test.mjs` fails if the paths are wrong.
-- **Either Package directory works (D-28).** `apps/admin/netlify.toml` is a byte-for-byte copy of
-  `apps/web/netlify.toml` (a test keeps them identical; change both together). Netlify reads the copy in the
-  site's Package directory, so a site set to `apps/web` (documented) or `apps/admin` (what Netlify's own app
-  detection lists first) builds and publishes the same combined site. Netlify's Next.js runtime takes the app
-  from the build output, not from the Package directory. This replaces the Phase 2.3.1 guard (D-27), which
-  failed every build from `apps/admin`; before that, such a build published the Admin Dashboard alone.
-
-### Exact site settings
-
-| Netlify setting (site configuration → continuous deployment → Build settings) | `bedochat` |
-| --- | --- |
-| Base directory | *(empty)* |
-| Package directory | `apps/web` (`apps/admin` builds the identical site, D-28) |
-| Build command | *(empty: taken from netlify.toml)* |
-| Publish directory | *(empty: taken from netlify.toml)* |
-| Environment variable `NEXT_PUBLIC_API_URL` | Nothing to set: `apps/web/netlify.toml` sets `https://bedochat.com/api` for both apps' builds (D-27), and it takes precedence over a UI value |
-| Environment variable `NEXT_PUBLIC_STORAGE_ORIGIN` (Phase 3, D-31) | The API's `SUPABASE_URL`, e.g. `https://<project>.supabase.co` (public, not a secret). The Content-Security-Policy allows profile pictures and their upload from this exact origin only. Required when profile pictures are set up; without it pictures do not load and uploads fail. A wrong value (not an https origin) fails the build. Redeploy after setting it |
-| Custom domain | *none* (Cloudflare serves `bedochat.com`) |
-
-What `apps/web/netlify.toml` (and its identical copy `apps/admin/netlify.toml`) sets (values in the file take
-precedence over the UI):
-
-| Setting | Value |
-| --- | --- |
-| `command` | `pnpm turbo run build --filter=@bedo/web` (builds the Admin Dashboard export first, then the web app) |
-| `publish` | `apps/web/.next` |
-| `NEXT_PUBLIC_API_URL` | `https://bedochat.com/api` (public address of the API, D-25; not a secret) |
-| `NODE_VERSION` | `24` |
-| `NEXT_TELEMETRY_DISABLED`, `TURBO_TELEMETRY_DISABLED` | `1` |
-| `[[redirects]]` | none (not needed, see above) |
-| `[[headers]]` | Admin Dashboard security headers, including its Content-Security-Policy (D-31), for `/admin` and `/admin/*`; long-term caching for `/admin/_next/static/*` |
-
-pnpm's version comes from `packageManager` in the root `package.json`. The Next.js runtime
-(`@netlify/plugin-nextjs`) is added by Netlify automatically. Do not add or pin it.
-
-### Deploying
-
-One build and one deploy carry both applications. Netlify builds from a Git repository connected to the site.
-Because Bedo Chat is delivered as a ZIP (D-11), either push the unzipped folder to a private repository you
-control and connect the `bedochat` site to it, or deploy from your machine with the Netlify CLI, run from the
-repository root:
-
-```bash
-netlify deploy --build --prod --filter @bedo/web --site bedochat
-```
-
-`--filter @bedo/web` selects the package directory (`apps/web`); `--site bedochat` names the site, so the
-deploy cannot go to a different linked site. There is no separate admin deploy.
-
-**Local deploys after a local build:** if you ran `pnpm build` in the same folder first, run the deploy as
-`TURBO_FORCE=true netlify deploy --build --prod --filter @bedo/web --site bedochat`.
-Netlify's Next.js runtime builds in "standalone" mode, which Turborepo's cache does not tell apart from a
-plain local build; without `TURBO_FORCE=true` a cached local build could be reused and the deploy fails with
-"publish directory does not contain expected Next.js build output". Since D-26 the web and admin builds are
-never taken from the cache, but `TURBO_FORCE=true` is still the safe way to run it. Builds on Netlify itself
-start from a fresh clone and are not affected.
-
-**After deploying, check the site itself** before anything else:
-
-| URL | Expected |
-| --- | --- |
-| `https://bedochat.netlify.app/` | 200, title "Bedo Chat" (redirects to `/login` in the browser when signed out) |
-| `https://bedochat.netlify.app/login` | 200, title "Sign in · Bedo Chat" |
-| `https://bedochat.netlify.app/sw.js` | 200, the student app's service worker |
-| `https://bedochat.netlify.app/admin` | 200, title "Bedo Chat Admin" (or a redirect to `/admin/` first, if Netlify's Pretty URLs adds the slash) |
-| `https://bedochat.netlify.app/admin/login` | 200, title "Sign in · Bedo Chat Admin" |
-
-Signing in only works on `https://bedochat.com`: the API accepts only that origin.
-
-Never set `DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY` or any other server secret (`ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SETTINGS_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`,
-`EDGE_SECRET`) on the Netlify site.
-
-Do not add `bedochat.com` to the Netlify site: Cloudflare serves it (section 5a). If a separate admin-only
-Netlify site was ever created before D-26, delete it or stop its builds: it is no longer used.
-
-## 5a. Cloudflare: one domain for everything (D-25)
-
-1. **Add `bedochat.com` to Cloudflare** and change the domain's nameservers at your registrar to the two
-   Cloudflare gives you.
-2. **Remove any existing `bedochat.com` (apex) record** in Cloudflare → DNS; the Worker's Custom Domain
-   creates its own record and certificate in step 4.
-3. **SSL/TLS**: encryption mode *Full (strict)*; turn on *Always Use HTTPS*. Network → *WebSockets* on (the
-   default).
-4. **Worker**: `deploy/cloudflare/wrangler.toml` holds the three origins (D-37): `WEB_ORIGIN` and `ADMIN_ORIGIN`
-   both `https://bedochat.netlify.app` (the one Netlify site, D-26), and `API_ORIGIN` the Render API
-   `https://bedochat-api.onrender.com`. Cloudflare deploys it from GitHub (section 0, step 4); the secret
-   `EDGE_SECRET` is added in the Worker's settings. The deploy attaches `bedochat.com` to the Worker as a Custom
-   Domain (Cloudflare's recommended setup); every request to it is answered by the Worker.
-4a. **www**: add a DNS record `CNAME www → bedochat.com`, Proxied, and a Redirect Rule (Rules → Redirect
-   Rules) from `https://www.bedochat.com/*` to `https://bedochat.com/${1}`, status 301, preserving the query.
-5. **Plan**: the Free plan includes 100,000 Worker requests a day; when real use exceeds that, switch on
-   Workers Paid (check Cloudflare's current pricing). A WebSocket connection counts once, not per message.
-6. **WebSockets (Phase 3)**: the Worker passes `wss://bedochat.com/api/v1/realtime` through to the API with
-   the edge secret (no change to the Worker). Cloudflare closes connections that stay silent too long and
-   during API restarts; the web app sends a heartbeat every 25 seconds and reconnects on its own, and nothing
-   is lost: every change is also fetched by sync after a reconnect.
-7. **Browsers**: the Admin Dashboard needs a browser that sends Fetch Metadata headers (Chrome, Edge,
-   Firefox 90+, Safari 16.4+). Older browsers are refused, not let through.
-8. **Admins**: because the student app and the Admin Dashboard share one origin (D-25), sign in to the
-   dashboard in a separate browser profile from any student account.
-9. **Content-Security-Policy (D-31, Phase 3)**: the student app's pages send a strict policy with a fresh
-   nonce per response (`apps/web/proxy.ts`; Netlify runs it as an edge function before the pages), and the
-   Admin Dashboard's pages send the fixed policy in `netlify.toml`. Both allow scripts and styles from
-   `bedochat.com` only and the API and its WebSocket on `bedochat.com`; the student app also allows profile
-   pictures from the one Supabase project in `NEXT_PUBLIC_STORAGE_ORIGIN` (section 5). Do not add Cloudflare features that inject
-   scripts into pages (Rocket Loader, Zaraz, Web Analytics auto-injection, email obfuscation, Bot Fight Mode's
-   JavaScript challenge on page routes): the policy blocks them. The student app's pages are now rendered per
-   request (a nonce cannot be in a page built ahead of time).
-10. **Service worker**: the student app's service worker (`/sw.js`, notifications only) has the scope `/`,
-   which also covers `/admin`. It has no fetch handler and caches nothing; keep it that way, since the same
-   origin means it would sit in front of the Admin Dashboard too.
-
-## 6. Check the deployment
-
-- `GET https://bedochat.com/api/health/ready` returns `{"status":"ok", ...}` with both checks `up`.
-- Open `https://bedochat.com/admin`: it sends you to `/admin/login`. Sign in with the Super Admin's phone
-  number, password and authenticator app (the first time: section 4a); the dashboard opens at `/admin` and
-  stays after a reload. A wrong password answers "The phone number or password is incorrect." and no WhatsApp
-  message is sent for admin sign-in.
-  In *OTP / WhatsApp*, **Send test message** reports that Waabek accepted it. Add your own number to the
-  academy phone list.
-- Open `https://bedochat.com/`: it sends you to `/login`. Sign in with that number: the WhatsApp code
-  arrives, a new account asks for a name, and the chat interface opens at `/`. A reload keeps you signed in
-  (if not, check `WEB_ORIGINS` and `API_PUBLIC_PATH`).
-- Sign in on a second browser: the first one shows a login alert (and a notification, if turned on).
+- `https://bedochat.com/api/health/ready` returns `"status":"ok"` with the database `up`.
+- `https://bedochat.com/admin` sends you to `/admin/login`. Sign in with the Super Admin's phone number,
+  password and authenticator app (the first time: section 4a or 4d); the dashboard opens at `/admin` and stays
+  after a reload. A wrong password answers "The phone number or password is incorrect." In *OTP / WhatsApp*,
+  **Send test message** reports that Waabek accepted it. Add your own number to the academy phone list.
+- `https://bedochat.com/` sends you to `/login`. Sign in with that number: the WhatsApp code arrives, a new
+  account asks for a name, the chat interface opens at `/`, and a reload keeps you signed in.
 - A number not on the list gets the same "code sent" answer, and no WhatsApp message.
-- In Redis, the key `<QUEUE_PREFIX>:worker:heartbeat` is refreshed every 15 seconds.
-- Phase 3: sign in on two browsers with two academy numbers, find the other by name and send a message: it
-  appears on the other browser at once (WebSocket through Cloudflare), and the sender's message shows
-  delivered, then seen. In the browser's developer tools, the Network panel shows the connection to
-  `wss://bedochat.com/api/v1/realtime` and the Console shows no Content-Security-Policy errors on `/`,
-  `/login`, `/admin` and `/admin/login`.
+- Sign in on two browsers with two academy numbers, find the other by name and send a message: it appears on
+  the other browser within a second or two, with typing shown while the other person writes. In the browser's
+  developer tools, the Network panel shows the WebSocket to `wss://<ref>.supabase.co/realtime/v1/websocket`
+  joining a private channel (a refused join means "Allow public access" or the JWT secret is wrong; the device then
+  still gets every change by checking every 20 seconds)
+  and a `POST /api/v1/realtime/heartbeat` every 25 seconds; the Console shows no Content-Security-Policy
+  errors on `/`, `/login`, `/admin` and `/admin/login`.
+- Netlify → Logs → Functions shows the API's request logs (no passwords, codes or keys).

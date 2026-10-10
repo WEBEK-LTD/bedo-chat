@@ -8,13 +8,12 @@ describe('response schemas', () => {
       status: 'ok',
       checks: {
         database: { status: 'up', latencyMs: 3, connectionString: 'postgres://secret' },
-        redis: { status: 'up', latencyMs: 1 },
       },
       internalNote: 'must not leak',
     });
     expect(parsed).toEqual({
       status: 'ok',
-      checks: { database: { status: 'up', latencyMs: 3 }, redis: { status: 'up', latencyMs: 1 } },
+      checks: { database: { status: 'up', latencyMs: 3 } },
     });
   });
 

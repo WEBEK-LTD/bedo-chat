@@ -52,7 +52,6 @@ export const privacySchema = z.object({
   lastSeenVisibility: visibilitySchema,
   photoVisibility: visibilitySchema,
   messagesFrom: visibilitySchema,
-  callsFrom: visibilitySchema,
 });
 export type Privacy = z.infer<typeof privacySchema>;
 export const updatePrivacyBodySchema = privacySchema

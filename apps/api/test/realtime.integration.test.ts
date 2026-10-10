@@ -1,270 +1,199 @@
-import { randomBytes } from 'node:crypto';
-import type { AddressInfo } from 'node:net';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { REALTIME_CLOSE, type RealtimeServerMessage } from '@bedo/contracts';
+import { REALTIME_SIGNAL_EVENT } from '@bedo/contracts';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import WebSocket from 'ws';
-import { ADMIN_ORIGIN, type IntegrationEnv, query, setupIntegrationEnv, startApp, WEB_ORIGIN } from './integration-env.js';
+import { TOKEN_GRACE_SECONDS, verifyRealtimeToken } from '../src/messaging/realtime-token.js';
+import { CHANNEL_PERIOD_MS, RealtimeService } from '../src/messaging/realtime.service.js';
+import { type IntegrationEnv, query, setupIntegrationEnv, startApp, TEST_REALTIME_JWT_SECRET } from './integration-env.js';
 import { client, createUser, resetMessageLimit, type TestUser } from './messaging-helpers.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-/** Random per run, like the production Worker secret (never a fixed value in the repository). */
-const EDGE_SECRET = randomBytes(32).toString('base64');
-
-interface Device {
-  ws: WebSocket;
-  received: RealtimeServerMessage[];
-  /** Resolves with the first message (already received or arriving) that matches. */
-  next<T extends RealtimeServerMessage>(match: (message: RealtimeServerMessage) => message is T, timeoutMs?: number): Promise<T>;
-  /** Resolves when nothing matching arrives within the time. */
-  none(match: (message: RealtimeServerMessage) => boolean, waitMs?: number): Promise<void>;
-  closed: Promise<number>;
-  send(message: unknown): void;
-}
-
-const isType =
-  <K extends RealtimeServerMessage['type']>(type: K, extra: (message: Extract<RealtimeServerMessage, { type: K }>) => boolean = () => true) =>
-  (message: RealtimeServerMessage): message is Extract<RealtimeServerMessage, { type: K }> =>
-    message.type === type && extra(message as Extract<RealtimeServerMessage, { type: K }>);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 /**
- * Realtime gateway (step 3.5) over a real socket: handshake checks (path, origin, edge secret), token
- * authentication, multi-device delivery and catch-up after a disconnect, typing and presence with blocks
- * and privacy, and disconnection when the session ends.
+ * Realtime (D-36) against real Postgres, with the API as the least-privilege runtime role and Supabase Realtime
+ * replaced by a recorder of what the API broadcasts: private per-device channels, content-free signals only to
+ * valid sessions, heartbeat-based presence, typing and presence with blocks and privacy.
  */
-describe.runIf(enabled)('Phase 3 realtime gateway (real Postgres + Redis, runtime role)', () => {
+describe.runIf(enabled)('Phase 3.3 realtime signals (real Postgres, runtime role)', () => {
   let ctx: IntegrationEnv;
   let app: NestFastifyApplication;
-  let baseUrl: string;
-  const devices: Device[] = [];
 
   beforeAll(async () => {
-    ctx = await setupIntegrationEnv({ EDGE_SECRET });
+    ctx = await setupIntegrationEnv();
     app = await startApp(ctx.env);
-    await app.listen({ host: '127.0.0.1', port: 0 });
-    const address = app.getHttpServer().address() as AddressInfo;
-    baseUrl = `ws://127.0.0.1:${address.port}`;
   });
 
   afterAll(async () => {
-    for (const device of devices) {
-      device.ws.terminate();
-    }
     await app?.close();
     await ctx?.teardown();
   });
 
-  // The edge secret travels on HTTP requests through app.inject too (the edge guard checks every request).
-  const edge = { 'x-bedo-edge-secret': EDGE_SECRET };
+  const api = (user: TestUser) => client(app, user);
+  const newUser = (name: string) => createUser(ctx, app, name);
+  const topicOf = async (user: TestUser) => (await api(user).get('/v1/realtime/channel')).body.topic as string;
+  const signals = (topic: string) => ctx.realtime.on(topic);
 
-  function open(options: { origin?: string; secret?: string | null; path?: string } = {}): Promise<{ device?: Device; status?: number }> {
-    const headers: Record<string, string> = {};
-    const secret = options.secret === undefined ? EDGE_SECRET : options.secret;
-    if (secret) {
-      headers['x-bedo-edge-secret'] = secret;
-    }
-    const ws = new WebSocket(`${baseUrl}${options.path ?? '/v1/realtime'}`, { origin: options.origin ?? WEB_ORIGIN, headers });
-    return new Promise((resolve) => {
-      ws.once('unexpected-response', (_request, response) => {
-        resolve({ status: response.statusCode });
-        ws.terminate();
-      });
-      ws.once('error', () => undefined);
-      ws.once('open', () => {
-        const received: RealtimeServerMessage[] = [];
-        const waiters: Array<() => void> = [];
-        ws.on('message', (data) => {
-          received.push(JSON.parse(String(data)) as RealtimeServerMessage);
-          for (const waiter of [...waiters]) waiter();
-        });
-        const closed = new Promise<number>((done) => ws.once('close', (code) => done(code)));
-        const device: Device = {
-          ws,
-          received,
-          closed,
-          send: (message) => ws.send(JSON.stringify(message)),
-          next: (match, timeoutMs = 5_000) =>
-            new Promise((done, fail) => {
-              let index = 0;
-              const check = () => {
-                for (; index < received.length; index += 1) {
-                  const message = received[index]!;
-                  if (match(message)) {
-                    index += 1;
-                    cleanup();
-                    done(message);
-                    return;
-                  }
-                }
-              };
-              const timer = setTimeout(() => {
-                cleanup();
-                fail(new Error(`no matching realtime message; received: ${JSON.stringify(received.map((m) => m.type))}`));
-              }, timeoutMs);
-              const cleanup = () => {
-                clearTimeout(timer);
-                const at = waiters.indexOf(check);
-                if (at >= 0) waiters.splice(at, 1);
-              };
-              waiters.push(check);
-              check();
-            }),
-          none: async (match, waitMs = 1_000) => {
-            const start = received.length;
-            await new Promise((done) => setTimeout(done, waitMs));
-            expect(received.slice(start).filter(match)).toEqual([]);
-          },
-        };
-        devices.push(device);
-        resolve({ device });
-      });
+  it('gives each device its own unguessable channel, and only to a signed-in device', async () => {
+    const ana = await newUser('Ana Channel');
+    const channel = await api(ana).get('/v1/realtime/channel');
+    expect(channel.status).toBe(200);
+    expect(channel.body).toEqual({
+      enabled: true,
+      url: 'https://realtime.bedo.test',
+      apiKey: 'public-anon-key-for-tests',
+      accessToken: expect.any(String),
+      topic: expect.stringMatching(/^bedo-[A-Za-z0-9_-]{43}$/),
+      expiresAt: expect.any(String),
+      expiresInSeconds: expect.any(Number),
+      event: REALTIME_SIGNAL_EVENT,
+      heartbeatSeconds: 25,
     });
-  }
-
-  async function connect(user: TestUser, since?: number): Promise<Device> {
-    const { device } = await open();
-    if (!device) {
-      throw new Error('handshake refused');
+    // Stable for the session, never derived from anything the device could know (session id, user id).
+    expect(await topicOf(ana)).toBe(channel.body.topic);
+    expect(channel.body.topic).not.toContain(ana.sessionId);
+    expect(channel.body.topic).not.toContain(ana.id);
+    const second = await createUser(ctx, app, 'Ana Second Device');
+    expect(await topicOf(second)).not.toBe(channel.body.topic);
+    // The name changes every hour, at the time given.
+    const expiresAt = Date.parse(channel.body.expiresAt);
+    expect(expiresAt % CHANNEL_PERIOD_MS).toBe(0);
+    expect(expiresAt - Date.now()).toBeGreaterThan(0);
+    expect(expiresAt - Date.now()).toBeLessThanOrEqual(CHANNEL_PERIOD_MS);
+    // The device schedules the change from the server's count, not its own clock.
+    expect(Math.abs(channel.body.expiresInSeconds - (expiresAt - Date.now()) / 1000)).toBeLessThan(5);
+    const realtime = app.get(RealtimeService);
+    const next = realtime.channelFor(ana.sessionId, expiresAt);
+    expect(next.topic).not.toBe(channel.body.topic);
+    expect(realtime.channelFor(ana.sessionId, expiresAt - 1).topic).toBe(channel.body.topic);
+    // Private channel (Realtime Authorization): the device's token names this one channel, as the role
+    // `authenticated`, for this user, and ends a few minutes after the channel name changes.
+    const claims = verifyRealtimeToken(TEST_REALTIME_JWT_SECRET, channel.body.accessToken);
+    expect(claims).toMatchObject({ aud: 'authenticated', role: 'authenticated', sub: ana.id, bedo_topic: channel.body.topic });
+    expect(claims!.exp).toBe(expiresAt / 1000 + TOKEN_GRACE_SECONDS);
+    expect(verifyRealtimeToken('another-secret-that-is-long-enough-0123456', channel.body.accessToken)).toBeNull();
+    // The other device's token names only its own channel.
+    const secondToken = (await api(second).get('/v1/realtime/channel')).body.accessToken as string;
+    expect(verifyRealtimeToken(TEST_REALTIME_JWT_SECRET, secondToken)?.bedo_topic).toBe(await topicOf(second));
+    expect(verifyRealtimeToken(TEST_REALTIME_JWT_SECRET, secondToken)?.sub).toBe(second.id);
+    for (const url of ['/v1/realtime/channel', '/v1/realtime/heartbeat', '/v1/realtime/typing', '/v1/realtime/offline']) {
+      const method = url.endsWith('channel') ? 'GET' : 'POST';
+      const anonymous = await app.inject({ method, url, payload: method === 'POST' ? {} : undefined });
+      expect(anonymous.statusCode, url).toBe(401);
     }
-    device.send({ type: 'auth', token: user.token });
-    const ready = await device.next(isType('ready'));
-    device.send({ type: 'sync', since: since ?? ready.seq });
-    return device;
-  }
-
-  // Through the edge: requests carry the edge secret (EDGE_SECRET is set for this app).
-  const api = (user: TestUser) => client(app, user, edge);
-  const newUser = (name: string) => createUser(ctx, app, name, edge);
-
-  it('accepts upgrades only on /v1/realtime, from the web app origin, through the edge', async () => {
-    expect((await open({ path: '/v1/other' })).status).toBe(404);
-    expect((await open({ origin: 'https://evil.example' })).status).toBe(403);
-    expect((await open({ origin: ADMIN_ORIGIN })).status).toBe(403);
-    expect((await open({ secret: null })).status).toBe(403);
-    expect((await open({ secret: randomBytes(32).toString('base64') })).status).toBe(403);
-    const ok = await open();
-    expect(ok.device).toBeDefined();
-    ok.device!.ws.close();
   });
 
-  it('closes connections with a bad token or that speak before authenticating', async () => {
-    const bad = (await open()).device!;
-    bad.send({ type: 'auth', token: 'not-a-token' });
-    expect(await bad.closed).toBe(REALTIME_CLOSE.unauthenticated);
-    const early = (await open()).device!;
-    early.send({ type: 'sync', since: 0 });
-    expect(await early.closed).toBe(REALTIME_CLOSE.unauthenticated);
-    const garbage = (await open()).device!;
-    garbage.ws.send('{not json');
-    expect(await garbage.closed).toBe(REALTIME_CLOSE.invalidMessage);
-  });
-
-  it('delivers new messages to every device of both users, with delivered status back to the sender', async () => {
+  it('signals every valid device of both users after a message, without any content; the device fetches over HTTP', async () => {
     const ana = await newUser('Ana Realtime');
     const ben = await newUser('Ben Realtime');
     const chat = await api(ana).openChat(ben);
-    const anaPhone = await connect(ana);
-    const benLaptop = await connect(ben);
-    const sent = (await api(ana).send(chat.id, 'hello over the socket')).body;
-    const onBen = await benLaptop.next(isType('updates', (m) => m.sync.messages.some((message) => message.id === sent.id)));
-    expect(onBen.sync.updates.map((update) => update.kind)).toContain('message.new');
-    expect(onBen.sync.chats[0]).toMatchObject({ id: chat.id, unreadCount: 1 });
+    const [anaTopic, benTopic] = [await topicOf(ana), await topicOf(ben)];
+    ctx.realtime.clear();
+    const sent = (await api(ana).send(chat.id, 'hello, signalled')).body;
+    expect(await signals(benTopic)).toEqual([{ type: 'updates' }]);
     // Ana's own device hears about her message too (multi-device sync).
-    await anaPhone.next(isType('updates', (m) => m.sync.messages.some((message) => message.id === sent.id)));
-    benLaptop.send({ type: 'delivered', chatId: chat.id, seq: sent.seq });
-    const delivered = await anaPhone.next(isType('updates', (m) => m.sync.updates.some((update) => update.kind === 'chat.delivered')));
-    expect(delivered.sync.chats[0]!.peerDeliveredSeq).toBe(sent.seq);
+    expect(await signals(anaTopic)).toEqual([{ type: 'updates' }]);
+    // Nothing broadcast ever carries a message: only the signal.
+    expect(JSON.stringify(ctx.realtime.sent)).not.toContain('hello, signalled');
+    expect(ctx.realtime.sent.every((message) => message.event === REALTIME_SIGNAL_EVENT)).toBe(true);
+    const synced = await api(ben).get('/v1/sync?since=0');
+    expect(synced.body.messages.map((message: { id: string }) => message.id)).toContain(sent.id);
+    // Delivered over HTTP: Ana's devices are signalled to fetch the new status.
+    ctx.realtime.clear();
+    expect((await api(ben).post(`/v1/chats/${chat.id}/delivered`, { seq: sent.seq })).status).toBe(200);
+    expect(await signals(anaTopic)).toEqual([{ type: 'updates' }]);
   });
 
-  it('catches a device up after a disconnect, from the last seq it holds', async () => {
-    const cai = await newUser('Cai Offline');
-    const dee = await newUser('Dee Online');
+  it('stops signalling a device as soon as its session ends', async () => {
+    const hal = await newUser('Hal Revoked');
+    const ivy = await newUser('Ivy Sender');
+    const chat = await api(ivy).openChat(hal);
+    const halTopic = await topicOf(hal);
+    await query(ctx.ownerUrl, "update app.sessions set revoked_at = now(), revoke_reason = 'terminated_by_user' where id = $1", [hal.sessionId]);
+    ctx.realtime.clear();
+    await api(ivy).send(chat.id, 'after revoke');
+    expect(await signals(halTopic)).toEqual([]);
+    expect((await api(hal).get('/v1/realtime/channel')).status).toBe(401);
+  });
+
+  it('keeps a device online with heartbeats, which also return the current update position', async () => {
+    const cai = await newUser('Cai Heartbeat');
+    const dee = await newUser('Dee Partner');
     const chat = await api(dee).openChat(cai);
-    const caiDevice = await connect(cai);
-    const first = (await api(dee).send(chat.id, 'one')).body;
-    const got = await caiDevice.next(isType('updates', (m) => m.sync.messages.some((message) => message.id === first.id)));
-    caiDevice.ws.close();
-    await caiDevice.closed;
+    await api(dee).send(chat.id, 'hi');
+    const first = await api(cai).post('/v1/realtime/heartbeat');
+    expect(first.status).toBe(200);
+    const sync = await api(cai).get('/v1/sync?since=0');
+    expect(first.body).toEqual({ seq: sync.body.seq });
+    const peer = (await api(dee).get(`/v1/users/${cai.id}`)).body;
+    expect(peer.presence).toEqual({ online: true, lastSeenAt: null });
     await resetMessageLimit(ctx, dee.id);
-    const second = (await api(dee).send(chat.id, 'two')).body;
-    const third = (await api(dee).send(chat.id, 'three')).body;
-    const back = await connect(cai, got.sync.seq);
-    const caughtUp = await back.next(isType('updates', (m) => m.sync.messages.some((message) => message.id === third.id)));
-    const ids = back.received.flatMap((m) => (m.type === 'updates' ? m.sync.messages.map((message) => message.id) : []));
-    expect(ids).toEqual(expect.arrayContaining([second.id, third.id]));
-    expect(ids).not.toContain(first.id);
-    expect(caughtUp.sync.resync).toBe(false);
+    await api(dee).send(chat.id, 'again');
+    expect((await api(cai).post('/v1/realtime/heartbeat')).body.seq).toBeGreaterThan(first.body.seq);
+    // More than 10 a minute are answered but do nothing more.
+    for (let index = 0; index < 12; index += 1) {
+      expect((await api(cai).post('/v1/realtime/heartbeat')).status).toBe(200);
+    }
   });
 
-  it('relays typing only where a message could be sent, and presence only where privacy allows', async () => {
-    const eve = await newUser('Eve Typing');
+  it('announces coming online and going offline to chat partners only where privacy and blocks allow', async () => {
+    const eve = await newUser('Eve Presence');
     const fin = await newUser('Fin Watching');
     const chat = await api(eve).openChat(fin);
     await api(eve).send(chat.id, 'hi');
-    const finDevice = await connect(fin);
-    // Eve coming online is shown to Fin (last seen Everyone).
-    const eveDevice = await connect(eve);
-    const online = await finDevice.next(isType('presence', (m) => m.userId === eve.id));
-    expect(online.presence).toEqual({ online: true, lastSeenAt: null });
-    eveDevice.send({ type: 'typing', chatId: chat.id });
-    await finDevice.next(isType('typing', (m) => m.chatId === chat.id && m.userId === eve.id));
-    // Fin blocks Eve: her typing no longer reaches him.
-    await api(fin).post(`/v1/users/${eve.id}/block`);
-    await new Promise((done) => setTimeout(done, 2_100));
-    eveDevice.send({ type: 'typing', chatId: chat.id });
-    await finDevice.none((m) => m.type === 'typing', 1_000);
-    // Eve hides her last seen: going offline is not announced to Fin.
-    await api(fin).del(`/v1/users/${eve.id}/block`);
+    const finTopic = await topicOf(fin);
+    ctx.realtime.clear();
+    await api(eve).post('/v1/realtime/heartbeat');
+    expect(await signals(finTopic)).toEqual([{ type: 'presence', userId: eve.id, presence: { online: true, lastSeenAt: null } }]);
+    // A second heartbeat is not a change: nothing more is announced.
+    ctx.realtime.clear();
+    await api(eve).post('/v1/realtime/heartbeat');
+    expect((await signals(finTopic)).filter((signal) => signal.type === 'presence')).toEqual([]);
+    await api(eve).post('/v1/realtime/offline');
+    const offline = (await signals(finTopic)).filter((signal) => signal.type === 'presence');
+    expect(offline).toEqual([{ type: 'presence', userId: eve.id, presence: { online: false, lastSeenAt: expect.stringMatching(/:00\.000Z$/) } }]);
+    // Last seen hidden (P-31): going online is not announced.
     await api(eve).patch('/v1/me/privacy', { lastSeenVisibility: 'nobody' });
-    eveDevice.ws.close();
-    await eveDevice.closed;
-    await finDevice.none((m) => m.type === 'presence' && m.userId === eve.id, 1_000);
+    ctx.realtime.clear();
+    await api(eve).post('/v1/realtime/heartbeat');
+    expect((await signals(finTopic)).filter((signal) => signal.type === 'presence')).toEqual([]);
   });
 
-  it('stops delivering to a device as soon as its session ends, without waiting for a heartbeat', async () => {
-    const hal = await newUser('Hal Revoked');
-    const ivy = await newUser('Ivy Sender');
-    const chat = (await api(ivy).openChat(hal));
-    const device = await connect(hal);
-    const before = (await api(ivy).send(chat.id, 'before revoke')).body;
-    await device.next(isType('updates', (m) => m.sync.messages.some((message) => message.id === before.id)));
-    await query(ctx.ownerUrl, "update app.sessions set revoked_at = now(), revoke_reason = 'terminated_by_user' where id = $1", [hal.sessionId]);
-    const after = (await api(ivy).send(chat.id, 'secret after revoke')).body;
-    expect(await device.closed).toBe(REALTIME_CLOSE.unauthenticated);
-    const delivered = device.received.flatMap((m) => (m.type === 'updates' ? m.sync.messages.map((message) => message.id) : []));
-    expect(delivered).not.toContain(after.id);
+  it('marks a device offline when its heartbeats stop, announced from any later heartbeat', async () => {
+    const gil = await newUser('Gil Vanishing');
+    const kim = await newUser('Kim Partner');
+    const chat = await api(gil).openChat(kim);
+    await api(gil).send(chat.id, 'hi');
+    const kimTopic = await topicOf(kim);
+    await api(gil).post('/v1/realtime/heartbeat');
+    // The tab closed without saying so: 60 seconds later (simulated) the device has expired.
+    await query(ctx.ownerUrl, "update app.presence_devices set expires_at = now() - interval '1 second' where user_id = $1", [gil.id]);
+    ctx.realtime.clear();
+    await api(kim).post('/v1/realtime/heartbeat');
+    const announced = (await signals(kimTopic)).filter((signal) => signal.type === 'presence' && signal.userId === gil.id);
+    expect(announced).toEqual([{ type: 'presence', userId: gil.id, presence: { online: false, lastSeenAt: expect.any(String) } }]);
+    expect((await query(ctx.ownerUrl, 'select 1 from app.presence_devices where user_id = $1', [gil.id])).rowCount).toBe(0);
+    expect((await api(kim).get(`/v1/users/${gil.id}`)).body.presence).toMatchObject({ online: false });
   });
 
-  it('limits connections per account and unauthenticated connections per address', async () => {
-    const jay = await newUser('Jay Many');
-    const many: Device[] = [];
-    for (let index = 0; index < 10; index += 1) {
-      many.push(await connect(jay));
-    }
-    const { device: extra } = await open();
-    extra!.send({ type: 'auth', token: jay.token });
-    expect(await extra!.closed).toBe(REALTIME_CLOSE.tooManyConnections);
-    for (const device of many) device.ws.close();
-    await Promise.all(many.map((device) => device.closed));
-    // Unauthenticated connections from one address.
-    const idle: Device[] = [];
-    for (let index = 0; index < 20; index += 1) {
-      const opened = await open();
-      idle.push(opened.device!);
-    }
-    expect((await open()).status).toBe(429);
-    for (const device of idle) device.ws.close();
-    await Promise.all(idle.map((device) => device.closed));
-    expect((await open()).device).toBeDefined();
-  });
-
-  it('disconnects a device when its session ends (checked on every heartbeat)', async () => {
-    const gil = await newUser('Gil Session');
-    const device = await connect(gil);
-    device.send({ type: 'ping' });
-    await device.next(isType('pong'));
-    await query(ctx.ownerUrl, "update app.sessions set revoked_at = now(), revoke_reason = 'logout' where id = $1", [gil.sessionId]);
-    device.send({ type: 'ping' });
-    expect(await device.closed).toBe(REALTIME_CLOSE.unauthenticated);
+  it('relays typing only where a message could be sent, at most every 2 seconds per chat', async () => {
+    const lia = await newUser('Lia Typing');
+    const max = await newUser('Max Reading');
+    const chat = await api(lia).openChat(max);
+    await api(lia).send(chat.id, 'hi');
+    const maxTopic = await topicOf(max);
+    ctx.realtime.clear();
+    expect((await api(lia).post('/v1/realtime/typing', { chatId: chat.id })).status).toBe(200);
+    await api(lia).post('/v1/realtime/typing', { chatId: chat.id });
+    expect(await signals(maxTopic)).toEqual([{ type: 'typing', chatId: chat.id, userId: lia.id }]);
+    // Not to someone outside the chat, and not to a chat the sender is not in.
+    const outsider = await newUser('Ned Outsider');
+    expect((await api(outsider).post('/v1/realtime/typing', { chatId: chat.id })).status).toBe(200);
+    expect(await signals(maxTopic)).toHaveLength(1);
+    // Max blocks Lia: her typing no longer reaches him.
+    await api(max).post(`/v1/users/${lia.id}/block`);
+    await new Promise((done) => setTimeout(done, 2_100));
+    ctx.realtime.clear();
+    await api(lia).post('/v1/realtime/typing', { chatId: chat.id });
+    expect(await signals(maxTopic)).toEqual([]);
+    expect((await api(lia).post('/v1/realtime/typing', { chatId: 'not-a-uuid' })).status).toBe(400);
   });
 });

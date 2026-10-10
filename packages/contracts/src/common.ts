@@ -1,5 +1,11 @@
 import { z } from 'zod';
 
+/**
+ * Where the API is on the site (D-36): the student web app, the Admin Dashboard and the API are one Netlify
+ * site, so browsers call the API at this same-origin path (https://bedochat.com/api in production).
+ */
+export const API_BASE_PATH = '/api';
+
 /** Machine-readable error codes returned by every Bedo Chat API endpoint. */
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
@@ -42,6 +48,14 @@ export const ERROR_CODES = [
   'USER_BLOCKED',
   /** A fixed maximum was reached (pinned chats, folders). */
   'LIMIT_REACHED',
+  // Phase 4
+  /** The uploaded file is missing, of another type or size than declared, or a program (O-30). */
+  'FILE_INVALID',
+  /** Files cannot be sent because storage is not configured, or GIFs because no GIPHY key is set. */
+  'FEATURE_UNAVAILABLE',
+  // Phase 5
+  /** The member's role or permissions in this group do not allow this. */
+  'NOT_ALLOWED',
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

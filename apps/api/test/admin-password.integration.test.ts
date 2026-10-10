@@ -7,6 +7,8 @@ import {
   ADMIN_ORIGIN,
   ADMIN_TEST_PASSWORD,
   adminCsrf,
+  allShortLivedState,
+  clearState,
   cookieValue,
   type IntegrationEnv,
   issuePasswordSetup,
@@ -16,10 +18,9 @@ import {
   setupIntegrationEnv,
   startApp,
   TOTP_KEY,
-  WEB_ORIGIN,
 } from './integration-env.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 let counter = 0;
 const nextPhone = () => `+2010${String(Date.now() % 1e4).padStart(4, '0')}${String(++counter).padStart(4, '0')}`;
 
@@ -69,7 +70,7 @@ describe.runIf(enabled)('Phase 3.2 admin passwords (D-34, real Postgres + Redis,
   const liveSessions = async (adminId: string) =>
     Number((await owner<{ n: string }>('select count(*) as n from app.admin_sessions where admin_id = $1 and revoked_at is null', [adminId])).rows[0]!.n);
   const clearLimits = async (phone: string) => {
-    await ctx.redis.del(`${ctx.prefix}:rl:admin-password-lock:${phone}`, `${ctx.prefix}:rl:admin-password-fail:${phone}`);
+    await clearState(ctx, `rl:admin-password-lock:${phone}`, `rl:admin-password-fail:${phone}`);
   };
 
   /** An admin with an authenticator, created by SQL (no password yet). */
@@ -286,8 +287,8 @@ describe.runIf(enabled)('Phase 3.2 admin passwords (D-34, real Postgres + Redis,
       expect(locked.json().error.code).toBe('RATE_LIMITED');
       expect(locked.json().error.retryAfterSeconds).toBeGreaterThan(14 * 60);
       expect(locked.json().error.retryAfterSeconds).toBeLessThanOrEqual(15 * 60);
-      const ttl = await ctx.redis.ttl(`${ctx.prefix}:rl:admin-password-lock:${admin.phone}`);
-      expect(ttl).toBeGreaterThan(14 * 60);
+      const lock = await owner<{ ttl: string }>("select extract(epoch from (expires_at - now()))::text as ttl from app.ephemeral where key = $1", [`rl:admin-password-lock:${admin.phone}`]);
+      expect(Number(lock.rows[0]!.ttl)).toBeGreaterThan(14 * 60);
       expect(await events(admin.id)).toContain('admin_password_failed');
       expect((await owner("select 1 from audit.security_events where phone = $1 and event = 'admin_password_locked'", [admin.phone])).rowCount).toBe(1);
       expect((await owner("select 1 from audit.security_events where phone = $1 and event = 'admin_password_locked_attempt'", [admin.phone])).rowCount).toBe(1);
@@ -460,7 +461,7 @@ describe.runIf(enabled)('Phase 3.2 admin passwords (D-34, real Postgres + Redis,
     it('sends no WhatsApp code for admin sign-in', async () => {
       const admin = await withPassword();
       await signIn(admin);
-      expect(await latestCode(ctx.otpQueue, admin.phone)).toBeNull();
+      expect(await latestCode(ctx.waabek, admin.phone)).toBeNull();
     });
   });
 
@@ -544,7 +545,7 @@ describe.runIf(enabled)('Phase 3.2 admin passwords (D-34, real Postgres + Redis,
       for (const [url, payload] of Object.entries(bodies)) {
         const attempts: Array<Record<string, string>> = [
           { origin: ADMIN_ORIGIN, cookie },
-          { origin: WEB_ORIGIN, 'x-bedo-csrf': '1', cookie },
+          { origin: 'http://localhost:8080', 'x-bedo-csrf': '1', cookie },
           { origin: 'https://evil.example', 'x-bedo-csrf': '1', cookie },
           { 'x-bedo-csrf': '1', 'sec-fetch-site': 'cross-site', cookie },
         ];
@@ -565,10 +566,10 @@ describe.runIf(enabled)('Phase 3.2 admin passwords (D-34, real Postgres + Redis,
       (await owner('select * from app.admin_password_setup')).rows,
       (await owner('select id, phone, name, password_hash from app.admin_accounts')).rows,
     ]);
-    const redisValues = JSON.stringify(await Promise.all((await ctx.redis.keys(`${ctx.prefix}:*`)).map(async (key) => [key, await ctx.redis.type(key) === 'string' ? await ctx.redis.get(key) : null])));
+    const stateValues = await allShortLivedState(ctx);
     for (const password of PASSWORDS) {
       expect(history.includes(password), password).toBe(false);
-      expect(redisValues.includes(password), password).toBe(false);
+      expect(stateValues.includes(password), password).toBe(false);
       expect(responses.some((body) => body.includes(password)), password).toBe(false);
     }
   });

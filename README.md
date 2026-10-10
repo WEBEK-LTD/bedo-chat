@@ -4,57 +4,56 @@ Private messaging platform for the academy. Users get exactly **Login → Chat I
 administrators get a separate **Admin Dashboard**. The full requirements, architecture, decision log and
 phase plan live in the *Bedo Chat — Phase 0 Blueprint*; `docs/DECISIONS.md` mirrors the approved decisions.
 
-**Current state: Phase 2 (Accounts and audit foundation).** Students sign in with a WhatsApp code
-(academy phone list only), manage their profile, privacy, devices, 2-Step Verification, notifications and
-account deletion requests inside the chat interface. Admins sign in with their phone number, a password and
-an authenticator app (D-34, Phase 3.2) and manage the academy phone list, deletion requests and 2-Step resets. Every identity, account,
-security and admin action is kept in an append-only history. Messaging starts in Phase 3.
-What Phase 2 contains and how it was verified: [`docs/PHASE-2-REPORT.md`](docs/PHASE-2-REPORT.md).
+**Current state: Phase 3.3 (one Netlify site, D-36).** Students sign in with a WhatsApp code (academy phone
+list only), chat privately with realtime delivery, and manage their profile, privacy, devices, 2-Step
+Verification, notifications and account deletion requests inside the chat interface. Admins sign in with their
+phone number, a password and an authenticator app (D-34) and manage the academy phone list, deletion requests,
+2-Step resets and the WhatsApp settings. Every identity, account, security and admin action is kept in an
+append-only history. The whole system is one Netlify site plus Supabase: the API runs inside the website's
+server functions at `/api`. Phase reports: `docs/PHASE-*-REPORT.md`; the latest is
+[`docs/PHASE-3.3-REPORT.md`](docs/PHASE-3.3-REPORT.md).
 
 ## Repository layout
 
 | Path | What it is |
 | --- | --- |
-| `apps/api` | NestJS 12 HTTP API on Fastify 5: configuration, health checks, error envelope, response contracts, OpenAPI document |
-| `apps/worker` | NestJS background worker with BullMQ queues: heartbeat, verification codes (Waabek WhatsApp), Web Push |
-| `apps/web` | Next.js 16 user app with exactly two routes: `/login` and `/` (chat interface) |
-| `apps/admin` | Next.js 16 admin dashboard, separate app and domain |
-| `packages/config` | Zod-validated environment variables for every service; list of server-only variables |
-| `packages/contracts` | Zod schemas shared by API, worker and clients; builds the OpenAPI 3.1 document |
+| `apps/api` | NestJS 12 API on Fastify 5, run inside the website (D-36: `src/serverless.ts`, no port): accounts, admin, messaging, realtime signals, WhatsApp (Waabek) and Web Push delivery, hourly housekeeping, OpenAPI document |
+| `apps/web` | Next.js 16 website: the user app with exactly two pages, `/login` and `/` (chat interface), and the route `/api/[[...path]]` that serves the API |
+| `apps/admin` | Next.js 16 Admin Dashboard, a separate app; its static export is served by the same site under `/admin` |
+| `packages/config` | Zod-validated environment variables; list of server-only variables |
+| `packages/contracts` | Zod schemas shared by the API and the apps; builds the OpenAPI 3.1 document |
 | `packages/db` | Kysely database access and the checksummed SQL migration runner |
 | `packages/ui` | Design tokens and the Material Symbols icon component |
-| `packages/e2e` | Browser tests of the web and admin apps against the real API, Postgres and Redis (`pnpm e2e`) |
+| `packages/e2e` | Browser tests of the built site (web app, Admin Dashboard and API) against real Postgres (`pnpm e2e`) |
 | `supabase/migrations` | SQL migrations (Supabase file naming), applied by `@bedo/db` |
-| `scripts` | Repository checks: allowed web routes, client-bundle secret guard, edge router tests |
-| `deploy/cloudflare` | The Cloudflare Worker that serves everything from `https://bedochat.com` (D-25) |
+| `scripts` | Repository checks: allowed web routes, client-bundle secret guard, one-site and CSP tests |
 | `docs` | Decision log, phase reports and the deployment guide |
 
 ## Prerequisites
 
 - **Node.js 24** (`.nvmrc`). With nvm: `nvm use`.
 - **pnpm 10.28** (`corepack enable` picks the version pinned in `package.json`).
-- **Docker** for the local Postgres and Redis (or your own Postgres 16+ and Redis 7+).
+- **Docker** for the local Postgres (or your own Postgres 16+). Nothing else: no Redis (D-36).
 
 ## Quick start
 
 ```bash
 pnpm install --frozen-lockfile        # install scripts are blocked by policy (see below)
-pnpm stack:up                         # Postgres on 127.0.0.1:5432, Redis on 127.0.0.1:6379
+pnpm stack:up                         # Postgres on 127.0.0.1:5432
 
-cp apps/api/.env.example apps/api/.env
-cp apps/worker/.env.example apps/worker/.env
 cp packages/db/.env.example packages/db/.env
-cp apps/web/.env.example apps/web/.env.local
-cp apps/admin/.env.example apps/admin/.env.local
+cp apps/web/.env.example apps/web/.env.local   # the site's variables, including the API's (server-only)
 
-pnpm build                            # builds packages, API (+ OpenAPI file), worker, web, admin
+pnpm build                            # builds packages, API (+ OpenAPI file), admin export and web app
 pnpm db:migrate                       # applies supabase/migrations to DATABASE_URL
 
-pnpm --filter @bedo/api start         # http://localhost:4000/health/ready
-pnpm --filter @bedo/worker start
-pnpm --filter @bedo/web dev           # http://localhost:3000
-pnpm --filter @bedo/admin dev         # http://localhost:3001/admin
+pnpm --filter @bedo/admin dev         # the Admin Dashboard's dev server (port 3001)
+pnpm --filter @bedo/web dev           # the site: http://localhost:3000 (/, /login, /admin via the admin
+                                      # dev server, and the API at http://localhost:3000/api/health/ready)
 ```
+
+In development the web app's dev server shows the Admin Dashboard's dev server under `/admin`, so the two apps
+and the API share one origin, as in production.
 
 Before the first sign-in, fill in the Phase 2 variables (see "Accounts (Phase 2)" below), create the first
 Super Admin, sign in to the admin app and add the students' numbers to the academy phone list.
@@ -63,12 +62,10 @@ Super Admin, sign in to the admin app and add the students' numbers to the acade
 
 ## Deployment
 
-Web app and Admin Dashboard deploy together as one Netlify site (D-26, `apps/web/netlify.toml`: the admin
-app's static export is included under `/admin`); the API and worker run as containers
-on persistent hosting (`apps/api/Dockerfile`, `apps/worker/Dockerfile`); data lives in Supabase and queues
-in managed Redis. Production (D-37): Render creates the API, worker and Redis in Singapore from `render.yaml`
-(Blueprint; it asks only for the database password), Supabase stays in Sydney, and Cloudflare deploys the routing
-Worker from `deploy/cloudflare`. Step-by-step instructions: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), section 0.
+One Netlify site is the whole of Bedo Chat (D-36): the web app, the Admin Dashboard under `/admin` (D-26) and
+the API under `/api`, built and deployed together (`apps/web/netlify.toml`). Supabase provides Postgres,
+Storage and Realtime. There is no API host, worker, Redis or Cloudflare Worker. Step-by-step instructions:
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Scripts
 
@@ -78,41 +75,37 @@ Worker from `deploy/cloudflare`. Step-by-step instructions: [`docs/DEPLOYMENT.md
 | `pnpm typecheck` | TypeScript in strict mode across every package |
 | `pnpm test` | Unit tests (Vitest) + repository check tests (`node --test`) |
 | `pnpm build` | Production builds; also writes `apps/api/openapi/openapi.json` |
-| `pnpm test:integration` | Tests against real Postgres and Redis (needs `TEST_DATABASE_URL`, `REDIS_URL`) |
+| `pnpm test:integration` | Tests against real Postgres (needs `TEST_DATABASE_URL`) |
 | `pnpm db:migrate` / `pnpm db:status` | Apply / list migrations for `DATABASE_URL` |
-| `pnpm check:routes` | Fails if the web app has any route other than `/` and `/login` (spec §23): checks page, route and metadata files, forbids `pages/` and `src/` route folders, and checks the last build's route manifest |
+| `pnpm check:routes` | Fails if the web app has any page other than `/` and `/login` (spec §23), or any route other than those and the API route handler `/api/[[...path]]` (D-36): checks page, route and metadata files, forbids `pages/` and `src/` route folders, and checks the last build's route manifest |
 | `pnpm check:bundles` | After `pnpm build`: fails if server-only variable names or values appear in any file served to browsers (see below) |
 | `pnpm verify` | lint + typecheck + test + build + both checks |
-| `pnpm e2e` | Builds API, web and admin for a local API on port 4100 and runs the browser tests (needs `TEST_DATABASE_URL`, `REDIS_URL` and Chromium; set `E2E_CHROMIUM` to its path if it is not `/opt/pw-browsers/chromium`) |
+| `pnpm e2e` | Builds the site and runs the browser tests against it (`next start` behind a local stand-in for Netlify, with local stand-ins for Waabek and Supabase Realtime; needs `TEST_DATABASE_URL`, `openssl` and Chromium; set `E2E_CHROMIUM` to its path if it is not `/opt/pw-browsers/chromium`) |
 | `pnpm --filter @bedo/api admin:create` | Phase 2 tool that creates an admin with an authenticator secret. Optional and not needed: admins are created by SQL (see below). Such an admin still needs a password set with an owner setup token (D-34) |
-| `pnpm --filter @bedo/worker test:live` | Sends one real WhatsApp code through Waabek with a key from your shell (opt-in developer check, see below) |
+| `pnpm --filter @bedo/api test:live` | Sends one real WhatsApp code through Waabek with a key from your shell (opt-in developer check, see below) |
 
 Integration tests need a Postgres role that may create databases and roles (the Docker Compose
-`postgres` user can) and a Redis instance. The database tests create and drop their own temporary
-databases; the API tests use `TEST_DATABASE_URL` directly; the worker tests use a random queue prefix and
-delete only their own keys.
+`postgres` user can). They create and drop their own temporary databases.
 
 ```bash
-TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres \
-REDIS_URL=redis://localhost:6379 \
-pnpm test:integration
+TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres pnpm test:integration
 ```
 
 ## Environment variables
 
-Every service validates its environment at start-up and refuses to start with a list of the invalid
-variable names (values are never printed). Templates: `apps/api/.env.example`,
-`apps/worker/.env.example`, `packages/db/.env.example`, `apps/web/.env.example`, `apps/admin/.env.example`.
+The API validates its environment on its first request and answers 503 (naming the invalid variables in the
+log only; values are never printed) until it is right. Templates: `apps/web/.env.example` (the site, including
+the API's server variables), `packages/db/.env.example` (migrations). Production values: Netlify site
+variables, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) section 2.
 
-Server-only variables (`DATABASE_URL`, `REDIS_URL`, `WAABEK_API_KEY`, `ACCESS_TOKEN_SECRET`,
-`OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY`, `SETTINGS_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`,
-`EDGE_SECRET`) must never be placed
-in a web or admin app (spec §1: the Waabek key is never exposed). Every server variable must be classified as
-secret or non-secret in `packages/config` — a test fails otherwise.
+Server-only variables (`DATABASE_URL`, `WAABEK_API_KEY`, `ACCESS_TOKEN_SECRET`, `OTP_HMAC_SECRET`,
+`ADMIN_TOTP_KEY`, `SETTINGS_ENCRYPTION_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VAPID_PRIVATE_KEY`) are read only by
+the API on the server and must never reach a page (spec §1: the Waabek key is never exposed). Every server
+variable must be classified as secret or non-secret in `packages/config` — a test fails otherwise.
 
 `pnpm check:bundles` scans every file the web and admin apps serve to browsers (`.next/static`,
 prerendered pages in `.next/server/app`, and `public/`) for those variable names, the Waabek host, and the
-actual secret values found in the environment and in `apps/api/.env`, `apps/worker/.env` and
+actual secret values found in the environment and in `apps/web/.env*`, `apps/api/.env` and
 `packages/db/.env`. It cannot see pages rendered per request or values that were encoded or split, so the
 rule still holds in code review: browser code never reads server variables.
 
@@ -135,8 +128,9 @@ variables and confirmed with the owner before deployment.
 - If another run holds the lock for more than 60 seconds, the runner stops with an error instead of waiting
   forever.
 - The runner works on any Postgres, including Supabase. Do not mix it with `supabase db push`.
-- **Supabase: use the direct connection or the session-mode pooler (port 5432).** The transaction-mode
-  pooler (port 6543) cannot hold the migration lock; the runner refuses it.
+- **Supabase: run migrations over the direct connection or the session-mode pooler (port 5432).** The
+  transaction-mode pooler (port 6543) cannot hold the migration lock; the runner refuses it. (The API itself
+  should use the transaction pooler, D-36.)
 - Application tables live in the `app` schema. Browsers never connect to the database (D-08); the baseline
   revokes access for Supabase's `anon` and `authenticated` roles.
 
@@ -145,7 +139,7 @@ variables and confirmed with the owner before deployment.
 | Who | Connects as | Can |
 | --- | --- | --- |
 | Migrations (`pnpm db:migrate`) | The table owner, e.g. `postgres` | Everything: create and alter tables, grants |
-| API and worker (`DATABASE_URL` in their `.env`) | A login role that is a member of `bedo_runtime` | Only what each migration grants `bedo_runtime` (for the audit log: `SELECT`, `INSERT`) |
+| API (`DATABASE_URL` of the site) | A login role that is a member of `bedo_runtime` | Only what each migration grants `bedo_runtime` (for the audit log: `SELECT`, `INSERT`) |
 
 The baseline migration creates the `bedo_runtime` group role. Create the login role once per environment,
 with the password taken from your secret store:
@@ -162,23 +156,22 @@ Docker Compose superuser may be used for convenience.
 ## Accounts (Phase 2)
 
 **Secrets.** The API needs `ACCESS_TOKEN_SECRET`, `OTP_HMAC_SECRET`, `ADMIN_TOTP_KEY` and
-`SETTINGS_ENCRYPTION_KEY`; the worker needs the same `SETTINGS_ENCRYPTION_KEY` (D-32). Generate each with
-`openssl rand -base64 32` and keep them only in the host's secret
-settings or in local `.env` files (ignored by git). Profile pictures need `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`; notifications need a VAPID key pair (`npx web-push generate-vapid-keys`): the
-public key goes to both API and worker, the private key and `VAPID_SUBJECT` to the worker only.
+`SETTINGS_ENCRYPTION_KEY` (D-32). Generate each with `openssl rand -base64 32` and keep them only in the
+Netlify site's variables or in local `.env` files (ignored by git). Profile pictures and realtime need
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY`; notifications need a VAPID key pair
+(`npx web-push generate-vapid-keys`) with `VAPID_SUBJECT`.
 
 **Verification codes** always go through Waabek in development, testing and production (D-22). The Waabek
 API key is an Admin Dashboard setting (D-32): a Super Admin saves it under *OTP / WhatsApp*, it is stored
-encrypted with `SETTINGS_ENCRYPTION_KEY` (AES-256-GCM), and the worker reads it from the database before every
-message, so a change applies to the next message on every worker without a restart. It is never an
-environment variable: the worker refuses to start if `WAABEK_API_KEY` is set. The test code sender
-(`OTP_DELIVERY=test-capture`) exists only for automated tests: configuration rejects it unless `NODE_ENV=test`.
-The dashboard's **Send test message** checks the saved key. A developer can also check a key directly from a
+encrypted with `SETTINGS_ENCRYPTION_KEY` (AES-256-GCM), and the API checks it in the database before every
+message, so a change applies to the next message everywhere without a redeploy. It is never an environment
+variable: the API refuses to start if `WAABEK_API_KEY` is set. Automated tests replace Waabek with a local
+stand-in; nothing in the application can switch it off. The dashboard's **Send test message** checks the saved
+key. A developer can also check a key directly from a
 shell (the key is not stored anywhere by this):
 
 ```bash
-WAABEK_LIVE_TEST_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/worker test:live
+WAABEK_LIVE_TEST_KEY=... WAABEK_LIVE_TEST_PHONE=+2010XXXXXXXX pnpm --filter @bedo/api test:live
 ```
 
 **Admin sign-in (D-34, Phase 3.2).** Phone number + password, then the authenticator (TOTP) code; no admin
@@ -200,16 +193,14 @@ also run `select * from app.open_otp_settings_recovery();` for a one-time recove
 `/admin/login` save a new key only (D-33, section 4b). Roles: `super_admin` (changes) and `moderator`
 (read-only).
 
-**One public domain (D-25).** In production everything is served from `https://bedochat.com`: the student
-chat at `/` and `/login`, the Admin Dashboard at `/admin` and `/admin/login`, the API at `/api`. Cloudflare
-and a small Worker (`deploy/cloudflare/`) route the paths to the one Netlify site (D-26: student app, with the
-Admin Dashboard under `/admin`) and the API host, which
-also carries Phase 3's WebSocket connections. Both apps and the API share one origin, so the API's session
-cookies are first-party (P-14) and scoped under `/api`. Set the API's `CORS_ALLOWED_ORIGINS`, `ADMIN_ORIGINS`
-and `WEB_ORIGINS` to `https://bedochat.com`, `API_PUBLIC_PATH=/api`, and an `EDGE_SECRET` shared with the
-Worker (the API then answers only requests that came through it). On one origin the API cannot tell the
-two apps apart, so admins should use a separate browser profile for the dashboard. Setup:
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md), sections 5 and 5a.
+**One site, one domain (D-25, D-26, D-36).** In production everything is served by one Netlify site at
+`https://bedochat.com`: the student chat at `/` and `/login`, the Admin Dashboard at `/admin` and
+`/admin/login`, the API at `/api` (the web app's own route, in the same server functions). Both apps and the
+API share one origin, so the session cookies are first-party (P-14) and scoped under `/api`, and the API
+accepts cookie-authenticated requests only from pages of that same origin, with nothing to configure. Realtime
+goes through Supabase Realtime: each signed-in device listens on its own private channel for content-free
+signals and fetches the data over HTTP. On one origin the API cannot tell the two apps apart, so admins should
+use a separate browser profile for the dashboard. Setup: [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 **Phone numbers leaving the list (D-24).** When an admin approves an account deletion, or a user changes
 their phone number, the old number is removed from the academy phone list so it can no longer sign in or

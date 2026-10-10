@@ -40,8 +40,8 @@ export class UserAuthGuard implements CanActivate {
   }
 
   /**
-   * Checks an access token and its session. Shared by HTTP requests and the realtime gateway (Phase 3), so
-   * both refuse ended sessions and blocked or deleted accounts the same way.
+   * Checks an access token and its session, so every request refuses ended sessions and blocked or deleted
+   * accounts the same way.
    */
   async authenticate(token: string): Promise<AuthContext> {
     const claims = await this.tokens.verify(token);
@@ -50,8 +50,8 @@ export class UserAuthGuard implements CanActivate {
   }
 
   /**
-   * Refuses a session that has ended or expired, or whose account is blocked or deleted. The realtime
-   * gateway repeats this on every heartbeat, so a long-lived connection ends with its session.
+   * Refuses a session that has ended or expired, or whose account is blocked or deleted. Realtime heartbeats
+   * are ordinary requests, so a device stops being online with its session (D-36).
    */
   async checkSession(sessionId: string, userId: string): Promise<void> {
     const session = await this.sessions.loadActive(sessionId, userId);

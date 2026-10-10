@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/database.d.ts",
+      "default": "./dist/database.js"
     }
   },
   "bin": {

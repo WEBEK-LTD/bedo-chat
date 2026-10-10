@@ -1,13 +1,14 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { DeletionRequestDetail } from '@bedo/contracts';
-import { sql } from 'kysely';
+import type { Database } from '@bedo/db';
+import { sql, type Transaction } from 'kysely';
 import { AppError } from '../common/app-error.js';
 import { normalizePhone } from '../common/phone.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { AuditService } from '../audit/audit.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
+import { PushService } from '../delivery/push.service.js';
 import type { AdminContext } from './admin-auth.service.js';
 
 const PAGE_SIZE = 50;
@@ -22,7 +23,7 @@ export class AdminOperationsService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(SessionsService) private readonly sessions: SessionsService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   private get db() {
@@ -293,78 +294,106 @@ export class AdminOperationsService {
       if (request.status !== 'pending') {
         throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
       }
-      const user = await trx.selectFrom('app.users').selectAll().where('id', '=', request.user_id).forUpdate().executeTakeFirstOrThrow();
-      const actor = { type: 'admin' as const, id: admin.adminId };
-      const identity = { phone: user.phone, name: user.name, username: user.username, bio: user.bio, photo: user.photo_key };
+      return this.eraseAccount(trx, admin, request.user_id, reason ?? null, info, requestId);
+    });
+    this.tellDeleted(userId, subscriptions, 'Your request to delete your Bedo Chat account was approved. The account has been deleted.');
+    return this.deletionRequestDetail(requestId);
+  }
 
-      // The original identity stays in the permanent audit history (D-14, D-17)...
-      await this.audit.account(trx, {
-        userId: user.id,
-        event: 'deletion_approved',
-        actor,
-        reason: reason ?? null,
-        details: { requestId, identity },
-      });
-      for (const field of ['phone', 'name', 'username', 'bio', 'photo'] as const) {
-        await this.audit.identity(trx, { userId: user.id, field, oldValue: identity[field], newValue: null, actor });
-      }
-      // ...and the account itself no longer carries it; other users see "Deleted account".
-      await trx
-        .updateTable('app.users')
-        .set({ status: 'deleted', phone: null, name: null, username: null, bio: null, photo_key: null, deleted_at: sql`now()` })
-        .where('id', '=', user.id)
-        .execute();
-      await trx.deleteFrom('app.two_step').where('user_id', '=', user.id).execute();
-      // D-24: the number can no longer sign in or create a new account; it stays in the history above.
-      if (user.phone) {
-        await this.audit.removeFromPhoneList(trx, { phone: user.phone, reason: 'account_deleted', actor, userId: user.id });
-      }
-      await this.audit.account(trx, { userId: user.id, event: 'deleted', actor });
+  /**
+   * Phase 10: a Super Admin deletes an account directly (spec §22 "delete"), with a reason. The same steps as an
+   * approved deletion request (D-14): the identity moves to the permanent history, the number leaves the academy
+   * list, every session ends, and a pending request of the user is approved with it.
+   */
+  async deleteUserByAdmin(admin: AdminContext, userId: string, reason: string, info: RequestInfo): Promise<void> {
+    const { subscriptions } = await this.db.transaction().execute(async (trx) => {
+      const pending = await trx
+        .selectFrom('app.account_deletion_requests')
+        .select('id')
+        .where('user_id', '=', userId)
+        .where('status', '=', 'pending')
+        .forUpdate()
+        .executeTakeFirst();
+      return this.eraseAccount(trx, admin, userId, reason, info, pending?.id ?? null);
+    });
+    this.tellDeleted(userId, subscriptions, 'An administrator deleted your Bedo Chat account.');
+  }
 
-      // Tell the user on every device, then end every session.
-      const subscriptions = await trx
-        .selectFrom('app.push_subscriptions')
-        .select(['endpoint', 'p256dh', 'auth'])
-        .where('user_id', '=', user.id)
-        .execute();
-      const ended = await this.sessions.revokeAll(trx, user.id, 'account_deleted');
-      await this.audit.security(trx, {
-        subjectType: 'user',
-        subjectId: user.id,
-        event: 'sessions_ended_account_deleted',
-        details: { count: ended.length },
-      });
+  private tellDeleted(userId: string, subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>, body: string): void {
+    if (subscriptions.length > 0) {
+      this.push.notify({ userId, excludeSessionId: null, subscriptions, notification: { title: 'Account deleted', body, tag: 'account-deletion' } });
+    }
+  }
 
-      await trx
-        .updateTable('app.account_deletion_requests')
-        .set({ status: 'approved', decided_by: admin.adminId, decided_at: sql`now()`, decision_reason: reason ?? null })
-        .where('id', '=', requestId)
-        .execute();
-      await this.audit.admin(trx, {
-        adminId: admin.adminId,
-        action: 'account.deletion_approved',
-        targetType: 'user',
-        targetId: user.id,
-        ip: info.ip,
-        userAgent: info.userAgent,
-        metadata: { requestId, reason: reason ?? null },
-      });
-      return { userId: user.id, subscriptions };
+  private async eraseAccount(
+    trx: Transaction<Database>,
+    admin: AdminContext,
+    userId: string,
+    reason: string | null,
+    info: RequestInfo,
+    requestId: string | null,
+  ) {
+    const user = await trx.selectFrom('app.users').selectAll().where('id', '=', userId).forUpdate().executeTakeFirst();
+    if (!user) {
+      throw new AppError(HttpStatus.NOT_FOUND, 'NOT_FOUND');
+    }
+    if (user.status === 'deleted') {
+      throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
+    }
+    const actor = { type: 'admin' as const, id: admin.adminId };
+    const identity = { phone: user.phone, name: user.name, username: user.username, bio: user.bio, photo: user.photo_key };
+
+    // The original identity stays in the permanent audit history (D-14, D-17)...
+    await this.audit.account(trx, {
+      userId: user.id,
+      event: 'deletion_approved',
+      actor,
+      reason,
+      details: { requestId, identity, ...(requestId ? {} : { byAdmin: true }) },
+    });
+    for (const field of ['phone', 'name', 'username', 'bio', 'photo'] as const) {
+      await this.audit.identity(trx, { userId: user.id, field, oldValue: identity[field], newValue: null, actor });
+    }
+    // ...and the account itself no longer carries it; other users see "Deleted account".
+    await trx
+      .updateTable('app.users')
+      .set({ status: 'deleted', phone: null, name: null, username: null, bio: null, photo_key: null, deleted_at: sql`now()` })
+      .where('id', '=', user.id)
+      .execute();
+    await trx.deleteFrom('app.two_step').where('user_id', '=', user.id).execute();
+    // D-24: the number can no longer sign in or create a new account; it stays in the history above.
+    if (user.phone) {
+      await this.audit.removeFromPhoneList(trx, { phone: user.phone, reason: 'account_deleted', actor, userId: user.id });
+    }
+    await this.audit.account(trx, { userId: user.id, event: 'deleted', actor });
+
+    // Tell the user on every device, then end every session.
+    const subscriptions = await trx.selectFrom('app.push_subscriptions').select(['endpoint', 'p256dh', 'auth']).where('user_id', '=', user.id).execute();
+    const ended = await this.sessions.revokeAll(trx, user.id, 'account_deleted');
+    await this.audit.security(trx, {
+      subjectType: 'user',
+      subjectId: user.id,
+      event: 'sessions_ended_account_deleted',
+      details: { count: ended.length },
     });
 
-    if (subscriptions.length > 0) {
-      await this.queues.enqueuePush({
-        userId,
-        excludeSessionId: null,
-        subscriptions,
-        notification: {
-          title: 'Account deleted',
-          body: 'Your request to delete your Bedo Chat account was approved. The account has been deleted.',
-          tag: 'account-deletion',
-        },
-      });
+    if (requestId) {
+      await trx
+        .updateTable('app.account_deletion_requests')
+        .set({ status: 'approved', decided_by: admin.adminId, decided_at: sql`now()`, decision_reason: reason })
+        .where('id', '=', requestId)
+        .execute();
     }
-    return this.deletionRequestDetail(requestId);
+    await this.audit.admin(trx, {
+      adminId: admin.adminId,
+      action: requestId ? 'account.deletion_approved' : 'account.deleted_by_admin',
+      targetType: 'user',
+      targetId: user.id,
+      ip: info.ip,
+      userAgent: info.userAgent,
+      metadata: { requestId, reason },
+    });
+    return { userId: user.id, subscriptions };
   }
 
   async rejectDeletion(admin: AdminContext, requestId: string, reason: string | undefined, info: RequestInfo) {
@@ -411,7 +440,7 @@ export class AdminOperationsService {
       });
       return request.user_id;
     });
-    await this.queues.enqueuePush({
+    this.push.notify({
       userId,
       excludeSessionId: null,
       notification: {
@@ -459,7 +488,7 @@ export class AdminOperationsService {
       });
       return user.id;
     });
-    await this.queues.enqueuePush({
+    this.push.notify({
       userId,
       excludeSessionId: null,
       notification: {

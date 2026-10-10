@@ -1,6 +1,6 @@
-import { type Browser, type BrowserContext, chromium, type Page } from 'playwright-core';
+import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_PASSWORD, ADMIN_URL, createAdmin, query, type Stack, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, createAdmin, launchBrowser, query, type Stack, startStack, totpNow, waitForCode, WEB_URL } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -9,8 +9,7 @@ async function shot(page: Page, name: string) {
   }
 }
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
-const executablePath = process.env.E2E_CHROMIUM ?? '/opt/pw-browsers/chromium';
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 const STUDENT_A = '+201000001001';
 const STUDENT_B = '+201000001002';
@@ -23,7 +22,7 @@ const MODERATOR = '+201000001902';
  * and a second device), login alerts, ending sessions, account deletion approved in the admin dashboard,
  * 2-Step reset by an admin, and the Moderator's read-only access.
  */
-describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + Redis)', () => {
+describe.runIf(enabled)('Phase 2 in the browser (one site: web + admin + API, Postgres)', () => {
   let stack: Stack;
   let browser: Browser;
   let adminPage: Page;
@@ -50,7 +49,7 @@ describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + 
 
   beforeAll(async () => {
     stack = await startStack();
-    browser = await chromium.launch({ executablePath, headless: true });
+    browser = await launchBrowser();
     superSecret = await createAdmin(stack, SUPER_ADMIN, 'Head Office', 'super_admin');
     adminPage = await newPage();
   });
@@ -76,8 +75,11 @@ describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + 
     await adminPage.getByText('The authenticator code is incorrect').waitFor();
     await adminPage.getByLabel('Authenticator code').fill(totpNow(superSecret));
     await adminPage.getByRole('button', { name: 'Sign in' }).click();
-    await adminPage.getByRole('heading', { name: 'Academy phone list' }).waitFor();
+    // Phase 10: the dashboard opens on the overview.
+    await adminPage.getByRole('heading', { name: 'Overview' }).waitFor();
     await adminPage.getByText('Head Office · Super Admin').waitFor();
+    await adminPage.getByRole('button', { name: 'Academy phone list' }).click();
+    await adminPage.getByRole('heading', { name: 'Academy phone list' }).waitFor();
     await shot(adminPage, '01-admin-phone-list');
   });
 
@@ -262,6 +264,7 @@ describe.runIf(enabled)('Phase 2 in the browser (web + admin + API + Postgres + 
     await page.getByLabel('Authenticator code').fill(totpNow(moderatorSecret));
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.getByText('Floor Moderator · Moderator').waitFor();
+    await page.getByRole('button', { name: 'Academy phone list' }).click();
     await page.getByText('Your Moderator role can view the list.').waitFor();
     expect(await page.getByRole('button', { name: '2-Step reset' }).count()).toBe(0);
     expect(await page.getByRole('heading', { name: 'Add a number' }).count()).toBe(0);

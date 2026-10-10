@@ -6,7 +6,15 @@ import { FoldersService } from './folders.service.js';
 import { MessagesService } from './messages.service.js';
 
 const KINDS: ReadonlySet<string> = new Set(UPDATE_KINDS);
-const MESSAGE_KINDS: ReadonlySet<UpdateKind> = new Set(['message.new', 'message.edited', 'message.deleted', 'message.pinned', 'message.unpinned']);
+const MESSAGE_KINDS: ReadonlySet<UpdateKind> = new Set([
+  'message.new',
+  'message.edited',
+  'message.deleted',
+  'message.pinned',
+  'message.unpinned',
+  'message.reactions',
+  'message.poll',
+]);
 
 /**
  * Sync (P-17, blueprint: Sync): a device sends the last update seq it holds and gets everything after
@@ -65,7 +73,8 @@ export class SyncService {
     const allowedChats = new Set(chats.map((chat) => chat.id));
     return {
       seq,
-      updates: updates.filter((update) => update.chatId === null || allowedChats.has(update.chatId)),
+      // "chat.removed" concerns a chat the user is no longer in: it is kept so their devices drop it.
+      updates: updates.filter((update) => update.chatId === null || allowedChats.has(update.chatId) || update.kind === 'chat.removed'),
       hasMore: seq < last,
       resync: false,
       chats,

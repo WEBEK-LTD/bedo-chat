@@ -1,20 +1,18 @@
-import { readFileSync } from 'node:fs';
 import { parsePhoneNumberFromString } from 'libphonenumber-js/max';
+import { COMMON_LIST } from './common-passwords.list.js';
 
 /**
  * Admin password rules beyond length (D-34): a password may not be the admin's own phone number in any common
- * spelling, and may not be on the built-in common-password list (assets/common-passwords.txt, loaded once from
- * disk; no network calls). Length (12–128 characters, no forced character mix) is checked by the contract.
+ * spelling, and may not be on the built-in common-password list (common-passwords.list.ts, compiled into the API;
+ * no file or network access). Length (12–128 characters, no forced character mix) is checked by the contract.
  */
-
-const LIST_URL = new URL('../../assets/common-passwords.txt', import.meta.url);
 
 let commonPasswords: ReadonlySet<string> | null = null;
 
-/** Loads the list once. Fails loudly (the API does not start) if the file is missing or empty. */
+/** Builds the list once. Fails loudly if it is missing or incomplete. */
 export function loadCommonPasswords(): ReadonlySet<string> {
   if (!commonPasswords) {
-    const entries = readFileSync(LIST_URL, 'utf8')
+    const entries = COMMON_LIST.join('\n')
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0);

@@ -15,7 +15,6 @@ export const readyResponseSchema = z.object({
   status: z.enum(['ok', 'unavailable']),
   checks: z.object({
     database: dependencyCheckSchema,
-    redis: dependencyCheckSchema,
   }),
 });
 export type ReadyResponse = z.infer<typeof readyResponseSchema>;

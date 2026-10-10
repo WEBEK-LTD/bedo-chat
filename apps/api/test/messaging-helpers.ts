@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { clearCooldown, type IntegrationEnv, latestCode, query } from './integration-env.js';
+import { clearCooldown, clearState, type IntegrationEnv, latestCode, query } from './integration-env.js';
 
 let phoneCounter = 0;
 let ipCounter = 0;
@@ -21,13 +21,13 @@ export interface TestUser {
 export async function createUser(ctx: IntegrationEnv, app: NestFastifyApplication, name: string, extraHeaders: Record<string, string> = {}): Promise<TestUser> {
   const phone = nextPhone();
   await query(ctx.ownerUrl, 'insert into app.academy_phone_list (phone, added_by) values ($1, gen_random_uuid())', [phone]);
-  await clearCooldown(ctx.redis, ctx.prefix, phone);
+  await clearCooldown(ctx, phone);
   const ip = nextIp();
   await app.inject({ method: 'POST', url: '/v1/auth/otp/request', payload: { phone }, remoteAddress: ip, headers: extraHeaders });
   const verified = await app.inject({
     method: 'POST',
     url: '/v1/auth/otp/verify',
-    payload: { phone, code: await latestCode(ctx.otpQueue, phone) },
+    payload: { phone, code: await latestCode(ctx.waabek, phone) },
     remoteAddress: ip,
     headers: extraHeaders,
   });
@@ -61,5 +61,5 @@ export function client(app: NestFastifyApplication, user: TestUser, extraHeaders
 
 /** Clears a user's message rate-limit window (tests send many messages). */
 export async function resetMessageLimit(ctx: IntegrationEnv, userId: string): Promise<void> {
-  await ctx.redis.del(`${ctx.prefix}:rl:messages:${userId}`);
+  await clearState(ctx, `rl:messages:${userId}`);
 }

@@ -18,6 +18,9 @@ import {
   okResponseSchema,
   peerSchema,
   readChatBodySchema,
+  realtimeChannelResponseSchema,
+  realtimeHeartbeatResponseSchema,
+  realtimeTypingBodySchema,
   type ReportBody,
   reportBodySchema,
   screenshotEventBodySchema,
@@ -37,6 +40,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { ChatsService } from './chats.service.js';
 import { FoldersService } from './folders.service.js';
 import { MessagesService } from './messages.service.js';
+import { RealtimeActivityService } from './realtime-activity.service.js';
 import { SafetyService } from './safety.service.js';
 import { SyncService } from './sync.service.js';
 import { UsersService } from './users.service.js';
@@ -281,5 +285,44 @@ export class SafetyAndSyncController {
   @ResponseSchema(syncResponseSchema)
   updates(@CurrentAuth() auth: AuthContext, @Query(new ZodValidationPipe(syncQuerySchema)) query: z.infer<typeof syncQuerySchema>) {
     return this.sync.since(auth.userId, query.since);
+  }
+}
+
+/**
+ * Realtime (D-36): where this device listens for signals, and what it tells the server while it is open. A
+ * device is online while it sends a heartbeat every 25 seconds (P-18).
+ */
+@Controller('v1/realtime')
+@UseGuards(UserAuthGuard)
+export class RealtimeController {
+  constructor(@Inject(RealtimeActivityService) private readonly activity: RealtimeActivityService) {}
+
+  @Get('channel')
+  @ResponseSchema(realtimeChannelResponseSchema)
+  channel(@CurrentAuth() auth: AuthContext) {
+    return this.activity.channel(auth.userId, auth.sessionId);
+  }
+
+  @Post('heartbeat')
+  @HttpCode(200)
+  @ResponseSchema(realtimeHeartbeatResponseSchema)
+  heartbeat(@CurrentAuth() auth: AuthContext) {
+    return this.activity.heartbeat(auth.userId, auth.sessionId);
+  }
+
+  @Post('typing')
+  @HttpCode(200)
+  @ResponseSchema(okResponseSchema)
+  async typing(@CurrentAuth() auth: AuthContext, @Body(new ZodValidationPipe(realtimeTypingBodySchema)) body: z.infer<typeof realtimeTypingBodySchema>) {
+    await this.activity.typing(auth.userId, auth.sessionId, body.chatId);
+    return OK;
+  }
+
+  @Post('offline')
+  @HttpCode(200)
+  @ResponseSchema(okResponseSchema)
+  async offline(@CurrentAuth() auth: AuthContext) {
+    await this.activity.offline(auth.userId, auth.sessionId);
+    return OK;
   }
 }

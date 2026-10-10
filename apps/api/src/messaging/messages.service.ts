@@ -12,10 +12,24 @@ import { AuditService, type Executor } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/user-auth.guard.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService } from '../database/database.service.js';
+import { FilesService, type VerifiedFile } from '../media/files.service.js';
+import { GifsService } from '../media/gifs.service.js';
+import { StickersService } from '../media/stickers.service.js';
+import { MentionsService } from '../groups/mentions.service.js';
+import { PollsService } from '../groups/polls.service.js';
 import { MessagingLimitsService } from './messaging-limits.service.js';
-import { PermissionService } from './permissions.service.js';
+import { NotificationsService } from './notifications.service.js';
+import { type ChatAccess, PermissionService, type PostKind } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import { MESSAGE_COLUMNS, type MessageRow, ViewsService } from './views.service.js';
+
+/**
+ * Phase 6: a scheduled message sent by the API when due (D-40). Its sender's limits were counted when it was
+ * scheduled, and its file was checked then (it is ready, owned by the sender, and not sent before).
+ */
+export interface SendOptions {
+  scheduled?: boolean;
+}
 
 /** Raised inside a transaction when another request with the same client id won the race. */
 class DuplicateRequest extends Error {}
@@ -36,7 +50,18 @@ export class MessagesService {
     @Inject(UpdateLogService) private readonly updateLog: UpdateLogService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(MessagingLimitsService) private readonly limits: MessagingLimitsService,
+    @Inject(FilesService) private readonly files: FilesService,
+    @Inject(GifsService) private readonly gifs: GifsService,
+    @Inject(StickersService) private readonly stickers: StickersService,
+    @Inject(PollsService) private readonly polls: PollsService,
+    @Inject(MentionsService) private readonly mentions: MentionsService,
+    @Inject(NotificationsService) private readonly notifications: NotificationsService,
   ) {}
+
+  /** What a new message carries, for the group permission it needs. */
+  private static postKind(body: SendMessageBody): PostKind {
+    return body.poll ? 'poll' : body.stickerId || body.gifId ? 'sticker' : body.fileId ? 'media' : 'text';
+  }
 
   private async viewOne(db: Executor, viewerId: string, messageId: string): Promise<Message> {
     const row = await db.selectFrom('app.messages').select(MESSAGE_COLUMNS).where('id', '=', messageId).executeTakeFirstOrThrow();
@@ -93,23 +118,55 @@ export class MessagesService {
     return members.filter((member) => !hiddenFor.has(member));
   }
 
-  /** Send (blueprint: Write path). Re-sending with the same client id returns the stored message. */
-  async send(auth: AuthContext, chatId: string, body: SendMessageBody): Promise<Message> {
+  /**
+   * Send (blueprint: Write path): text, a file with an optional caption, a sticker or a GIF. Re-sending with the same
+   * client id returns the stored message. A file is read back and checked before the message exists (Phase 4).
+   */
+  async send(auth: AuthContext, chatId: string, body: SendMessageBody, options: SendOptions = {}): Promise<Message> {
     const previous = await this.existingRequest(auth.userId, body.clientId);
     if (previous) {
       return this.replay(auth.userId, previous, 'send', chatId);
     }
-    await this.limits.messages(auth.userId);
+    if (!options.scheduled) {
+      await this.limits.messages(auth.userId);
+    }
+    const kind = MessagesService.postKind(body);
+    {
+      // Membership and the right to post are checked before any file is fetched or checked (and again below).
+      const access = await this.permissions.chatAccess(this.database.db, auth.userId, chatId);
+      await this.permissions.assertCanPost(this.database.db, auth.userId, access, kind);
+      if (body.poll && access.type === 'private') {
+        // Polls are for groups (Phase 5) and channels (Phase 6).
+        throw new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
+      }
+    }
+    let verified: VerifiedFile | null = null;
+    let fileId: string | null = null;
+    if (body.fileId && options.scheduled) {
+      fileId = await this.files.assertPrepared(auth.userId, body.fileId);
+    } else if (body.fileId) {
+      verified = await this.files.verify(auth.userId, body.fileId);
+      fileId = verified.fileId;
+    } else if (body.gifId) {
+      fileId = await this.gifs.fileFor(auth.userId, body.gifId);
+    }
     let messageId: string;
     try {
       messageId = await this.updateLog.run(async (trx, updates) => {
         const access = await this.permissions.chatAccess(trx, auth.userId, chatId);
-        await this.permissions.assertCanSend(trx, auth.userId, access.peerId);
+        await this.permissions.assertCanPost(trx, auth.userId, access, kind);
         if (body.replyToId) {
           await this.assertVisibleInChat(trx, auth.userId, chatId, body.replyToId);
         }
+        if (body.stickerId) {
+          await this.stickers.assertSendable(trx, body.stickerId);
+        }
+        const pollId = body.poll ? await this.polls.create(trx, chatId, auth.userId, body.poll) : null;
         const [id] = await this.newIds(trx, 1);
         await this.claimRequest(trx, auth.userId, body.clientId, 'send', chatId, [id!]);
+        if (verified && !(await this.files.markReady(trx, auth.userId, verified))) {
+          throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
+        }
         const seq = await this.allocateSeqs(trx, chatId, 1);
         await trx
           .insertInto('app.messages')
@@ -119,11 +176,18 @@ export class MessagesService {
             seq,
             sender_id: auth.userId,
             client_id: body.clientId,
-            text: body.text,
+            kind: pollId ? 'poll' : fileId ? 'media' : body.stickerId ? 'sticker' : 'text',
+            text: body.text ?? null,
             reply_to_id: body.replyToId ?? null,
+            file_id: fileId,
+            sticker_id: body.stickerId ?? null,
+            poll_id: pollId,
           })
           .execute();
-        updates.addFor([auth.userId, access.peerId], { kind: 'message.new', chatId, messageId: id! });
+        if (access.type !== 'private' && body.text) {
+          await this.mentions.record(trx, chatId, id!, body.text);
+        }
+        updates.addFor(await this.permissions.audienceOf(trx, auth.userId, access), { kind: 'message.new', chatId, messageId: id! });
         return id!;
       });
     } catch (error) {
@@ -135,6 +199,8 @@ export class MessagesService {
       }
       throw error;
     }
+    // Phase 7: the members are notified after the response (D-41).
+    this.notifications.messagesCreated(chatId, [messageId], auth.userId);
     return this.viewOne(this.database.db, auth.userId, messageId);
   }
 
@@ -159,6 +225,8 @@ export class MessagesService {
     if (stored.kind !== kind || stored.conversation_id !== chatId) {
       throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
     }
+    // Phase 9: a retry shows the message only to someone still in the chat.
+    await this.permissions.chatAccess(this.database.db, viewerId, chatId);
     return this.viewOne(this.database.db, viewerId, stored.message_ids[0]!);
   }
 
@@ -183,7 +251,11 @@ export class MessagesService {
     await this.updateLog.run(async (trx, updates) => {
       const message = await this.lockOwnVisible(trx, auth.userId, messageId);
       const access = await this.permissions.chatAccess(trx, auth.userId, message.conversation_id);
-      await this.permissions.assertCanSend(trx, auth.userId, access.peerId);
+      await this.permissions.assertCanPost(trx, auth.userId, access, 'text');
+      if (message.kind === 'sticker' || message.kind === 'poll') {
+        // Stickers and polls have no text to edit.
+        throw new AppError(HttpStatus.FORBIDDEN, 'FORBIDDEN');
+      }
       if (message.text === text) {
         return;
       }
@@ -194,11 +266,15 @@ export class MessagesService {
         action: 'edited',
         previousText: message.text,
         newText: text,
+        fileId: message.file_id,
         actor: { type: 'user', id: auth.userId },
         sessionId: auth.sessionId,
       });
       await trx.updateTable('app.messages').set({ text, edited_at: sql`now()` }).where('id', '=', messageId).execute();
-      updates.addFor(await this.audience(trx, [auth.userId, access.peerId], messageId), {
+      if (access.type !== 'private') {
+        await this.mentions.record(trx, message.conversation_id, messageId, text);
+      }
+      updates.addFor(await this.audience(trx, await this.permissions.audienceOf(trx, auth.userId, access), messageId), {
         kind: 'message.edited',
         chatId: message.conversation_id,
         messageId,
@@ -226,6 +302,8 @@ export class MessagesService {
    * limit (O-27). Each message's text goes to the audit history in the same transaction.
    */
   async delete(auth: AuthContext, body: DeleteMessagesBody): Promise<void> {
+    // Phase 9: deleting for both notifies every member's devices.
+    await this.limits.peerActions(auth.userId);
     await this.updateLog.run(async (trx, updates) => {
       const access = await this.permissions.chatAccess(trx, auth.userId, body.chatId);
       const rows = await trx
@@ -254,6 +332,9 @@ export class MessagesService {
             senderId: row.sender_id,
             action: 'deleted_for_me',
             previousText: row.text,
+            fileId: row.file_id,
+            stickerId: row.sticker_id,
+            pollId: row.poll_id,
             actor,
             sessionId: auth.sessionId,
           });
@@ -267,9 +348,11 @@ export class MessagesService {
         }
         return;
       }
-      if (rows.some((row) => row.sender_id !== auth.userId)) {
+      // Their own messages, or anyone's for a group admin with the right to delete messages (Phase 5).
+      if (rows.some((row) => row.sender_id !== auth.userId) && !this.permissions.hasRight(access, 'delete_messages')) {
         throw new AppError(HttpStatus.FORBIDDEN, 'FORBIDDEN');
       }
+      const members = await this.permissions.audienceOf(trx, auth.userId, access);
       for (const row of rows) {
         if (row.deleted_at !== null) {
           continue;
@@ -280,6 +363,9 @@ export class MessagesService {
           senderId: row.sender_id,
           action: 'deleted_for_both',
           previousText: row.text,
+          fileId: row.file_id,
+          stickerId: row.sticker_id,
+          pollId: row.poll_id,
           actor,
           sessionId: auth.sessionId,
         });
@@ -288,7 +374,7 @@ export class MessagesService {
           .set({ text: null, deleted_at: sql`now()`, deleted_by: auth.userId })
           .where('id', '=', row.id)
           .execute();
-        const audience = await this.audience(trx, [auth.userId, access.peerId], row.id);
+        const audience = await this.audience(trx, members, row.id);
         updates.addFor(audience, { kind: 'message.deleted', chatId: body.chatId, messageId: row.id });
         const unpinned = await trx.deleteFrom('app.message_pins').where('conversation_id', '=', body.chatId).where('message_id', '=', row.id).executeTakeFirst();
         if (Number(unpinned.numDeletedRows) > 0) {
@@ -322,7 +408,7 @@ export class MessagesService {
     let created: string[];
     try {
       created = await this.updateLog.run(async (trx, updates) => {
-        await this.permissions.chatAccess(trx, auth.userId, body.fromChatId);
+        const fromAccess = await this.permissions.chatAccess(trx, auth.userId, body.fromChatId);
         const sources = await trx
           .selectFrom('app.messages as m')
           .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
@@ -337,21 +423,36 @@ export class MessagesService {
         if (sources.length !== body.messageIds.length) {
           throw notFound();
         }
+        // Phase 9: an open quiz cannot be forwarded: a copy elsewhere would show its answer before the class answered.
+        const pollIds = sources.map((source) => source.poll_id).filter((id): id is string => id !== null);
+        if (pollIds.length > 0) {
+          const openQuiz = await trx.selectFrom('app.polls').select('id').where('id', 'in', pollIds).where('kind', '=', 'quiz').where('closed_at', 'is', null).executeTakeFirst();
+          if (openQuiz) throw new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
+        }
         const targets = [...body.targets].sort((a, b) => (a.chatId < b.chatId ? -1 : a.chatId > b.chatId ? 1 : 0));
         const accesses = await this.permissions.chatAccesses(trx, auth.userId, targets.map((target) => target.chatId));
+        const kinds = new Set<PostKind>(sources.map((source) => (source.kind === 'poll' ? 'poll' : source.kind === 'sticker' ? 'sticker' : source.kind === 'media' ? 'media' : 'text')));
         for (const target of targets) {
           const access = accesses.get(target.chatId);
           if (!access) {
             throw notFound();
           }
-          await this.permissions.assertCanSend(trx, auth.userId, access.peerId);
+          for (const kind of kinds) {
+            await this.permissions.assertCanPost(trx, auth.userId, access, kind);
+          }
         }
         const createdIds: string[] = [];
+        const perChat: Array<[string, string[]]> = [];
         for (const target of targets) {
           const access = accesses.get(target.chatId)!;
           const ids = await this.newIds(trx, sources.length);
           await this.claimRequest(trx, auth.userId, target.clientId, 'forward', target.chatId, ids);
           const firstSeq = await this.allocateSeqs(trx, target.chatId, sources.length);
+          // Phase 9: a forwarded poll is a new poll of the target chat (its own votes and voters).
+          const pollCopies = new Map<string, string>();
+          for (const source of sources) {
+            if (source.poll_id) pollCopies.set(source.id, await this.polls.copy(trx, source.poll_id, target.chatId, auth.userId));
+          }
           await trx
             .insertInto('app.messages')
             .values(
@@ -361,16 +462,31 @@ export class MessagesService {
                 seq: firstSeq + index,
                 sender_id: auth.userId,
                 client_id: target.clientId,
+                kind: source.kind,
                 text: source.text,
-                forward_from_user_id: source.forward_from_user_id ?? source.sender_id,
+                // The copy references the same stored file or sticker (blueprint: a forward shares the file).
+                file_id: source.file_id,
+                sticker_id: source.sticker_id,
+                poll_id: pollCopies.get(source.id) ?? null,
+                // The first origin is kept; a channel's own posts are forwarded as from the channel (D-40).
+                ...(source.forward_from_user_id || source.forward_from_chat_id
+                  ? { forward_from_user_id: source.forward_from_user_id, forward_from_chat_id: source.forward_from_chat_id }
+                  : fromAccess.type === 'channel'
+                    ? { forward_from_chat_id: body.fromChatId }
+                    : { forward_from_user_id: source.sender_id }),
               })),
             )
             .execute();
+          const audience = await this.permissions.audienceOf(trx, auth.userId, access);
           for (const id of ids) {
-            updates.addFor([auth.userId, access.peerId], { kind: 'message.new', chatId: target.chatId, messageId: id });
+            updates.addFor(audience, { kind: 'message.new', chatId: target.chatId, messageId: id });
           }
           createdIds.push(...ids);
+          perChat.push([target.chatId, ids]);
         }
+        return { createdIds, perChat };
+      }).then(({ createdIds, perChat }) => {
+        for (const [chatId, ids] of perChat) this.notifications.messagesCreated(chatId, ids, auth.userId);
         return createdIds;
       });
     } catch (error) {
@@ -404,6 +520,11 @@ export class MessagesService {
     if (!complete) {
       throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
     }
+    // Phase 9: a retry shows the copies only to someone still in each chat.
+    const accesses = await this.permissions.chatAccesses(this.database.db, viewerId, stored.map((row) => row.conversation_id));
+    if (stored.some((row) => !accesses.has(row.conversation_id))) {
+      throw notFound();
+    }
     return this.orderedViews(
       viewerId,
       stored.flatMap((row) => row.message_ids),
@@ -430,14 +551,14 @@ export class MessagesService {
         if (message.deleted_at !== null) {
           throw notFound();
         }
-        await this.permissions.assertCanSend(trx, auth.userId, access.peerId);
+        await this.assertCanPin(trx, auth.userId, access);
         const added = await trx
           .insertInto('app.message_pins')
           .values({ conversation_id: message.conversation_id, message_id: messageId, pinned_by: auth.userId })
           .onConflict((conflict) => conflict.columns(['conversation_id', 'message_id']).doNothing())
           .executeTakeFirst();
         if (Number(added.numInsertedOrUpdatedRows ?? 0) > 0) {
-          updates.addFor(await this.audience(trx, [auth.userId, access.peerId], messageId), {
+          updates.addFor(await this.audience(trx, await this.permissions.audienceOf(trx, auth.userId, access), messageId), {
             kind: 'message.pinned',
             chatId: message.conversation_id,
             messageId,
@@ -445,9 +566,12 @@ export class MessagesService {
         }
         return;
       }
+      if (access.type !== 'private') {
+        await this.assertCanPin(trx, auth.userId, access);
+      }
       const removed = await trx.deleteFrom('app.message_pins').where('conversation_id', '=', message.conversation_id).where('message_id', '=', messageId).executeTakeFirst();
       if (Number(removed.numDeletedRows) > 0) {
-        updates.addFor(await this.audience(trx, [auth.userId, access.peerId], messageId), {
+        updates.addFor(await this.audience(trx, await this.permissions.audienceOf(trx, auth.userId, access), messageId), {
           kind: 'message.unpinned',
           chatId: message.conversation_id,
           messageId,
@@ -455,6 +579,17 @@ export class MessagesService {
       }
     });
     return this.viewOne(this.database.db, auth.userId, messageId);
+  }
+
+  /** Pinning needs the right to send in a private chat, and the pin permission (or admin right) in a group. */
+  private async assertCanPin(db: Executor, userId: string, access: ChatAccess): Promise<void> {
+    if (access.type === 'private') {
+      await this.permissions.assertCanSend(db, userId, access.peerId!);
+      return;
+    }
+    if (!this.permissions.may(access, 'pin_messages', 'pin_messages')) {
+      throw new AppError(HttpStatus.FORBIDDEN, 'NOT_ALLOWED');
+    }
   }
 
   /** Chat history, oldest first, in pages of at most 50 (P-17). */
@@ -504,6 +639,7 @@ export class MessagesService {
    * chat the viewer is a member of, never messages deleted for both sides or hidden for the viewer.
    */
   async search(viewerId: string, chatId: string, q: string, before?: number): Promise<Message[]> {
+    await this.limits.searches(viewerId);
     const db = this.database.db;
     await this.permissions.chatAccess(db, viewerId, chatId);
     let builder = db

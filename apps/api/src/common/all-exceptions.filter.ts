@@ -50,6 +50,9 @@ const SAFE_MESSAGES: Record<ErrorCode, string> = {
   CANNOT_MESSAGE: "You can't message this user",
   USER_BLOCKED: 'Unblock this user to send messages.',
   LIMIT_REACHED: 'You have reached the limit for this.',
+  FILE_INVALID: 'The file could not be accepted.',
+  FEATURE_UNAVAILABLE: 'This is not available right now.',
+  NOT_ALLOWED: 'You are not allowed to do this in this group.',
 };
 
 /**
@@ -61,7 +64,6 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('Errors');
 
   catch(exception: unknown, host: ArgumentsHost): void {
-    // HTTP only. The realtime gateway (Phase 3) gets its own filter with its own error shape.
     if (host.getType() !== 'http') {
       throw exception;
     }

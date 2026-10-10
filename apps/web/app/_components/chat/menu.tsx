@@ -1,7 +1,7 @@
 'use client';
 
 import { Icon, type IconName } from '@bedo/ui';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export interface MenuItem {
   label: string;
@@ -11,10 +11,30 @@ export interface MenuItem {
   disabled?: boolean;
 }
 
-/** A small action menu opened from an icon button; closes on selection, Escape or a click outside. */
+/** Space kept between an open menu and the edge of the screen. */
+const SCREEN_MARGIN = 8;
+
+/**
+ * A small action menu opened from an icon button; closes on selection, Escape or a click outside. Phase 13: on a
+ * small screen the open menu is moved back inside the screen, and opens upwards when there is no room below.
+ */
 export function ActionMenu({ label, items, icon = 'more_vert', align = 'right' }: { label: string; items: MenuItem[]; icon?: IconName; align?: 'left' | 'right' }) {
   const [open, setOpen] = useState(false);
+  const [place, setPlace] = useState({ x: 0, up: false });
   const root = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+
+  // Measured once per opening, in the menu's natural place (before anything is moved).
+  useLayoutEffect(() => {
+    if (!open || !menu.current) return;
+    const rect = menu.current.getBoundingClientRect();
+    let x = 0;
+    if (rect.right > window.innerWidth - SCREEN_MARGIN) x = window.innerWidth - SCREEN_MARGIN - rect.right;
+    if (rect.left + x < SCREEN_MARGIN) x = SCREEN_MARGIN - rect.left;
+    const button = root.current?.getBoundingClientRect();
+    const up = rect.bottom > window.innerHeight - SCREEN_MARGIN && button !== undefined && button.top - rect.height - SCREEN_MARGIN > 0;
+    setPlace({ x, up });
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -39,16 +59,21 @@ export function ActionMenu({ label, items, icon = 'more_vert', align = 'right' }
         aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          setPlace({ x: 0, up: false });
+          setOpen((value) => !value);
+        }}
         className="grid size-9 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
       >
         <Icon name={icon} size={20} />
       </button>
       {open ? (
         <div
+          ref={menu}
           role="menu"
           aria-label={label}
-          className={`absolute top-full z-30 mt-1 min-w-48 rounded-md border border-line bg-surface py-1 shadow-sm ${align === 'right' ? 'right-0' : 'left-0'}`}
+          style={place.x ? { transform: `translateX(${Math.round(place.x)}px)` } : undefined}
+          className={`absolute z-30 min-w-48 max-w-[calc(100vw-16px)] rounded-md border border-line bg-surface py-1 shadow-sm ${place.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
           {items.map((item) => (
             <button

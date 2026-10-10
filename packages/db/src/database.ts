@@ -1,5 +1,6 @@
 import { type ColumnType, type Generated, Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
+import { SUPABASE_ROOT_CA_2021 } from './supabase-ca.js';
 
 export interface AuditLogTable {
   id: Generated<string>;
@@ -30,10 +31,11 @@ export type SessionRevokeReason =
   | 'refresh_reuse'
   | 'account_deleted'
   | 'account_blocked'
-  | 'phone_changed';
+  | 'phone_changed'
+  | 'ended_by_admin';
 export type OtpPurpose = 'sign_in' | 'change_phone' | 'admin_sign_in';
 export type SecurityNoticeKind = 'new_login' | 'deletion_requested' | 'deletion_rejected' | 'two_step_reset';
-export type AccountEvent = 'created' | 'deletion_requested' | 'deletion_approved' | 'deletion_rejected' | 'deleted';
+export type AccountEvent = 'created' | 'deletion_requested' | 'deletion_approved' | 'deletion_rejected' | 'deleted' | 'suspended' | 'banned' | 'reactivated';
 export type IdentityField = 'phone' | 'name' | 'username' | 'bio' | 'photo';
 
 export interface AcademyPhoneListTable {
@@ -136,8 +138,17 @@ export interface UserPrivacyTable {
   last_seen_visibility: Generated<Visibility>;
   photo_visibility: Generated<Visibility>;
   messages_from: Generated<Visibility>;
+  /** Unused since D-45 (no calls); kept so the live database needs no change. */
   calls_from: Generated<Visibility>;
   updated_at: CreatedAt;
+}
+
+/** Phase 13 (D-46): the site's Web Push key pair, one row, never changed. */
+export interface PushKeysTable {
+  id: Generated<boolean>;
+  public_key: string;
+  private_key_enc: string;
+  created_at: CreatedAt;
 }
 
 export interface SessionsTable {
@@ -251,8 +262,11 @@ export interface SecurityEventsTable {
 }
 
 // Phase 3: messaging core.
-export type ConversationType = 'private';
-export type MessageKind = 'text';
+export type ConversationType = 'private' | 'group' | 'channel';
+export type MemberRole = 'owner' | 'admin' | 'member' | 'subscriber';
+export type ScheduledStatus = 'pending' | 'sending' | 'sent' | 'cancelled' | 'failed';
+export type MessageKind = 'text' | 'media' | 'sticker' | 'poll';
+export type FileKind = 'photo' | 'video' | 'audio' | 'voice' | 'video_note' | 'file' | 'gif';
 export type ReportReason = 'spam' | 'harassment' | 'inappropriate_content' | 'other';
 export type MessageRevisionAction = 'edited' | 'deleted_for_me' | 'deleted_for_both';
 type BigIntColumn = ColumnType<string, string | number | bigint, string | number | bigint>;
@@ -266,6 +280,11 @@ export interface ConversationsTable {
   last_seq: ColumnType<string, string | number | undefined, string | number>;
   last_message_at: Date | null;
   created_at: CreatedAt;
+  title: string | null;
+  description: string | null;
+  photo_key: string | null;
+  deleted_at: Date | null;
+  is_public: Generated<boolean>;
 }
 
 export interface ConversationMembersTable {
@@ -274,6 +293,91 @@ export interface ConversationMembersTable {
   joined_at: CreatedAt;
   read_seq: ColumnType<string, string | number | undefined, string | number>;
   delivered_seq: ColumnType<string, string | number | undefined, string | number>;
+  role: Generated<MemberRole>;
+  admin_rights: Generated<string[]>;
+  denied_permissions: Generated<string[]>;
+  restricted_until: Date | null;
+}
+
+export interface GroupSettingsTable {
+  conversation_id: string;
+  default_permissions: Generated<string[]>;
+  hide_member_count: Generated<boolean>;
+  hide_member_list: Generated<boolean>;
+  updated_at: Generated<Date>;
+}
+
+export interface InviteLinksTable {
+  id: Generated<string>;
+  conversation_id: string;
+  code: string;
+  name: string | null;
+  created_by: string;
+  created_at: CreatedAt;
+  expires_at: Date | null;
+  usage_limit: number | null;
+  usage_count: Generated<number>;
+  requires_approval: Generated<boolean>;
+  revoked_at: Date | null;
+}
+
+export interface JoinRequestsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  user_id: string;
+  invite_link_id: string | null;
+  requested_at: CreatedAt;
+  status: Generated<'pending' | 'approved' | 'declined' | 'withdrawn'>;
+  decided_by: string | null;
+  decided_at: Date | null;
+}
+
+export interface PollsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  created_by: string;
+  question: string;
+  options: string[];
+  kind: 'regular' | 'quiz';
+  anonymous: boolean;
+  multiple: boolean;
+  correct_option: number | null;
+  explanation: string | null;
+  closed_at: Date | null;
+  created_at: CreatedAt;
+}
+
+export interface PollVotesTable {
+  poll_id: string;
+  user_id: string;
+  options: number[];
+  voted_at: CreatedAt;
+}
+
+export interface MessageMentionsTable {
+  message_id: string;
+  conversation_id: string;
+  user_id: string;
+}
+
+export interface UserPermissionsTable {
+  user_id: string;
+  create_groups: Generated<boolean>;
+  create_channels: Generated<boolean>;
+  schedule_messages: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Generated<Date>;
+}
+
+export interface MembershipEventsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  user_id: string;
+  action: string;
+  actor_type: ActorType;
+  actor_id: string | null;
+  details: ColumnType<Record<string, unknown>, Record<string, unknown> | undefined, never>;
+  occurred_at: CreatedAt;
 }
 
 export interface MessagesTable {
@@ -286,11 +390,77 @@ export interface MessagesTable {
   text: string | null;
   reply_to_id: string | null;
   forward_from_user_id: string | null;
+  forward_from_chat_id: string | null;
   created_at: CreatedAt;
   edited_at: Date | null;
   deleted_at: Date | null;
   deleted_by: string | null;
+  file_id: string | null;
+  sticker_id: string | null;
+  poll_id: string | null;
+  /** Phase 10: removed for everyone by this admin (O-18: a reported message). */
+  removed_by_admin: string | null;
   search_vector: ColumnType<string, never, never>;
+}
+
+export interface FilesTable {
+  id: Generated<string>;
+  owner_id: string;
+  kind: FileKind;
+  mime_type: string;
+  size_bytes: BigIntColumn;
+  file_name: string | null;
+  object_path: string;
+  thumbnail_path: string | null;
+  width: number | null;
+  height: number | null;
+  duration_ms: number | null;
+  waveform: number[] | null;
+  status: Generated<'pending' | 'ready'>;
+  created_at: CreatedAt;
+  ready_at: Date | null;
+}
+
+export interface StickerPacksTable {
+  id: Generated<string>;
+  name: string;
+  created_by: string | null;
+  created_at: CreatedAt;
+  archived_at: Date | null;
+}
+
+export interface StickersTable {
+  id: Generated<string>;
+  pack_id: string;
+  emoji: string;
+  object_path: string;
+  mime_type: 'image/png' | 'image/webp';
+  width: number;
+  height: number;
+  position: Generated<number>;
+  created_at: CreatedAt;
+  removed_at: Date | null;
+}
+
+export interface GifSettingsTable {
+  id: Generated<boolean>;
+  giphy_key_enc: string | null;
+  updated_by: string | null;
+  updated_at: Date | null;
+}
+
+export interface GifFilesTable {
+  giphy_id: string;
+  file_id: string;
+  created_at: CreatedAt;
+}
+
+export interface MessageReactionsTable {
+  message_id: string;
+  conversation_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: CreatedAt;
 }
 
 export interface MessageRequestsTable {
@@ -322,6 +492,7 @@ export interface UserChatStateTable {
   pinned_at: Date | null;
   archived_at: Date | null;
   marked_unread: Generated<boolean>;
+  muted_until: Date | null;
   updated_at: CreatedAt;
 }
 
@@ -377,6 +548,81 @@ export interface UserPresenceTable {
   last_seen_at: Timestamp;
 }
 
+/** Phase 3.3 (D-36): short-lived server state with an expiry (what Redis held before). */
+export interface EphemeralTable {
+  key: string;
+  value: string;
+  expires_at: Timestamp;
+}
+
+export interface RateCountersTable {
+  key: string;
+  count: number;
+  expires_at: Timestamp;
+}
+
+export interface RateEventsTable {
+  bucket: string;
+  at: Timestamp;
+}
+
+export interface PresenceDevicesTable {
+  user_id: string;
+  session_id: string;
+  expires_at: Timestamp;
+  /** Phase 7: the chat this device is showing (not pushed about it). */
+  viewing_chat_id: string | null;
+}
+
+/** Phase 10: the decision on a report (append-only). */
+export interface ReportDecisionsTable {
+  report_id: string;
+  admin_id: string;
+  decision: 'dismissed' | 'message_removed' | 'user_suspended' | 'user_banned';
+  note: string | null;
+  decided_at: CreatedAt;
+}
+
+/** Phase 10 (O-20): notifications an admin sends to everyone or to one chat's members, sent in batches. */
+export interface BroadcastsTable {
+  id: Generated<string>;
+  admin_id: string;
+  title: string;
+  body: string;
+  audience: 'all' | 'chat';
+  conversation_id: string | null;
+  status: Generated<'sending' | 'sent'>;
+  last_subscription_id: string | null;
+  devices: Generated<number>;
+  created_at: CreatedAt;
+  finished_at: Date | null;
+}
+
+/** Phase 9: people an admin removed from a group or channel (they cannot rejoin on their own). */
+export interface ChatBansTable {
+  conversation_id: string;
+  user_id: string;
+  banned_by: string | null;
+  /** Phase 10: removed by a system admin. */
+  banned_by_admin: string | null;
+  banned_at: CreatedAt;
+}
+
+/** Phase 7: notification settings per user (defaults when there is no row). */
+export interface NotificationSettingsTable {
+  user_id: string;
+  private_chats: Generated<boolean>;
+  groups: Generated<boolean>;
+  channels: Generated<boolean>;
+  previews: Generated<boolean>;
+  updated_at: CreatedAt;
+}
+
+export interface MaintenanceRunsTable {
+  name: string;
+  last_run_at: Timestamp;
+}
+
 export interface MessageRevisionsTable {
   id: Generated<string>;
   message_id: string;
@@ -385,12 +631,33 @@ export interface MessageRevisionsTable {
   action: MessageRevisionAction;
   previous_text: string | null;
   new_text: string | null;
+  file_id: string | null;
+  sticker_id: string | null;
+  poll_id: string | null;
   actor_type: ActorType;
   actor_id: string | null;
   session_id: string | null;
   /** Set by a database trigger to the writing transaction. */
   tx_id: ColumnType<string, never, never>;
   occurred_at: CreatedAt;
+}
+
+/** Phase 6: messages sent by the API at a set time. */
+export interface ScheduledMessagesTable {
+  id: Generated<string>;
+  conversation_id: string;
+  sender_id: string;
+  session_id: string;
+  client_id: string;
+  send_at: Date;
+  payload: Json;
+  status: Generated<ScheduledStatus>;
+  attempts: Generated<number>;
+  error_code: string | null;
+  message_id: string | null;
+  created_at: CreatedAt;
+  updated_at: CreatedAt;
+  sent_at: Date | null;
 }
 
 export interface ScreenshotEventsTable {
@@ -445,8 +712,33 @@ export interface Database {
   'app.user_sync_state': UserSyncStateTable;
   'app.update_log': UpdateLogTable;
   'app.user_presence': UserPresenceTable;
+  'app.ephemeral': EphemeralTable;
+  'app.rate_counters': RateCountersTable;
+  'app.rate_events': RateEventsTable;
+  'app.presence_devices': PresenceDevicesTable;
+  'app.maintenance_runs': MaintenanceRunsTable;
   'audit.message_revisions': MessageRevisionsTable;
   'audit.screenshot_events': ScreenshotEventsTable;
+  'app.files': FilesTable;
+  'app.sticker_packs': StickerPacksTable;
+  'app.stickers': StickersTable;
+  'app.gif_settings': GifSettingsTable;
+  'app.gif_files': GifFilesTable;
+  'app.message_reactions': MessageReactionsTable;
+  'app.group_settings': GroupSettingsTable;
+  'app.invite_links': InviteLinksTable;
+  'app.join_requests': JoinRequestsTable;
+  'app.polls': PollsTable;
+  'app.poll_votes': PollVotesTable;
+  'app.message_mentions': MessageMentionsTable;
+  'app.scheduled_messages': ScheduledMessagesTable;
+  'app.notification_settings': NotificationSettingsTable;
+  'app.chat_bans': ChatBansTable;
+  'app.report_decisions': ReportDecisionsTable;
+  'app.broadcasts': BroadcastsTable;
+  'app.push_keys': PushKeysTable;
+  'app.user_permissions': UserPermissionsTable;
+  'audit.membership_events': MembershipEventsTable;
 }
 
 export interface CreateDbOptions {
@@ -455,6 +747,8 @@ export interface CreateDbOptions {
   applicationName?: string;
   /** Server-side limit for any single statement (Postgres statement_timeout). */
   statementTimeoutMs?: number;
+  /** How long an unused pooled connection stays open (default 30 s). */
+  idleTimeoutMs?: number;
   /**
    * Called when an idle pooled connection fails (database restart, network cut, idle-connection
    * reaping by a proxy). Without a listener, Node would treat it as an unhandled error and exit.
@@ -470,20 +764,69 @@ export interface DbHandle {
   ping(timeoutMs: number): Promise<void>;
 }
 
+/**
+ * Supabase's transaction-mode pooler (Supavisor) listens on 6543: consecutive transactions of one client may
+ * run on different server connections, so no session setting can be relied on there.
+ */
+export function usesTransactionPooler(connectionString: string): boolean {
+  try {
+    return new URL(connectionString).port === '6543';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * TLS for a database connection (D-36). Every connection to a Supabase host (`*.supabase.com`, `*.supabase.co`) is
+ * encrypted and fully verified against Supabase's root certificate, including the host name, with nothing to
+ * configure. The host is read exactly as node-postgres reads it (including a `?host=` parameter, letter case, a
+ * trailing dot or percent-encoding). A Supabase connection string that sets its own TLS options keeps them only if
+ * they still verify the server; one that turns verification or TLS off is refused. Other hosts (local development,
+ * tests) are unchanged.
+ */
+export function connectionTls(connectionString: string): pg.ConnectionConfig['ssl'] {
+  const unset = { bedoNoSslOptionsInUrl: true } as unknown as pg.ConnectionConfig['ssl'];
+  let parsed: { host?: unknown; ssl?: unknown };
+  try {
+    // Parses the string the way the driver will, without connecting. Options in the URL replace `ssl` here.
+    parsed = (new pg.Client({ connectionString, ssl: unset }) as unknown as { connectionParameters: { host?: unknown; ssl?: unknown } })
+      .connectionParameters;
+  } catch {
+    return undefined;
+  }
+  const host = String(parsed.host ?? '').toLowerCase().replace(/\.+$/, '');
+  if (!host.endsWith('.supabase.com') && !host.endsWith('.supabase.co')) {
+    return undefined;
+  }
+  if (parsed.ssl === unset) {
+    return { ca: SUPABASE_ROOT_CA_2021, rejectUnauthorized: true };
+  }
+  if (parsed.ssl && typeof parsed.ssl === 'object' && (parsed.ssl as { rejectUnauthorized?: unknown }).rejectUnauthorized !== false) {
+    return undefined; // the URL's own TLS options, which verify the server (e.g. sslmode=verify-full&sslrootcert=...)
+  }
+  throw new Error('DATABASE_URL: a Supabase connection must verify the server certificate; remove its sslmode (TLS is verified automatically)');
+}
+
 export function createDb(options: CreateDbOptions): DbHandle {
   const statementTimeoutMs = options.statementTimeoutMs ?? 15_000;
+  const transactionPooler = usesTransactionPooler(options.connectionString);
   const pool = new pg.Pool({
     connectionString: options.connectionString,
+    ssl: connectionTls(options.connectionString),
     max: options.poolMax ?? 10,
     application_name: options.applicationName ?? 'bedo',
-    idleTimeoutMillis: 30_000,
+    idleTimeoutMillis: options.idleTimeoutMs ?? 30_000,
     connectionTimeoutMillis: 5_000,
     // Client-side backstop for when the server cannot even be reached to enforce statement_timeout.
     query_timeout: statementTimeoutMs + 1_000,
     // Runs, and is awaited, before a new connection is handed out. Set here rather than as a startup
-    // parameter, which some connection poolers reject. A failure discards the connection.
+    // parameter, which some connection poolers reject. A failure discards the connection. Not with the
+    // transaction pooler, where a session setting would not stay with this client (query_timeout above
+    // still bounds every query).
     onConnect: async (client) => {
-      await client.query(`set statement_timeout = ${Math.trunc(statementTimeoutMs)}`);
+      if (!transactionPooler) {
+        await client.query(`set statement_timeout = ${Math.trunc(statementTimeoutMs)}`);
+      }
     },
   });
   pool.on('error', (error: Error) => {

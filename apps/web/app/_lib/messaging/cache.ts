@@ -17,7 +17,15 @@ export interface PendingMessage {
   error: string | null;
 }
 
+/**
+ * The shape of cached messages; a cache in an older shape is dropped (Phase 4 added files, stickers, reactions;
+ * Phase 6 channels, scheduled counts and forward origins).
+ */
+export const CACHE_FORMAT = 3;
+
 export interface CachedState {
+  /** CACHE_FORMAT when written (missing before Phase 4). */
+  format?: number;
   userId: string;
   seq: number;
   chats: Chat[];
@@ -75,7 +83,7 @@ export async function loadCache(userId: string): Promise<CachedState | null> {
   closed = false;
   const state = await run<CachedState>('readonly', (store) => store.get(KEY) as IDBRequest<CachedState>);
   if (!state) return null;
-  if (state.userId !== userId) {
+  if (state.userId !== userId || state.format !== CACHE_FORMAT) {
     await clearCache();
     // The cache now belongs to the account that is signing in.
     closed = false;
@@ -89,6 +97,7 @@ export async function saveCache(state: CachedState): Promise<void> {
   const started = generation;
   const trimmed: CachedState = {
     ...state,
+    format: CACHE_FORMAT,
     messages: Object.fromEntries(Object.entries(state.messages).map(([chatId, list]) => [chatId, list.slice(-CACHED_MESSAGES_PER_CHAT)])),
   };
   await run<unknown>('readwrite', (store) => (started === generation && !closed ? store.put(trimmed, KEY) : store.count()) as IDBRequest<unknown>);

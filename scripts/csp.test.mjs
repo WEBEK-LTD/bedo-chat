@@ -39,28 +39,32 @@ test('the admin pages get a strict policy from both netlify.toml files, equal to
   assert.doesNotMatch(ADMIN_CSP, /unsafe-|\*|https?:|wss?:/);
 });
 
-test('the web app policy allows only the site, the API and its WebSocket, and the one storage project', () => {
+test('the web app policy allows only the site (with its API, D-36) and the one Supabase project (Storage and Realtime)', () => {
   const STORAGE = 'https://abcdefghijklmnop.supabase.co';
-  const policy = directives(webCsp({ nonce: NONCE, apiUrl: 'https://bedochat.com/api', storage: STORAGE, https: true }));
+  const policy = directives(webCsp({ nonce: NONCE, storage: STORAGE, https: true }));
   assert.deepEqual(policy['default-src'], ["'none'"]);
   assert.deepEqual(policy['script-src'], ["'self'", `'nonce-${NONCE}'`, "'strict-dynamic'"]);
   assert.deepEqual(policy['style-src'], ["'self'", `'nonce-${NONCE}'`]);
-  assert.deepEqual(policy['connect-src'], ["'self'", 'https://bedochat.com', 'wss://bedochat.com', STORAGE]);
+  assert.deepEqual(policy['connect-src'], ["'self'", STORAGE, 'wss://abcdefghijklmnop.supabase.co']);
   assert.deepEqual(policy['img-src'], ["'self'", 'data:', 'blob:', STORAGE]);
+  // Phase 4: chat videos, voice and video messages from the private bucket, and the page's own recordings.
+  assert.deepEqual(policy['media-src'], ["'self'", 'blob:', STORAGE]);
   assert.deepEqual(policy['worker-src'], ["'self'"]);
   assert.deepEqual(policy['frame-ancestors'], ["'none'"]);
   assert.deepEqual(policy['object-src'], ["'none'"]);
   assert.deepEqual(policy['form-action'], ["'self'"]);
   assert.ok('upgrade-insecure-requests' in policy);
-  const production = webCsp({ nonce: NONCE, apiUrl: 'https://bedochat.com/api', storage: STORAGE });
+  const production = webCsp({ nonce: NONCE, storage: STORAGE });
   assert.doesNotMatch(production, /unsafe-inline|unsafe-eval|\*/);
-  // Without profile pictures set up, no storage host is allowed at all.
-  const noStorage = directives(webCsp({ nonce: NONCE, apiUrl: 'https://bedochat.com/api' }));
+  // Without the Supabase project set, only the site itself (which includes the API) is allowed.
+  const noStorage = directives(webCsp({ nonce: NONCE }));
   assert.deepEqual(noStorage['img-src'], ["'self'", 'data:', 'blob:']);
-  assert.deepEqual(noStorage['connect-src'], ["'self'", 'https://bedochat.com', 'wss://bedochat.com']);
+  assert.deepEqual(noStorage['media-src'], ["'self'", 'blob:']);
+  assert.deepEqual(noStorage['connect-src'], ["'self'"]);
+  assert.doesNotMatch(webCsp({ nonce: NONCE }), /wss?:|https?:/);
   // Local browser tests: plain http on localhost, no upgrade.
-  const local = directives(webCsp({ nonce: NONCE, apiUrl: 'http://localhost:3100/api' }));
-  assert.deepEqual(local['connect-src'], ["'self'", 'http://localhost:3100', 'ws://localhost:3100']);
+  const local = directives(webCsp({ nonce: NONCE, storage: 'https://localhost:3400' }));
+  assert.deepEqual(local['connect-src'], ["'self'", 'https://localhost:3400', 'wss://localhost:3400']);
   assert.ok(!('upgrade-insecure-requests' in local));
   // next dev only: eval for React's debugging aids and inline styles of the dev overlay.
   const dev = directives(webCsp({ nonce: NONCE, dev: true }));
@@ -88,7 +92,7 @@ test('the proxy covers the web app pages, never the Admin Dashboard, the API or 
   // The matcher is a path pattern with one regular-expression group, as Next.js compiles it.
   const pattern = new RegExp(`^${source.replace(/\\\\/g, '\\')}$`);
   for (const page of ['/', '/login', '/missing-page']) assert.match(page, pattern, page);
-  for (const other of ['/admin', '/admin/', '/admin/login', '/api', '/api/v1/me', '/_next/static/chunks/a.js', '/sw.js', '/favicon.ico']) {
+  for (const other of ['/admin', '/admin/', '/admin/login', '/api', '/api/v1/me', '/_next/static/chunks/a.js', '/sw.js', '/favicon.ico', '/manifest.webmanifest', '/icons/icon-192.png']) {
     assert.doesNotMatch(other, pattern, other);
   }
 });

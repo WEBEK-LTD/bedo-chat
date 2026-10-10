@@ -2,7 +2,7 @@
   "name": "@bedo/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Bedo Chat user web app: Login and the Chat Interface only (spec §23)",
+  "description": "Bedo Chat website: the student web app (Login, Chat Interface; spec \u00a723), the Admin Dashboard under /admin and the API under /api (D-26, D-36)",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 3000",
@@ -12,10 +12,15 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@bedo/api": "workspace:*",
     "@bedo/api-client": "workspace:*",
     "@bedo/contracts": "workspace:*",
     "@bedo/ui": "workspace:*",
-    "next": "16.3.6",
+    "@node-rs/argon2": "^2.2.1",
+    "@node-rs/bcrypt": "^1.10.9",
+    "@supabase/realtime-js": "^2.116.0",
+    "next": "16.3.8",
+    "pg": "^8.23.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

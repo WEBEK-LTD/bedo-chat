@@ -25,7 +25,7 @@ import { UserAuthGuard } from './user-auth.guard.js';
     ProfileService,
     AccountSecurityService,
   ],
-  // TokenService and UserAuthGuard: used by the Phase 3 messaging module (HTTP routes and realtime gateway).
+  // TokenService and UserAuthGuard: used by the Phase 3 messaging module (HTTP routes, including realtime).
   exports: [AccountsService, OtpService, SessionsService, TwoStepService, TokenService, UserAuthGuard],
 })
 export class AuthModule {}

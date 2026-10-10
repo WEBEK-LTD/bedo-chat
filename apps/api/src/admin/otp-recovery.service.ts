@@ -6,9 +6,8 @@ import { AppError } from '../common/app-error.js';
 import { hashToken, safeEqualHex } from '../common/crypto.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
-import { ipBucket, RateLimitService } from '../redis/rate-limit.service.js';
-import { RedisService } from '../redis/redis.service.js';
+import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
+import { ipBucket, RateLimitService } from '../state/rate-limit.service.js';
 import { OtpSettingsService } from './otp-settings.service.js';
 
 type RecoveryRow = { token_hash: string | null; expires_at: Date | null; failed_attempts: number; key_saved_at: Date | null };
@@ -41,18 +40,17 @@ function refuseUnless(check: TokenCheck): void {
  * when admin sign-in still needed a WhatsApp code; it is kept unchanged), the database owner runs
  * app.open_otp_settings_recovery() by SQL and gets a one-time recovery token. With it, the sign-in page can do
  * exactly two things: save ONE new Waabek key (the token is then used up for saving) (encrypted here with SETTINGS_ENCRYPTION_KEY, raising the settings
- * version every worker checks) and send a test message. It never signs anyone in, never creates a session and
+ * version checked before every message) and send a test message. It never signs anyone in, never creates a session and
  * never reads or changes admin accounts' credentials, roles, sessions or the initial-setup bootstrap.
  */
 @Injectable()
 export class OtpRecoveryService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService,
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(OtpSettingsService) private readonly settings: OtpSettingsService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
   ) {}
 
   private get db() {
@@ -119,13 +117,13 @@ export class OtpRecoveryService {
       throw new AppError(HttpStatus.FORBIDDEN, 'RECOVERY_UNAVAILABLE');
     }
     const limit = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:waabek-test:recovery`,
+      `rl:waabek-test:recovery`,
       ADMIN_BOOTSTRAP_RULES.testMessageWindowSeconds * 1000,
     );
     if (limit.count > ADMIN_BOOTSTRAP_RULES.maxTestMessages) {
       throw new AppError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', limit.retryAfterSeconds);
     }
-    const outcome = await this.queues.sendWaabekTest({ phone: target.phone });
+    const outcome = await this.delivery.sendTest(target.phone);
     const result: WaabekTestResponse = {
       delivered: outcome.delivered,
       sentTo: maskPhone(target.phone),
@@ -145,7 +143,7 @@ export class OtpRecoveryService {
 
   private async limitIp(info: RequestInfo): Promise<void> {
     const attempt = await this.rateLimit.reserveAttempt(
-      `${this.redis.prefix}:rl:otp-recovery:ip:${ipBucket(info.ip ?? 'unknown')}`,
+      `rl:otp-recovery:ip:${ipBucket(info.ip ?? 'unknown')}`,
       OTP_RECOVERY_RULES.ipWindowSeconds * 1000,
     );
     if (attempt.count > OTP_RECOVERY_RULES.maxRequestsPerIp) {

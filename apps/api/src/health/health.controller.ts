@@ -11,14 +11,12 @@ import type { FastifyReply } from 'fastify';
 import { ResponseSchema } from '../common/response-schema.js';
 import { API_ENV } from '../config/tokens.js';
 import { DatabaseService } from '../database/database.service.js';
-import { RedisService } from '../redis/redis.service.js';
 
 @Controller('health')
 export class HealthController {
   constructor(
     @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RedisService) private readonly redis: RedisService,
   ) {}
 
   /** The process is running. Never touches dependencies, so orchestrators don't restart it during an outage. */
@@ -28,17 +26,14 @@ export class HealthController {
     return { status: 'ok' };
   }
 
-  /** The API can serve traffic: Postgres and Redis both answer within the configured timeout. */
+  /** The API can serve traffic: Postgres answers within the configured timeout (D-36: the only dependency). */
   @Get('ready')
   @ResponseSchema(readyResponseSchema)
   async ready(@Res({ passthrough: true }) reply: FastifyReply): Promise<ReadyResponse> {
-    const [database, redis] = await Promise.all([
-      this.check(() => this.database.ping(this.env.HEALTH_CHECK_TIMEOUT_MS)),
-      this.check(() => this.redis.ping()),
-    ]);
-    const healthy = database.status === 'up' && redis.status === 'up';
+    const database = await this.check(() => this.database.ping(this.env.HEALTH_CHECK_TIMEOUT_MS));
+    const healthy = database.status === 'up';
     void reply.status(healthy ? 200 : 503);
-    return { status: healthy ? 'ok' : 'unavailable', checks: { database, redis } };
+    return { status: healthy ? 'ok' : 'unavailable', checks: { database } };
   }
 
   private async check(probe: () => Promise<void>): Promise<DependencyCheck> {

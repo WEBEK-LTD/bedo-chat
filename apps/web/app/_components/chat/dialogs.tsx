@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { errorMessage } from '../../_lib/api';
 import { useMessaging, useMessagingStore } from '../../_lib/messaging/context';
 import { Avatar, Button, FormError, TextField } from '../ui';
-import { displayName } from './format';
+import { canPost, chatPhoto, chatTitle } from './format';
 import { Dialog } from './menu';
 
 /** Folders (P-21): up to 10, names of 1-12 characters, chats chosen by hand. */
@@ -64,8 +64,8 @@ export function FoldersDialog({ chats, onClose, onNotice }: { chats: Chat[]; onC
                     checked={checked}
                     onChange={() => setEditing({ ...editing, chatIds: checked ? editing.chatIds.filter((id) => id !== chat.id) : [...editing.chatIds, chat.id] })}
                   />
-                  <Avatar name={chat.peer.displayName} photoUrl={chat.peer.photoUrl} size={32} />
-                  <span className="truncate text-sm">{displayName(chat.peer)}</span>
+                  <Avatar name={chatTitle(chat)} photoUrl={chatPhoto(chat)} size={32} />
+                  <span className="truncate text-sm">{chatTitle(chat)}</span>
                 </label>
               );
             })}
@@ -124,7 +124,7 @@ export function ForwardDialog({ fromChatId, messageIds, onClose, onDone }: { fro
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const chats = Object.values(state.chats).filter((chat) => chat.peer.canMessage);
+  const chats = Object.values(state.chats).filter((chat) => canPost(chat));
   // D-30: every forwarded copy counts towards 30 messages per minute.
   const maxChats = Math.min(MESSAGING_RULES.maxForwardTargets, Math.floor(MESSAGING_RULES.messagesPerMinute / messageIds.length));
 
@@ -161,8 +161,8 @@ export function ForwardDialog({ fromChatId, messageIds, onClose, onDone }: { fro
               <li key={chat.id}>
                 <label className={`flex items-center gap-3 rounded-sm px-1 py-1.5 ${full ? 'opacity-50' : 'hover:bg-surface-hover'}`}>
                   <input type="checkbox" checked={checked} disabled={full} onChange={() => setSelected(checked ? selected.filter((id) => id !== chat.id) : [...selected, chat.id])} />
-                  <Avatar name={chat.peer.displayName} photoUrl={chat.peer.photoUrl} size={32} />
-                  <span className="truncate text-sm">{displayName(chat.peer)}</span>
+                  <Avatar name={chatTitle(chat)} photoUrl={chatPhoto(chat)} size={32} />
+                  <span className="truncate text-sm">{chatTitle(chat)}</span>
                 </label>
               </li>
             );

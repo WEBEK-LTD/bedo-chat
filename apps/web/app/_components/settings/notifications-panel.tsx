@@ -1,6 +1,13 @@
 'use client';
 
-import { listSecurityNotices, markSecurityNoticesRead, type SecurityNoticesResponseNoticesItem as SecurityNotice } from '@bedo/api-client';
+import {
+  getNotificationSettings,
+  listSecurityNotices,
+  markSecurityNoticesRead,
+  type SecurityNoticesResponseNoticesItem as SecurityNotice,
+  updateNotificationSettings,
+} from '@bedo/api-client';
+import type { NotificationSettings } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
 import { useCallback, useEffect, useState } from 'react';
 import { errorMessage } from '../../_lib/api';
@@ -29,13 +36,21 @@ const PUSH_TEXT: Record<PushState, string> = {
     'This browser does not support notifications. On iPhone and iPad, add Bedo Chat to your Home Screen first (iOS 16.4 or later).',
   unavailable: 'Notifications are not available yet.',
   denied: 'Notifications are blocked for this site. Allow them in your browser settings, then come back here.',
-  off: 'Get a notification on this device when someone signs in to your account.',
+  off: 'Get notifications on this device for new messages, mentions and replies, and when someone signs in to your account.',
   on: 'Notifications are on for this device.',
 };
 
-/** Security notices and this browser's notification permission (D-13, D-21). */
+const SETTING_LABELS: Array<[keyof NotificationSettings, string, string]> = [
+  ['privateChats', 'Private chats', 'New messages from one person'],
+  ['groups', 'Groups', 'New messages in your groups'],
+  ['channels', 'Channels', 'New posts in channels you joined'],
+  ['previews', 'Show sender and text', 'Off: notifications only say "New message"'],
+];
+
+/** Security notices, this browser's notification permission and what notifies (D-13, D-21, D-41). */
 export function NotificationsPanel() {
   const [notices, setNotices] = useState<SecurityNotice[] | null>(null);
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
   const [push, setPush] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +62,9 @@ export function NotificationsPanel() {
 
   useEffect(() => {
     load().catch((caught: unknown) => setError(errorMessage(caught)));
+    getNotificationSettings()
+      .then(setSettings)
+      .catch((caught: unknown) => setError(errorMessage(caught)));
     pushState()
       .then(setPush)
       .catch(() => setPush('unavailable'));
@@ -61,6 +79,17 @@ export function NotificationsPanel() {
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function changeSetting(key: keyof NotificationSettings, value: boolean) {
+    const previous = settings;
+    if (previous) setSettings({ ...previous, [key]: value });
+    try {
+      setSettings(await updateNotificationSettings({ [key]: value }));
+    } catch (caught) {
+      setSettings(previous);
+      setError(errorMessage(caught));
     }
   }
 
@@ -89,6 +118,28 @@ export function NotificationsPanel() {
         ) : (
           <p className="text-sm text-ink-secondary">Checking…</p>
         )}
+      </section>
+
+      <section className="flex flex-col gap-3" aria-label="Notify me about">
+        <h3 className="text-sm font-semibold">Notify me about</h3>
+        {settings ? (
+          <ul className="flex flex-col gap-3">
+            {SETTING_LABELS.map(([key, label, hint]) => (
+              <li key={key}>
+                <label className="flex items-start gap-3 text-sm">
+                  <input type="checkbox" className="mt-1" checked={settings[key]} onChange={(event) => void changeSetting(key, event.target.checked)} />
+                  <span>
+                    {label}
+                    <span className="block text-xs text-ink-secondary">{hint}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-secondary">Loading…</p>
+        )}
+        <p className="text-xs text-ink-secondary">Mentions of you and replies to your messages notify even in muted chats. Mute a chat from its menu.</p>
       </section>
 
       <section className="flex flex-col gap-3">

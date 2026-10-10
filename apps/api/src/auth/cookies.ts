@@ -13,7 +13,7 @@ export function setRefreshCookie(reply: FastifyReply, env: ApiEnv, token: string
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: publicCookiePath(env, REFRESH_COOKIE_PATH),
+    path: publicCookiePath(REFRESH_COOKIE_PATH),
     maxAge: TOKEN_RULES.refreshTokenIdleDays * 24 * 60 * 60,
   });
 }
@@ -23,6 +23,6 @@ export function clearRefreshCookie(reply: FastifyReply, env: ApiEnv): void {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: publicCookiePath(env, REFRESH_COOKIE_PATH),
+    path: publicCookiePath(REFRESH_COOKIE_PATH),
   });
 }

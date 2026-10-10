@@ -8,7 +8,6 @@ import {
   SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import type { ApiEnv } from '@bedo/config';
 import { ADMIN_SESSION_COOKIE } from '@bedo/contracts';
 import type { AdminRole } from '@bedo/db';
 import type { FastifyRequest } from 'fastify';
@@ -16,7 +15,6 @@ import { AuditService } from '../audit/audit.service.js';
 import { AppError } from '../common/app-error.js';
 import { requestInfo } from '../common/request-info.js';
 import { DatabaseService } from '../database/database.service.js';
-import { API_ENV } from '../config/tokens.js';
 import { assertCsrf } from '../security/csrf.js';
 import { type AdminContext, AdminAuthService } from './admin-auth.service.js';
 
@@ -33,7 +31,6 @@ export const AdminRoles = (...roles: AdminRole[]) => SetMetadata(ROLES_KEY, role
 @Injectable()
 export class AdminAuthGuard implements CanActivate {
   constructor(
-    @Inject(API_ENV) private readonly env: ApiEnv,
     @Inject(AdminAuthService) private readonly auth: AdminAuthService,
     @Inject(Reflector) private readonly reflector: Reflector,
     @Inject(AuditService) private readonly audit: AuditService,
@@ -42,9 +39,10 @@ export class AdminAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AdminRequest>();
-    // Every admin request, reads included, must come from the Admin Dashboard's origin with the CSRF
-    // header, so a page on another allowed origin (the user web app) cannot read or act on admin data.
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    // Every admin request, reads included, must come from a page of this site with the CSRF header, so no
+    // other site can read or act on admin data. The student web app shares the origin (D-25, D-36): what keeps
+    // it apart is the separate admin session cookie and the strict Content-Security-Policy (D-31).
+    assertCsrf(request);
     const token = request.cookies[ADMIN_SESSION_COOKIE];
     if (!token) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED');

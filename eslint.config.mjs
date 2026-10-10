@@ -14,6 +14,8 @@ export default tseslint.config(
       '**/.turbo/**',
       '**/coverage/**',
       '**/next-env.d.ts',
+      // Data, not code: the compiled common-password list (D-34, D-36).
+      'apps/api/src/admin/common-passwords.list.ts',
     ],
   },
   js.configs.recommended,
@@ -28,7 +30,7 @@ export default tseslint.config(
   },
   {
     // NestJS resolves constructor dependencies at runtime, so injected classes must stay value imports.
-    files: ['apps/api/src/**/*.ts', 'apps/worker/src/**/*.ts'],
+    files: ['apps/api/src/**/*.ts'],
     rules: {
       '@typescript-eslint/consistent-type-imports': 'off',
     },

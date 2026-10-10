@@ -1,4 +1,5 @@
-# The one Bedo Chat Netlify site (D-15, D-26): the student web app, with the Admin Dashboard under /admin.
+# The one Bedo Chat Netlify site (D-15, D-26, D-36): the student web app, with the Admin Dashboard under /admin
+# and the API under /api (served by the web app's own server functions; no separate API host).
 # Exact site settings are in docs/DEPLOYMENT.md.
 #
 # D-28: this file exists twice, byte for byte: apps/web/netlify.toml and apps/admin/netlify.toml (a test keeps
@@ -21,13 +22,20 @@
   publish = "apps/web/.next"
 
 [build.environment]
-  # Phase 2.3.1: the public API address both apps are built with (D-25: https://bedochat.com/api). A public URL,
-  # not a secret. Values in this file take precedence over variables set in the Netlify UI, so the combined
-  # build can never be produced without it.
-  NEXT_PUBLIC_API_URL = "https://bedochat.com/api"
+  # D-36: no API address is configured. Both apps call the API at /api on the site itself. The API's server
+  # variables are set in the Netlify UI for the Production context only (docs/DEPLOYMENT.md, section 2).
+  # The Bedo Chat Supabase project (public address, not a secret): the student app's Content-Security-Policy allows
+  # profile pictures and each device's private realtime channel (wss://) from this exact origin only (D-31, D-36).
+  NEXT_PUBLIC_STORAGE_ORIGIN = "https://cspnnzoyuyxjiyhwzgqj.supabase.co"
   NODE_VERSION = "24"
   NEXT_TELEMETRY_DISABLED = "1"
   TURBO_TELEMETRY_DISABLED = "1"
+
+# Phase 6 (D-40): Netlify Functions of the site besides the Next.js server functions. scheduler.mts runs every
+# minute and asks the site's own API to send scheduled messages and channel posts that are due (on the published
+# production deploy only). Relative to the base directory (the repository root), like every path here.
+[functions]
+  directory = "apps/web/netlify/functions"
 
 # D-26: this one site also serves the Admin Dashboard. The web app's build adds the admin's static export to
 # public/admin (scripts/bundle-admin-into-web.mjs), which Netlify publishes as static files under /admin.

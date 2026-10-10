@@ -1,6 +1,23 @@
 import {
   blockUser,
+  cancelScheduledMessage,
+  createChannel as apiCreateChannel,
+  getMyPermissions,
+  joinChannel as apiJoinChannel,
+  listScheduledMessages,
+  realtimeViewing,
+  scheduleMessage,
+  searchChannels as apiSearchChannels,
+  sendScheduledMessageNow,
+  updateScheduledMessage,
   createFolder,
+  createUpload,
+  getMessageFile,
+  listChatMedia,
+  listStickers,
+  reactToMessage,
+  removeReaction,
+  searchGifs,
   deleteFolder,
   deleteMessages,
   editMessage,
@@ -14,8 +31,10 @@ import {
   markChatRead,
   openChat,
   pinMessage,
+  realtimeTyping,
   reportUser,
   searchChat,
+  searchEverywhere,
   searchUsers,
   sendMessage,
   sync as fetchSync,
@@ -27,17 +46,46 @@ import {
 import {
   type Chat,
   type Folder,
+  type GifSearchResponse,
+  type MediaFilter,
   type Message,
   MESSAGING_RULES,
+  type ReactionBody,
+  type StickerPack,
+  type UploadKind,
   type Peer,
   type Presence,
-  type RealtimeServerMessage,
+  type PublicChannel,
+  type RealtimeSignal,
   type ReportBody,
+  type GlobalSearchResponse,
+  type ScheduledMessage,
   type SyncResponse,
+  type UserPermissions,
 } from '@bedo/contracts';
 import { ApiError, errorMessage } from '../api';
 import { type CachedState, clearCache, loadCache, type PendingMessage, saveCache } from './cache';
+import { type PreparedFile, uploadWithProgress } from './media';
 import { type ConnectionState, RealtimeClient } from './realtime';
+
+/** A file being uploaded and sent (Phase 4). Kept in memory only: a page reload drops it. */
+export interface PendingUpload {
+  clientId: string;
+  chatId: string;
+  kind: UploadKind;
+  fileName: string | null;
+  size: number;
+  previewUrl: string | null;
+  caption: string | null;
+  replyToId: string | null;
+  /** Phase 6: schedule it for this time instead of sending it now. */
+  sendAt: string | null;
+  /** 0 to 1 while uploading. */
+  progress: number;
+  status: 'uploading' | 'sending' | 'failed';
+  error: string | null;
+  createdAt: string;
+}
 
 export type { PendingMessage } from './cache';
 
@@ -51,11 +99,16 @@ export interface MessagingSnapshot {
   hasOlder: Record<string, boolean>;
   pins: Record<string, Message[]>;
   outbox: PendingMessage[];
+  uploads: PendingUpload[];
   folders: Folder[];
   /** chatId -> time (ms) the other participant's typing indicator ends. */
   typing: Record<string, number>;
+  /** Groups: chatId -> who is typing, when this member may know it (O-03); missing: "someone". */
+  typingNames: Record<string, string>;
   /** Live presence of users from realtime events, newer than the chat summaries. */
   presence: Record<string, Presence | null>;
+  /** Phase 6: the signed-in user's scheduled messages, per chat whose list was opened (not cached on the device). */
+  scheduled: Record<string, ScheduledMessage[]>;
 }
 
 const EMPTY: MessagingSnapshot = {
@@ -66,16 +119,19 @@ const EMPTY: MessagingSnapshot = {
   hasOlder: {},
   pins: {},
   outbox: [],
+  uploads: [],
   folders: [],
   typing: {},
+  typingNames: {},
   presence: {},
+  scheduled: {},
 };
 
 const PAGE = MESSAGING_RULES.refetchPageSize;
 const TYPING_MS = MESSAGING_RULES.typingSeconds * 1000;
 /** Typing is sent at most this often while the user keeps typing (the indicator lasts 6 s). */
 const TYPING_SEND_MS = 3_000;
-/** Without a realtime connection, sync over HTTP this often. */
+/** While not listening on the realtime channel, sync over HTTP this often. */
 const POLL_MS = 20_000;
 /** After a reconnect or re-fetch, only the most recently active chats get their newest page again. */
 const REFETCH_CHATS = 20;
@@ -105,7 +161,7 @@ export function sortedChats(chats: readonly Chat[]): Chat[] {
 
 /**
  * The web app's messaging state: chats, messages, folders and the outbox, kept in step with the server by
- * the realtime connection and sync (P-17), cached locally for a fast start and offline reading. Every change
+ * realtime signals, heartbeats and sync (P-17, D-36), cached locally for a fast start and offline reading. Every change
  * goes through the API, which decides what is allowed; this store never assumes a permission.
  */
 export class MessagingStore {
@@ -118,14 +174,24 @@ export class MessagingStore {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private httpSyncing = false;
+  /** A sync was asked for while one was running: run once more after it. */
+  private syncAgain = false;
+  private outboxFlushed = false;
   private readonly lastTypingSent = new Map<string, number>();
   private readonly sending = new Set<string>();
+  /** Files of uploads in progress (and their upload slot once given), for retries. */
+  private readonly uploadJobs = new Map<string, { file: PreparedFile; fileId: string | null; uploaded: boolean; controller: AbortController }>();
+  private stickerPacks: Promise<StickerPack[]> | null = null;
+  private permissions: Promise<UserPermissions> | null = null;
+  /** Phase 7: the chat this device last said it shows (null: none). */
+  private viewingChat: string | null | undefined = undefined;
   private stopped = false;
 
   constructor() {
     this.realtime = new RealtimeClient({
-      onReady: (serverSeq) => void this.onReady(serverSeq),
-      onMessage: (message) => this.onRealtime(message),
+      onHeartbeat: (serverSeq) => void this.onHeartbeat(serverSeq),
+      onListening: () => void this.httpSync(),
+      onSignal: (signal) => this.onSignal(signal),
       onState: (connection) => this.onConnection(connection),
     });
   }
@@ -150,6 +216,7 @@ export class MessagingStore {
   async start(userId: string): Promise<void> {
     this.userId = userId;
     this.stopped = false;
+    this.outboxFlushed = false;
     const cached = await loadCache(userId);
     if (this.stopped) return;
     if (cached) {
@@ -170,10 +237,10 @@ export class MessagingStore {
     }
     this.realtime.start();
     this.pollTimer = setInterval(() => {
-      if (this.snapshot.connection !== 'online') void this.httpSync();
+      if (!this.realtime.live) void this.httpSync();
     }, POLL_MS);
     if (!cached) {
-      // Without a cache, show the chat list as soon as possible, even before the socket is up.
+      // Without a cache, show the chat list as soon as possible, even before the first heartbeat.
       void this.fullFetch(null).catch(() => undefined);
     }
   }
@@ -217,12 +284,17 @@ export class MessagingStore {
     this.set({ connection }, false);
   }
 
-  private async onReady(serverSeq: number): Promise<void> {
+  /** Every heartbeat (25 s) returns the server's update seq: catch up when this device is behind. */
+  private async onHeartbeat(serverSeq: number): Promise<void> {
     if (!this.initialized) {
       await this.fullFetch(serverSeq).catch(() => undefined);
+    } else if (serverSeq !== this.seq) {
+      await this.httpSync();
     }
-    this.realtime.send({ type: 'sync', since: this.seq });
-    this.flushOutbox();
+    if (!this.outboxFlushed) {
+      this.outboxFlushed = true;
+      this.flushOutbox();
+    }
   }
 
   // ------------------------------------------------------------------------------ sync
@@ -254,14 +326,18 @@ export class MessagingStore {
     });
   }
 
-  private onRealtime(message: RealtimeServerMessage): void {
+  private onSignal(message: RealtimeSignal): void {
     switch (message.type) {
       case 'updates':
-        void this.applySync(message.sync);
+        void this.httpSync();
         return;
       case 'typing': {
         const until = Date.now() + TYPING_MS;
-        this.set({ typing: { ...this.snapshot.typing, [message.chatId]: until } }, false);
+        const typingNames = { ...this.snapshot.typingNames };
+        const sender = message.userId ? (this.snapshot.messages[message.chatId] ?? []).findLast((item) => item.sender?.id === message.userId)?.sender : undefined;
+        if (sender) typingNames[message.chatId] = sender.displayName.split(' ')[0]!;
+        else delete typingNames[message.chatId];
+        this.set({ typing: { ...this.snapshot.typing, [message.chatId]: until }, typingNames }, false);
         setTimeout(() => {
           if ((this.snapshot.typing[message.chatId] ?? 0) <= Date.now()) {
             const typing = { ...this.snapshot.typing };
@@ -279,18 +355,28 @@ export class MessagingStore {
     }
   }
 
-  /** Sync over HTTP, used while the realtime connection is down. */
+  /**
+   * Fetches the updates after this device's seq (P-17), page by page. Signals, heartbeats and the poll ask for
+   * it; requests that arrive while one runs collapse into one more round.
+   */
   private async httpSync(): Promise<void> {
-    if (this.httpSyncing || !this.initialized) return;
+    if (!this.initialized) return;
+    if (this.httpSyncing) {
+      this.syncAgain = true;
+      return;
+    }
     this.httpSyncing = true;
     try {
-      for (let page = 0; page < 20; page += 1) {
-        const result = cast<SyncResponse>(await fetchSync({ since: this.seq }));
-        const more = await this.applySync(result);
-        if (!more) break;
-      }
+      do {
+        this.syncAgain = false;
+        for (let page = 0; page < 20; page += 1) {
+          const result = cast<SyncResponse>(await fetchSync({ since: this.seq }));
+          const more = await this.applySync(result);
+          if (!more) break;
+        }
+      } while (this.syncAgain && !this.stopped);
     } catch {
-      // Offline: try again on the next tick.
+      // Offline: try again on the next heartbeat or poll.
     } finally {
       this.httpSyncing = false;
     }
@@ -306,7 +392,7 @@ export class MessagingStore {
     const chats = { ...this.snapshot.chats };
     for (const chat of result.chats) chats[chat.id] = chat;
     const presence = { ...this.snapshot.presence };
-    for (const chat of result.chats) delete presence[chat.peer.id];
+    for (const chat of result.chats) if (chat.peer) delete presence[chat.peer.id];
     const messages = { ...this.snapshot.messages };
     const pins = { ...this.snapshot.pins };
     const byId = new Map(result.messages.map((message) => [message.id, message]));
@@ -320,9 +406,18 @@ export class MessagingStore {
     const deliveredUpTo = new Map<string, number>();
     let outbox = this.snapshot.outbox;
     const typing = { ...this.snapshot.typing };
+    const scheduledChanged = new Set<string>();
     for (const update of result.updates) {
       const chatId = update.chatId;
       if (!chatId) continue;
+      if (update.kind === 'scheduled') scheduledChanged.add(chatId);
+      if (update.kind === 'chat.removed') {
+        // Left, removed or the group was deleted: the chat and its messages go from this device.
+        delete chats[chatId];
+        delete messages[chatId];
+        delete pins[chatId];
+        continue;
+      }
       if (update.kind === 'message.hidden' && update.messageId) {
         if (messages[chatId]) messages[chatId] = messages[chatId].filter((message) => message.id !== update.messageId);
         if (pins[chatId]) pins[chatId] = pins[chatId].filter((message) => message.id !== update.messageId);
@@ -359,21 +454,20 @@ export class MessagingStore {
       ...(result.folders ? { folders: result.folders } : {}),
     });
     for (const [chatId, seq] of deliveredUpTo) this.acknowledge(chatId, seq);
+    for (const chatId of scheduledChanged) if (this.snapshot.scheduled[chatId]) void this.loadScheduled(chatId).catch(() => undefined);
     return result.hasMore;
   }
 
   /** Tells the sender this device received their messages (status "delivered"). */
   private acknowledge(chatId: string, seq: number): void {
-    if (!this.realtime.send({ type: 'delivered', chatId, seq })) {
-      void markChatDelivered(chatId, { seq }).catch(() => undefined);
-    }
+    void markChatDelivered(chatId, { seq }).catch(() => undefined);
   }
 
   // ------------------------------------------------------------------------------ chats
 
   upsertChat(chat: Chat): void {
     const presence = { ...this.snapshot.presence };
-    delete presence[chat.peer.id];
+    if (chat.peer) delete presence[chat.peer.id];
     this.set({ chats: { ...this.snapshot.chats, [chat.id]: chat }, presence });
   }
 
@@ -423,7 +517,7 @@ export class MessagingStore {
     this.upsertChat(cast<Chat>(await markChatRead(chatId, { seq: chat.lastSeq })));
   }
 
-  async setChatState(chatId: string, state: { pinned?: boolean; archived?: boolean; unread?: boolean }): Promise<void> {
+  async setChatState(chatId: string, state: { pinned?: boolean; archived?: boolean; unread?: boolean; mutedUntil?: string | null }): Promise<void> {
     this.upsertChat(cast<Chat>(await updateChatState(chatId, state)));
   }
 
@@ -494,7 +588,7 @@ export class MessagingStore {
     const now = Date.now();
     if (now - (this.lastTypingSent.get(chatId) ?? 0) < TYPING_SEND_MS) return;
     this.lastTypingSent.set(chatId, now);
-    this.realtime.send({ type: 'typing', chatId });
+    void realtimeTyping({ chatId }).catch(() => undefined);
   }
 
   // ------------------------------------------------------------------------------ message actions
@@ -503,6 +597,22 @@ export class MessagingStore {
     const list = this.snapshot.messages[message.chatId];
     if (!list) return;
     this.set({ messages: { ...this.snapshot.messages, [message.chatId]: mergeMessages(list, [message]) } });
+  }
+
+  /** A message the API returned (a poll vote, a new poll): shown at once, before sync confirms it. */
+  replaceMessagePublic(message: Message): void {
+    this.replaceMessage(message);
+  }
+
+  /** Phase 5: a chat this user left or deleted goes from this device at once (sync says the same later). */
+  removeChatLocally(chatId: string): void {
+    const chats = { ...this.snapshot.chats };
+    const messages = { ...this.snapshot.messages };
+    const pins = { ...this.snapshot.pins };
+    delete chats[chatId];
+    delete messages[chatId];
+    delete pins[chatId];
+    this.set({ chats, messages, pins });
   }
 
   async edit(messageId: string, text: string): Promise<void> {
@@ -548,8 +658,230 @@ export class MessagingStore {
     return searchChat(chatId, { q, ...(before ? { before } : {}) }).then((result) => cast<Message[]>(result.messages));
   }
 
+  /** Phase 8: messages, files, images and voice messages across every chat (D-42). */
+  searchEverywhere(params: { q?: string; kind?: 'messages' | 'media' | 'files' | 'voice'; fromUserId?: string; after?: string; cursor?: string }): Promise<GlobalSearchResponse> {
+    return searchEverywhere(params).then((result) => cast<GlobalSearchResponse>(result));
+  }
+
   searchPeople(q: string): Promise<Peer[]> {
     return searchUsers({ q }).then((result) => cast<Peer[]>(result.users));
+  }
+
+  // ------------------------------------------------------------------------------ media (Phase 4)
+
+  /** Uploads a prepared file with progress, then sends it (with an optional caption and reply). */
+  sendFile(chatId: string, file: PreparedFile, caption: string | null, replyToId: string | null, sendAt: string | null = null): void {
+    const item: PendingUpload = {
+      clientId: crypto.randomUUID(),
+      chatId,
+      kind: file.kind,
+      fileName: file.fileName ?? null,
+      size: file.body.size,
+      previewUrl: file.previewUrl,
+      caption,
+      replyToId,
+      sendAt,
+      progress: 0,
+      status: 'uploading',
+      error: null,
+      createdAt: new Date().toISOString(),
+    };
+    this.uploadJobs.set(item.clientId, { file, fileId: null, uploaded: false, controller: new AbortController() });
+    this.set({ uploads: [...this.snapshot.uploads, item] }, false);
+    void this.deliverUpload(item.clientId);
+  }
+
+  retryUpload(clientId: string): void {
+    const job = this.uploadJobs.get(clientId);
+    if (!job) return;
+    job.controller = new AbortController();
+    void this.deliverUpload(clientId);
+  }
+
+  cancelUpload(clientId: string): void {
+    const job = this.uploadJobs.get(clientId);
+    job?.controller.abort();
+    const item = this.snapshot.uploads.find((entry) => entry.clientId === clientId);
+    if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    this.uploadJobs.delete(clientId);
+    this.set({ uploads: this.snapshot.uploads.filter((entry) => entry.clientId !== clientId) }, false);
+  }
+
+  private updateUpload(clientId: string, change: Partial<PendingUpload>): void {
+    this.set({ uploads: this.snapshot.uploads.map((entry) => (entry.clientId === clientId ? { ...entry, ...change } : entry)) }, false);
+  }
+
+  private async deliverUpload(clientId: string): Promise<void> {
+    const job = this.uploadJobs.get(clientId);
+    const item = this.snapshot.uploads.find((entry) => entry.clientId === clientId);
+    if (!job || !item || this.sending.has(clientId)) return;
+    this.sending.add(clientId);
+    try {
+      if (!job.fileId || !job.uploaded) {
+        this.updateUpload(clientId, { status: 'uploading', error: null, progress: 0 });
+        const { file } = job;
+        const slot = await createUpload({
+          chatId: item.chatId,
+          kind: file.kind,
+          mimeType: file.mimeType,
+          size: file.body.size,
+          ...(file.fileName ? { fileName: file.fileName } : {}),
+          ...(file.width ? { width: file.width, height: file.height } : {}),
+          ...(file.durationMs !== undefined ? { durationMs: file.durationMs } : {}),
+          ...(file.waveform ? { waveform: file.waveform } : {}),
+          ...(file.thumbnail ? { thumbnail: { mimeType: 'image/jpeg', size: file.thumbnail.size } } : {}),
+        });
+        job.fileId = slot.fileId;
+        const total = file.body.size + (file.thumbnail?.size ?? 0);
+        await uploadWithProgress(slot.upload.url, slot.upload.headers, file.body, (fraction) => this.updateUpload(clientId, { progress: (fraction * file.body.size) / total }), job.controller.signal);
+        if (slot.thumbnailUpload && file.thumbnail) {
+          await uploadWithProgress(slot.thumbnailUpload.url, slot.thumbnailUpload.headers, file.thumbnail, () => undefined, job.controller.signal).catch(() => undefined);
+        }
+        job.uploaded = true;
+      }
+      this.updateUpload(clientId, { status: 'sending', progress: 1 });
+      if (item.sendAt) {
+        // Phase 6: the file is checked now and sent by the server at the chosen time.
+        await scheduleMessage(item.chatId, {
+          sendAt: item.sendAt,
+          message: { clientId, fileId: job.fileId!, ...(item.caption ? { text: item.caption } : {}), ...(item.replyToId ? { replyToId: item.replyToId } : {}) },
+        });
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+        this.uploadJobs.delete(clientId);
+        this.set({ uploads: this.snapshot.uploads.filter((entry) => entry.clientId !== clientId) }, false);
+        void Promise.all([this.loadScheduled(item.chatId), this.refreshChat(item.chatId)]).catch(() => undefined);
+        return;
+      }
+      const message = cast<Message>(
+        await sendMessage(item.chatId, {
+          clientId,
+          fileId: job.fileId!,
+          ...(item.caption ? { text: item.caption } : {}),
+          ...(item.replyToId ? { replyToId: item.replyToId } : {}),
+        }),
+      );
+      if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      this.uploadJobs.delete(clientId);
+      const messages = this.snapshot.messages[item.chatId];
+      this.set({
+        uploads: this.snapshot.uploads.filter((entry) => entry.clientId !== clientId),
+        ...(messages ? { messages: { ...this.snapshot.messages, [item.chatId]: mergeMessages(messages, [message]) } } : {}),
+      });
+      void this.refreshChat(item.chatId).catch(() => undefined);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      // A refused file needs a new upload slot on retry.
+      if (error instanceof ApiError && error.code === 'FILE_INVALID') {
+        job.fileId = null;
+        job.uploaded = false;
+      }
+      this.updateUpload(clientId, { status: 'failed', error: error instanceof ApiError ? errorMessage(error) : 'The upload failed. Check your connection.' });
+    } finally {
+      this.sending.delete(clientId);
+    }
+  }
+
+  /** Sends a sticker or a GIF (nothing to upload). */
+  async sendPicked(chatId: string, pick: { stickerId: string } | { gifId: string }, replyToId: string | null): Promise<void> {
+    const message = cast<Message>(await sendMessage(chatId, { clientId: crypto.randomUUID(), ...pick, ...(replyToId ? { replyToId } : {}) }));
+    this.replaceMessage(message);
+    void this.refreshChat(chatId).catch(() => undefined);
+  }
+
+  /** A short-lived link to a message's file (5 minutes). */
+  async fileUrl(messageId: string, download = false): Promise<string> {
+    return (await getMessageFile(messageId, download ? { download: 'true' } : {})).url;
+  }
+
+  async react(message: Message, emoji: ReactionBody['emoji'] | null): Promise<void> {
+    this.replaceMessage(cast<Message>(emoji ? await reactToMessage(message.id, { emoji }) : await removeReaction(message.id)));
+  }
+
+  async chatMedia(chatId: string, kind: MediaFilter, before?: number): Promise<Message[]> {
+    return cast<Message[]>((await listChatMedia(chatId, { kind, ...(before ? { before } : {}) })).messages);
+  }
+
+  /** Sticker packs, fetched once per page load (and again after an error). */
+  stickers(): Promise<StickerPack[]> {
+    this.stickerPacks ??= listStickers()
+      .then((result) => cast<StickerPack[]>(result.packs))
+      .catch((error: unknown) => {
+        this.stickerPacks = null;
+        throw error;
+      });
+    return this.stickerPacks;
+  }
+
+  searchGifs(q: string, offset = 0): Promise<GifSearchResponse> {
+    return searchGifs({ ...(q ? { q } : {}), ...(offset ? { offset } : {}) }).then((result) => cast<GifSearchResponse>(result));
+  }
+
+  // ------------------------------------------------------------------------------ notifications (Phase 7)
+
+  /**
+   * Tells the server which chat this device shows (page visible), so it is not pushed about that chat (D-41).
+   * `force` repeats it (the server forgets it a minute after the device stops sending heartbeats).
+   */
+  viewing(chatId: string | null, force = false): void {
+    if (!force && this.viewingChat === chatId) return;
+    this.viewingChat = chatId;
+    void realtimeViewing({ chatId }).catch(() => {
+      this.viewingChat = undefined;
+    });
+  }
+
+  // ------------------------------------------------------------------------------ channels, scheduling (Phase 6)
+
+  /** What the signed-in user may create and do (O-21), fetched once per page load. */
+  myPermissions(): Promise<UserPermissions> {
+    this.permissions ??= getMyPermissions().catch((error: unknown) => {
+      this.permissions = null;
+      throw error;
+    });
+    return this.permissions;
+  }
+
+  async createChannel(body: { title: string; description?: string; isPublic: boolean }): Promise<Chat> {
+    const chat = cast<Chat>(await apiCreateChannel(body));
+    this.upsertChat(chat);
+    return chat;
+  }
+
+  searchChannels(q: string): Promise<PublicChannel[]> {
+    return apiSearchChannels({ q }).then((result) => cast<PublicChannel[]>(result.channels));
+  }
+
+  async joinChannel(channelId: string): Promise<Chat> {
+    const chat = cast<Chat>(await apiJoinChannel(channelId));
+    this.upsertChat(chat);
+    return chat;
+  }
+
+  async loadScheduled(chatId: string): Promise<ScheduledMessage[]> {
+    const list = cast<ScheduledMessage[]>((await listScheduledMessages(chatId)).scheduled);
+    this.set({ scheduled: { ...this.snapshot.scheduled, [chatId]: list } }, false);
+    return list;
+  }
+
+  /** Schedules a text message (files go through sendFile with a time). */
+  async schedule(chatId: string, text: string, replyToId: string | null, sendAt: string): Promise<void> {
+    await scheduleMessage(chatId, { sendAt, message: { clientId: crypto.randomUUID(), text, ...(replyToId ? { replyToId } : {}) } });
+    await Promise.all([this.loadScheduled(chatId), this.refreshChat(chatId)]);
+  }
+
+  async reschedule(item: ScheduledMessage, sendAt: string): Promise<void> {
+    await updateScheduledMessage(item.id, { sendAt });
+    await this.loadScheduled(item.chatId);
+  }
+
+  async cancelScheduled(item: ScheduledMessage): Promise<void> {
+    await cancelScheduledMessage(item.id);
+    await Promise.all([this.loadScheduled(item.chatId), this.refreshChat(item.chatId)]);
+  }
+
+  async sendScheduledNow(item: ScheduledMessage): Promise<void> {
+    this.replaceMessage(cast<Message>(await sendScheduledMessageNow(item.id)));
+    await Promise.all([this.loadScheduled(item.chatId), this.refreshChat(item.chatId)]);
   }
 
   // ------------------------------------------------------------------------------ safety, folders
@@ -557,7 +889,7 @@ export class MessagingStore {
   async setBlocked(userId: string, blocked: boolean): Promise<void> {
     if (blocked) await blockUser(userId);
     else await unblockUser(userId);
-    const chat = Object.values(this.snapshot.chats).find((item) => item.peer.id === userId);
+    const chat = Object.values(this.snapshot.chats).find((item) => item.peer?.id === userId);
     if (chat) await this.refreshChat(chat.id);
   }
 

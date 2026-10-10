@@ -93,6 +93,10 @@ export class AuditService {
       action: MessageRevisionAction;
       previousText: string | null;
       newText?: string | null;
+      /** The file or sticker the message carries (Phase 4). */
+      fileId?: string | null;
+      stickerId?: string | null;
+      pollId?: string | null;
       actor: Actor;
       sessionId?: string | null;
     },
@@ -106,9 +110,30 @@ export class AuditService {
         action: input.action,
         previous_text: input.previousText,
         new_text: input.newText ?? null,
+        file_id: input.fileId ?? null,
+        sticker_id: input.stickerId ?? null,
+        poll_id: input.pollId ?? null,
         actor_type: input.actor.type,
         actor_id: input.actor.id,
         session_id: input.sessionId ?? null,
+      })
+      .execute();
+  }
+
+  /** Phase 5: membership history (D-17): join, leave, add, remove, restrict, promote, ownership. */
+  async membership(
+    db: Executor,
+    input: { conversationId: string; userId: string; action: string; actor: Actor; details?: Record<string, unknown> },
+  ): Promise<void> {
+    await db
+      .insertInto('audit.membership_events')
+      .values({
+        conversation_id: input.conversationId,
+        user_id: input.userId,
+        action: input.action,
+        actor_type: input.actor.type,
+        actor_id: input.actor.id,
+        details: input.details ?? {},
       })
       .execute();
   }

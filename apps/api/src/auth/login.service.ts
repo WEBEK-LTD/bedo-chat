@@ -5,7 +5,7 @@ import { sql } from 'kysely';
 import { deviceLabel, type RequestInfo } from '../common/request-info.js';
 import { AuditService } from '../audit/audit.service.js';
 import { DatabaseService } from '../database/database.service.js';
-import { QueuesService } from '../queues/queues.service.js';
+import { PushService } from '../delivery/push.service.js';
 import { AccountsService } from './accounts.service.js';
 import { SessionsService } from './sessions.service.js';
 import { TokenService } from './token.service.js';
@@ -19,7 +19,7 @@ export class LoginService {
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(AccountsService) private readonly accounts: AccountsService,
     @Inject(AuditService) private readonly audit: AuditService,
-    @Inject(QueuesService) private readonly queues: QueuesService,
+    @Inject(PushService) private readonly push: PushService,
   ) {}
 
   async complete(input: {
@@ -63,7 +63,7 @@ export class LoginService {
     });
 
     if (hadOtherSessions) {
-      await this.queues.enqueuePush({
+      this.push.notify({
         userId: input.userId,
         excludeSessionId: session.sessionId,
         notification: {

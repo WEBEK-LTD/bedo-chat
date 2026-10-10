@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type IntegrationEnv, query, setupIntegrationEnv, startApp } from './integration-env.js';
 import { client, createUser, resetMessageLimit, type TestUser } from './messaging-helpers.js';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL && process.env.REDIS_URL);
+const enabled = Boolean(process.env.TEST_DATABASE_URL);
 
 /**
  * Phase 3 messaging core against real Postgres and Redis, with the API connected as the least-privilege
@@ -103,7 +103,7 @@ describe.runIf(enabled)('Phase 3 messaging (real Postgres + Redis, runtime role)
       await resetMessageLimit(ctx, ana.id);
       const original = (await a.send(chat.id, 'Question?')).body;
       const reply = await b.send(chat.id, 'Answer.', { replyToId: original.id });
-      expect(reply.body.replyTo).toEqual({ id: original.id, senderId: ana.id, text: 'Question?' });
+      expect(reply.body.replyTo).toEqual({ id: original.id, senderId: ana.id, text: 'Question?', media: null });
       const elsewhere = await a.openChat(cai);
       expect((await a.send(elsewhere.id, 'wrong chat', { replyToId: original.id })).status).toBe(404);
     });
@@ -259,7 +259,7 @@ describe.runIf(enabled)('Phase 3 messaging (real Postgres + Redis, runtime role)
         messageIds: [forwarded.body.messages[0].id],
         targets: [{ chatId: ab.id, clientId: randomUUID() }],
       });
-      expect(again.body.messages[0].forwardedFrom).toEqual({ id: ben.id, displayName: 'Ben Carter', deleted: false });
+      expect(again.body.messages[0].forwardedFrom).toEqual({ kind: 'user', id: ben.id, displayName: 'Ben Carter', deleted: false });
       const tooMany = Array.from({ length: 11 }, () => ({ chatId: randomUUID(), clientId: randomUUID() }));
       expect((await a.post('/v1/messages/forward', { fromChatId: ab.id, messageIds: [fromAna.id], targets: tooMany })).status).toBe(400);
       // A chat the sender is not in makes the whole request fail; nothing is stored.
@@ -440,7 +440,7 @@ describe.runIf(enabled)('Phase 3 messaging (real Postgres + Redis, runtime role)
       const copy = (await l.get(`/v1/chats/${forwarded.body.messages[0].chatId}/messages`)).body.messages.find(
         (m: { id: string }) => m.id === forwarded.body.messages[0].id,
       );
-      expect(copy.forwardedFrom).toEqual({ id: kim.id, displayName: 'Deleted account', deleted: true });
+      expect(copy.forwardedFrom).toEqual({ kind: 'user', id: kim.id, displayName: 'Deleted account', deleted: true });
       await owner("update app.users set status = 'suspended' where id = $1", [lou.id]);
       expect((await l.send(chat.id, 'suspended')).body.error.code).toBe('ACCOUNT_BLOCKED');
     });

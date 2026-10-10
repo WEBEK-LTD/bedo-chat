@@ -63,7 +63,7 @@ function setAdminCookie(reply: FastifyReply, env: ApiEnv, token: string): void {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: publicCookiePath(env, ADMIN_SESSION_COOKIE_PATH),
+    path: publicCookiePath(ADMIN_SESSION_COOKIE_PATH),
     maxAge: ADMIN_SESSION_RULES.absoluteHours * 60 * 60,
   });
 }
@@ -84,7 +84,7 @@ export class AdminAuthController {
   @HttpCode(200)
   @ResponseSchema(adminPasswordLoginResponseSchema)
   login(@Body(new ZodValidationPipe(adminPasswordLoginBodySchema)) body: { phone: string; password: string }, @Req() request: FastifyRequest) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     return this.passwords.login(requirePhone(body.phone), body.password, requestInfo(request));
   }
 
@@ -96,7 +96,7 @@ export class AdminAuthController {
     @Body(new ZodValidationPipe(adminPasswordSetupBodySchema)) body: { phone: string; setupToken: string; password: string },
     @Req() request: FastifyRequest,
   ) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     await this.passwords.setWithToken(requirePhone(body.phone), body.setupToken, body.password, requestInfo(request));
     return { ok: true as const };
   }
@@ -106,7 +106,7 @@ export class AdminAuthController {
   @HttpCode(200)
   @ResponseSchema(adminTotpSetupResponseSchema)
   setupTotp(@Body(new ZodValidationPipe(adminTotpSetupBodySchema)) body: { pendingToken: string }, @Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     // The answer carries an authenticator secret: never cached anywhere.
     void reply.header('cache-control', 'no-store');
     return this.auth.setupTotp(body.pendingToken, requestInfo(request));
@@ -120,7 +120,7 @@ export class AdminAuthController {
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     const { admin, sessionToken } = await this.auth.verifyTotp(body.pendingToken, body.code, requestInfo(request));
     setAdminCookie(reply, this.env, sessionToken);
     return { admin };
@@ -142,7 +142,7 @@ export class AdminBootstrapController {
   @Get()
   @ResponseSchema(adminBootstrapStatusResponseSchema)
   status(@Req() request: FastifyRequest) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     return this.bootstrap.status();
   }
 
@@ -153,7 +153,7 @@ export class AdminBootstrapController {
     @Body(new ZodValidationPipe(adminBootstrapWaabekKeyBodySchema)) body: { setupToken: string; apiKey: string },
     @Req() request: FastifyRequest,
   ) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     await this.bootstrap.saveWaabekKey(body.setupToken, body.apiKey, requestInfo(request));
     return { ok: true as const };
   }
@@ -162,7 +162,7 @@ export class AdminBootstrapController {
   @HttpCode(200)
   @ResponseSchema(waabekTestResponseSchema)
   testMessage(@Body(new ZodValidationPipe(adminBootstrapTestBodySchema)) body: { setupToken: string }, @Req() request: FastifyRequest) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     return this.bootstrap.sendTestMessage(body.setupToken, requestInfo(request));
   }
 }
@@ -182,7 +182,7 @@ export class AdminOtpRecoveryController {
   @Get()
   @ResponseSchema(otpRecoveryStatusResponseSchema)
   status(@Req() request: FastifyRequest) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     return this.recovery.status();
   }
 
@@ -193,7 +193,7 @@ export class AdminOtpRecoveryController {
     @Body(new ZodValidationPipe(otpRecoveryWaabekKeyBodySchema)) body: { recoveryToken: string; apiKey: string },
     @Req() request: FastifyRequest,
   ) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     await this.recovery.saveWaabekKey(body.recoveryToken, body.apiKey, requestInfo(request));
     return { ok: true as const };
   }
@@ -202,7 +202,7 @@ export class AdminOtpRecoveryController {
   @HttpCode(200)
   @ResponseSchema(waabekTestResponseSchema)
   testMessage(@Body(new ZodValidationPipe(otpRecoveryTestBodySchema)) body: { recoveryToken: string }, @Req() request: FastifyRequest) {
-    assertCsrf(request, this.env.ADMIN_ORIGINS);
+    assertCsrf(request);
     return this.recovery.sendTestMessage(body.recoveryToken, requestInfo(request));
   }
 }
@@ -249,7 +249,7 @@ export class AdminController {
       httpOnly: true,
       secure: this.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      path: publicCookiePath(this.env, ADMIN_SESSION_COOKIE_PATH),
+      path: publicCookiePath(ADMIN_SESSION_COOKIE_PATH),
     });
     return { ok: true as const };
   }

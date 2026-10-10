@@ -5,6 +5,8 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Bedo Chat Admin',
   robots: { index: false, follow: false },
+  // Phase 13: the site's favicon (apps/web/public), served from the same site.
+  icons: { icon: [{ url: '/favicon.ico', sizes: '32x32' }] },
 };
 
 export const viewport: Viewport = {

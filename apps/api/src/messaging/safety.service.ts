@@ -65,16 +65,19 @@ export class SafetyService {
     });
   }
 
-  /** Report a user or one of their messages (P-27). Kept permanently; reviewed in Phase 10. */
+  /**
+   * Report a user or one of their messages (P-27). Kept permanently; reviewed in Phase 10. Phase 9: every attempt
+   * counts against the daily limit, and a message in a channel where the reporter does not see who posts is reported
+   * as the channel's post (the server records its author; the answer is the same whoever is named), so reports cannot
+   * be used to find out who posted (D-40).
+   */
   async report(viewerId: string, body: ReportBody): Promise<void> {
     if (body.userId === viewerId) {
       throw new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
     }
+    await this.limits.reports(viewerId);
     const db = this.database.db;
-    const target = await db.selectFrom('app.users').select('id').where('id', '=', body.userId).executeTakeFirst();
-    if (!target) {
-      throw notFound();
-    }
+    let reportedUserId = body.userId;
     let conversationId: string | null = null;
     let messageText: string | null = null;
     if (body.messageId) {
@@ -83,23 +86,34 @@ export class SafetyService {
         .select(['id', 'conversation_id', 'sender_id', 'text'])
         .where('id', '=', body.messageId)
         .executeTakeFirst();
-      // Only a message of that user, in a chat the reporter is in and can still see.
+      // Only a message in a chat the reporter is in and can still see.
       const access = message ? await this.permissions.findChatAccess(db, viewerId, message.conversation_id) : null;
       const hidden = message
         ? await db.selectFrom('app.message_hidden').select('message_id').where('user_id', '=', viewerId).where('message_id', '=', message.id).executeTakeFirst()
         : undefined;
-      if (!message || !access || hidden || message.sender_id !== body.userId) {
+      if (!message || !access || hidden) {
         throw notFound();
       }
+      if (this.permissions.seesSenders(access)) {
+        // Elsewhere the reporter sees the sender, so naming someone else is a mistake.
+        if (message.sender_id !== body.userId) throw notFound();
+      } else if (message.sender_id === viewerId) {
+        throw new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
+      }
+      reportedUserId = message.sender_id;
       conversationId = message.conversation_id;
       messageText = message.text;
+    } else {
+      const target = await db.selectFrom('app.users').select('id').where('id', '=', body.userId).executeTakeFirst();
+      if (!target) {
+        throw notFound();
+      }
     }
-    await this.limits.reports(viewerId);
     await db
       .insertInto('app.reports')
       .values({
         reporter_id: viewerId,
-        reported_user_id: body.userId,
+        reported_user_id: reportedUserId,
         conversation_id: conversationId,
         message_id: body.messageId ?? null,
         reason: body.reason,

@@ -3,7 +3,7 @@ import type { UpdateKind } from '@bedo/contracts';
 import type { Database } from '@bedo/db';
 import { sql, type Transaction } from 'kysely';
 import { DatabaseService } from '../database/database.service.js';
-import { RealtimeBusService } from './realtime-bus.service.js';
+import { RealtimeService } from './realtime.service.js';
 
 export interface UpdateEntry {
   userId: string;
@@ -36,7 +36,8 @@ const MAX_ATTEMPTS = 3;
 /**
  * The write path of every messaging change (blueprint: Messaging, sync and multi-device): one transaction
  * makes the change, writes its audit records and appends an entry to each affected user's update log
- * (P-17); only after it commits are the users' connected devices told to fetch the new entries.
+ * (P-17); only after it commits are the users' devices signalled to fetch the new entries (D-36: after the
+ * response, through Supabase Realtime).
  *
  * Lock order, kept by every change: conversation rows (by id), then member rows, then the users'
  * update-log counters (by user id, taken last, here).
@@ -47,7 +48,7 @@ export class UpdateLogService {
 
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
-    @Inject(RealtimeBusService) private readonly bus: RealtimeBusService,
+    @Inject(RealtimeService) private readonly realtime: RealtimeService,
   ) {}
 
   async run<T>(change: (trx: Transaction<Database>, updates: UpdateCollector) => Promise<T>): Promise<T> {
@@ -59,7 +60,7 @@ export class UpdateLogService {
           await this.append(trx, updates.entries);
           return value;
         });
-        this.bus.notifyUpdates(updates.entries.map((entry) => entry.userId));
+        this.realtime.notifyUpdates(updates.entries.map((entry) => entry.userId));
         return result;
       } catch (error) {
         const code = (error as { code?: unknown }).code;
@@ -67,10 +68,10 @@ export class UpdateLogService {
           this.logger.warn(`Retrying a messaging change after ${code}`);
           continue;
         }
-        // The worker keeps message partitions three months ahead; if it has been down that long, the
-        // missing month is created here (through the owner-rights function) and the change is retried once.
+        // The hourly housekeeping keeps message partitions three months ahead; if it has not run for that long
+        // (no traffic), the missing month is created here (owner-rights function) and the change retried.
         if (attempt < MAX_ATTEMPTS && code === '23514' && /no partition of relation/.test(String((error as Error).message))) {
-          this.logger.error('No message partition for the current month: creating it (is the worker running?)');
+          this.logger.warn('No message partition for the current month: creating it');
           await sql`select app.ensure_message_partitions(3)`.execute(this.database.db);
           continue;
         }

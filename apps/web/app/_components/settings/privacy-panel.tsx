@@ -10,7 +10,6 @@ const SETTINGS: Array<{ key: keyof Privacy; label: string }> = [
   { key: 'lastSeenVisibility', label: 'Who can see my last seen' },
   { key: 'photoVisibility', label: 'Who can see my profile picture' },
   { key: 'messagesFrom', label: 'Who can message me' },
-  { key: 'callsFrom', label: 'Who can call me' },
 ];
 
 /** Privacy settings (P-08): Everyone or Nobody for each. */

@@ -47,7 +47,7 @@ test('bundle guard finds the Waabek host and passes clean output', () => {
   }
 });
 
-test('route check allows exactly / and /login', () => {
+test('route check allows exactly / and /login, plus the API route handler (D-36)', () => {
   const dir = tempDir();
   try {
     mkdirSync(path.join(dir, 'login'));
@@ -60,8 +60,15 @@ test('route check allows exactly / and /login', () => {
     const routes = collectRoutes(dir);
     assert.deepEqual(routes, ['/', '/login', '/settings']);
     assert.deepEqual(checkRoutes(routes).unexpected, ['/settings']);
-    assert.equal(checkRoutes(['/', '/login']).ok, true);
-    assert.deepEqual(checkRoutes(['/']).missing, ['/login']);
+    assert.equal(checkRoutes(['/', '/login', '/api/[[...path]]']).ok, true);
+    assert.deepEqual(checkRoutes(['/']).missing, ['/login', '/api/[[...path]]']);
+    // The API path is allowed only as a route handler, never as a page.
+    mkdirSync(path.join(dir, 'api', '[[...path]]'), { recursive: true });
+    writeFileSync(path.join(dir, 'api', '[[...path]]', 'route.ts'), '');
+    assert.ok(collectRoutes(dir).includes('/api/[[...path]]'));
+    rmSync(path.join(dir, 'api', '[[...path]]', 'route.ts'));
+    writeFileSync(path.join(dir, 'api', '[[...path]]', 'page.tsx'), '');
+    assert.ok(checkRoutes(collectRoutes(dir)).unexpected.includes('/api/[[...path]] (page)'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -69,10 +76,10 @@ test('route check allows exactly / and /login', () => {
 
 test('bundle guard reads secret values from server .env files', () => {
   const env = parseEnvFile(
-    '# comment\nexport DATABASE_URL="postgres://u:p@host/db" # quoted\nREDIS_URL=redis://cache:6379   # inline comment  \n\nBAD LINE',
+    '# comment\nexport DATABASE_URL="postgres://u:p@host/db" # quoted\nSUPABASE_SERVICE_ROLE_KEY=service-role-value   # inline comment  \n\nBAD LINE',
   );
-  assert.deepEqual(env, { DATABASE_URL: 'postgres://u:p@host/db', REDIS_URL: 'redis://cache:6379' });
-  const needles = buildNeedles(['DATABASE_URL', 'REDIS_URL'], {}, env);
+  assert.deepEqual(env, { DATABASE_URL: 'postgres://u:p@host/db', SUPABASE_SERVICE_ROLE_KEY: 'service-role-value' });
+  const needles = buildNeedles(['DATABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'], {}, env);
   assert.ok(needles.some((needle) => needle.text === 'postgres://u:p@host/db'));
 });
 
@@ -80,11 +87,11 @@ test('bundle guard scans static output, prerendered pages and public/, including
   const app = tempDir();
   try {
     for (const dir of ['.next/static', '.next/server/app', 'public']) mkdirSync(path.join(app, dir), { recursive: true });
-    writeFileSync(path.join(app, 'public', 'leak.bin'), Buffer.concat([Buffer.from([0, 255, 1]), Buffer.from('REDIS_URL')]));
+    writeFileSync(path.join(app, 'public', 'leak.bin'), Buffer.concat([Buffer.from([0, 255, 1]), Buffer.from('SUPABASE_SERVICE_ROLE_KEY')]));
     writeFileSync(path.join(app, '.next', 'server', 'app', 'index.body'), 'clean');
     const dirs = clientOutputDirs(app);
     assert.equal(dirs.length, 3);
-    const { findings, filesScanned } = scan(dirs, buildNeedles(['REDIS_URL'], {}));
+    const { findings, filesScanned } = scan(dirs, buildNeedles(['SUPABASE_SERVICE_ROLE_KEY'], {}));
     assert.equal(filesScanned, 2);
     assert.deepEqual(findings.map((finding) => path.basename(finding.file)), ['leak.bin']);
   } finally {
@@ -143,4 +150,41 @@ test('both Netlify config files build the one site (D-28) and publish from the r
       assert.ok(!toml.includes(secret), `apps/${app}/netlify.toml must not mention ${secret}`);
     }
   }
+});
+
+test('Phase 6: the scheduled function is deployed every minute and proves itself the way the API expects', async () => {
+  const { existsSync, readFileSync } = await import('node:fs');
+  for (const app of ['web', 'admin']) {
+    const toml = readFileSync(new URL(`../apps/${app}/netlify.toml`, import.meta.url), 'utf8');
+    assert.match(toml, /^\[functions\]\s*\n\s*directory = "apps\/web\/netlify\/functions"$/m, `apps/${app}/netlify.toml [functions] directory`);
+  }
+  const fn = new URL('../apps/web/netlify/functions/scheduler.mts', import.meta.url);
+  assert.ok(existsSync(fn), 'apps/web/netlify/functions/scheduler.mts exists');
+  const source = readFileSync(fn, 'utf8');
+  assert.match(source, /export const config = \{ schedule: '\* \* \* \* \*' \};/);
+  assert.match(source, /'x-bedo-dispatch'/);
+  assert.match(source, /\/api\/v1\/internal\/dispatch/);
+  const purpose = source.match(/const DISPATCH_PURPOSE = '([^']+)'/)?.[1];
+  const api = readFileSync(new URL('../apps/api/src/messaging/scheduled.service.ts', import.meta.url), 'utf8');
+  assert.equal(api.match(/const DISPATCH_PURPOSE = '([^']+)'/)?.[1], purpose, 'the function and the API use the same purpose');
+  // The function computes the token from the secret at run time; nothing secret is written in it.
+  assert.doesNotMatch(source, /[0-9a-f]{64}/);
+});
+
+test('the web app sends its access token to every route that needs one', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../apps/web/app/_lib/api.ts', import.meta.url), 'utf8');
+  const prefixes = [...source.match(/const USER_ROUTES = \[([^\]]*)\]/)[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  const document = JSON.parse(readFileSync(new URL('../apps/api/openapi/openapi.json', import.meta.url), 'utf8'));
+  const missing = [];
+  // P-28: screenshot events come from the iOS and Android apps only; the web app never calls the route.
+  const notFromTheWeb = new Set(['/v1/screenshot-events']);
+  for (const [path, operations] of Object.entries(document.paths)) {
+    if (notFromTheWeb.has(path)) continue;
+    for (const operation of Object.values(operations)) {
+      const bearer = (operation.security ?? []).some((entry) => 'bearerAuth' in entry);
+      if (bearer && !prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) missing.push(path);
+    }
+  }
+  assert.deepEqual([...new Set(missing)], []);
 });

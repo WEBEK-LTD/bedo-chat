@@ -1,5 +1,5 @@
 import { setTransport, type WaabekTestResponse } from '@bedo/api-client';
-import { CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
+import { API_BASE_PATH, CSRF_HEADER, CSRF_HEADER_VALUE, type ErrorCode, type ErrorEnvelope } from '@bedo/contracts';
 
 /** An error answer from the API (or a network failure, code NETWORK). */
 export class ApiError extends Error {
@@ -15,7 +15,8 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '');
+/** D-36: the API is served by the same site at /api (https://bedochat.com/api). */
+const API_URL = API_BASE_PATH;
 
 /**
  * The admin app's transport for the generated API client (@bedo/api-client). The admin session is an
@@ -72,7 +73,11 @@ export function errorMessage(error: unknown): string {
     case 'NOT_FOUND':
       return 'Not found.';
     case 'CONFLICT':
-      return 'This has already been decided.';
+      return 'This has already been done or decided. Refresh to see the current state.';
+    case 'LIMIT_REACHED':
+      return 'This group or channel is full.';
+    case 'NOT_ALLOWED':
+      return 'This change is not possible here.';
     case 'SETUP_UNAVAILABLE':
       return 'Initial setup is not available. It may be complete, or the setup token expired or was locked after wrong attempts: run the setup SQL again for a new token.';
     case 'SETUP_TOKEN_INVALID':
