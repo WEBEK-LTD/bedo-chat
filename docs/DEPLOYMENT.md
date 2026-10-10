@@ -39,9 +39,18 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
 2. **Netlify plan and region**: the site's team on **Pro**, then Site configuration → **Functions** → **Region** →
    **Asia Pacific (Sydney)** → Save. The API runs in the functions, next to the database in Sydney; in another
    region every request waits for several round trips across the Pacific. (Choosing the region needs Pro.)
-3. **Netlify variables**: fill in the 8 `PASTE_` values in [`docs/netlify-production.env`](netlify-production.env)
-   (it says where each comes from), then Site configuration → **Environment variables** → **Add a variable** →
-   **Import from a .env file** → paste → **Import**. Then Deploys → **Trigger deploy** → **Deploy site**.
+3. **Netlify variables** (without them every page of the API answers an error and the logs say "Invalid environment
+   configuration ... is required"):
+   1. Supabase → **SQL Editor** → paste the whole of
+      [`docs/owner-sql/netlify-variables.sql`](owner-sql/netlify-variables.sql) → **Run**. The result is 9 lines:
+      the database address with a new password for `bedo_api`, and the site's four keys, all made for you.
+   2. In those lines replace the three `PASTE_` values with the Supabase keys (Project Settings → **API Keys** →
+      *Legacy API keys*: `anon` and `service_role`; **JWT Keys** → *Legacy JWT Secret*).
+   3. Netlify → Site configuration → **Environment variables** → **Add a variable** → **Import from a .env file** →
+      paste the 9 lines → **Import** (scopes: all; the same value for every deploy context).
+   4. Deploys → **Trigger deploy** → **Deploy site**. Variables reach the site only with a new deploy.
+   5. Keep the 9 lines in your password manager and delete the query from the SQL Editor. Run the script again only
+      to replace all of them (it refuses once the site has stored encrypted secrets with its keys).
 4. **Supabase SQL Editor** (role `postgres`):
    1. Paste the whole of [`docs/owner-sql/apply-updates.sql`](owner-sql/apply-updates.sql) → **Run** once.
       Every line of the result says `ok`. It applies every migration after the first six, in order (D-35 admin

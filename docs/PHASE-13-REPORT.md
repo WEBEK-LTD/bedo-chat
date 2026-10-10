@@ -70,3 +70,15 @@ out after the response, so the poster does not wait for them.
   notifications) are in the go-live steps, `docs/DEPLOYMENT.md` section 0.
 - The temporary release-age exemptions for `next`, `source-map-js` and `sharp` can be removed after 2026-10-14
   (nothing breaks on that date; it returns them to the normal 14-day rule).
+
+## Phase 13.1 — the site's variables from the SQL Editor
+
+On the first go-live the site's function logs said "Invalid environment configuration: DATABASE_URL ... is
+required": the Netlify site had no server variables, and the five secret values had no documented way to be made
+without a terminal. `docs/owner-sql/netlify-variables.sql` now makes them in the Supabase SQL Editor: it gives
+`bedo_api` a new random password and shows the nine lines to import into Netlify (only the three Supabase keys are
+copied by hand). It refuses, changing nothing, once the site has stored secrets encrypted with its keys (an admin's
+authenticator, the Waabek, GIPHY or Web Push keys), since new keys could not read them. Tested in
+`apps/api/test/netlify-variables.integration.test.ts` (the new password works, every value passes the API's own
+checks, a second run makes new values, the refusal leaves the old password working). `docs/DEPLOYMENT.md` section 0,
+step 3, uses it.
