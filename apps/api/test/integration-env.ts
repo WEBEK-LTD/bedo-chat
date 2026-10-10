@@ -14,7 +14,7 @@ import { WaabekSender } from '../src/delivery/waabek.client.js';
 import { type BroadcastMessage, RealtimeBroadcaster } from '../src/messaging/realtime-broadcaster.js';
 import { signRealtimeToken } from '../src/messaging/realtime-token.js';
 import { DeferredTasks } from '../src/runtime/deferred-tasks.service.js';
-import { GifProvider, type GifItem } from '../src/media/gif-provider.js';
+import { GifProvider, GifProviderError, type GifItem } from '../src/media/gif-provider.js';
 import { type MediaBucket, MediaStorage, type ObjectHead } from '../src/storage/media-storage.js';
 import { ProfilePhotoStorage } from '../src/storage/profile-photo-storage.js';
 
@@ -233,8 +233,14 @@ export class FakeGifProvider extends GifProvider {
     return url.startsWith('https://media.giphy.com/');
   }
 
+  /** Keys GIPHY answers 401 for (not accepted), and a key whose check finds GIPHY unreachable. */
+  static readonly REJECTED_KEY = ['Rejected', 'Giphy', 'Key1'].join('');
+  static readonly UNREACHABLE_KEY = ['Unreachable', 'Giphy', 'Key1'].join('');
+
   async search(apiKey: string, query: string | null, offset: number, limit: number) {
     this.calls.push({ apiKey, kind: 'search', value: query ?? '' });
+    if (apiKey === FakeGifProvider.REJECTED_KEY) throw new GifProviderError('GIPHY answered 401', 401);
+    if (apiKey === FakeGifProvider.UNREACHABLE_KEY) throw new GifProviderError('GIPHY could not be reached');
     const items = [...this.catalogue.values()].filter((item) => !query || item.title.toLowerCase().includes(query.toLowerCase()));
     return { items: items.slice(offset, offset + limit), total: items.length };
   }

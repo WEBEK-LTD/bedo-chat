@@ -220,7 +220,7 @@ describe.runIf(enabled)('Phase 4 media in the browser', () => {
     await admin.getByRole('button', { name: 'Sign in' }).click();
     await admin.getByText('Media Admin · Super Admin').waitFor();
     await admin.getByRole('button', { name: 'Stickers and GIFs' }).click();
-    await admin.getByTestId('gif-key-status').getByText(/On: a GIPHY key is saved/).waitFor();
+    await admin.getByTestId('gif-key-status').getByText('GIF search is on.').waitFor();
     await admin.getByLabel('New pack name').fill('Academy');
     await admin.getByRole('button', { name: 'Create pack' }).click();
     const pack = admin.getByRole('article', { name: 'Pack Academy' });

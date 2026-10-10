@@ -243,7 +243,10 @@ function startServices(keys: { serviceKey: string; anonKey: string; jwtSecret: s
           images: {
             fixed_height: { url: `${SERVICES_URL}/giphy-media/${gif.id}/200.gif`, mp4: `${SERVICES_URL}/giphy-media/${gif.id}/200.mp4`, width: '200', height: '150' },
             fixed_height_small: { url: `${SERVICES_URL}/giphy-media/${gif.id}/100.gif`, webp: `${SERVICES_URL}/giphy-media/${gif.id}/100.webp`, width: '133', height: '100' },
-            fixed_height_still: { url: `${SERVICES_URL}/giphy-media/${gif.id}/200_s.gif`, width: '200', height: '150' },
+            // Like GIPHY: the messaging bundle (used for searches) carries no still frames (Phase 14.2).
+            ...(url.searchParams.get('bundle') === 'messaging_non_clips'
+              ? {}
+              : { fixed_height_still: { url: `${SERVICES_URL}/giphy-media/${gif.id}/200_s.gif`, width: '200', height: '150' } }),
           },
         });
         const one = /^\/giphy\/v1\/gifs\/([A-Za-z0-9]+)$/.exec(url.pathname);

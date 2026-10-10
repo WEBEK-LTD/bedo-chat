@@ -317,11 +317,20 @@ describe.runIf(enabled)('Phase 4 media: files, stickers, GIFs, reactions (real P
 
     const superAdmin = await adminClient(app, await createTestAdmin(ctx, app, 'super_admin'));
     expect((await superAdmin.put('/v1/admin/settings/gifs', { apiKey: 'not a key!' })).status).toBe(400);
+    // Phase 14.2: GIPHY checks a key before it is saved; a refused key or an unreachable GIPHY saves nothing.
+    const rejected = await superAdmin.put('/v1/admin/settings/gifs', { apiKey: FakeGifProvider.REJECTED_KEY });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.code).toBe('GIPHY_KEY_INVALID');
+    expect((await superAdmin.put('/v1/admin/settings/gifs', { apiKey: FakeGifProvider.UNREACHABLE_KEY })).status).toBe(503);
+    expect((await query(ctx.ownerUrl, 'select giphy_key_enc from app.gif_settings')).rows[0]!.giphy_key_enc).toBeNull();
+    expect((await superAdmin.get('/v1/admin/settings/gifs')).body.configured).toBe(false);
     const saved = await superAdmin.put('/v1/admin/settings/gifs', { apiKey: TEST_GIPHY_KEY });
     expect(saved.body).toMatchObject({ configured: true });
     expect(JSON.stringify(saved.body)).not.toContain(TEST_GIPHY_KEY);
     const stored = await query(ctx.ownerUrl, 'select giphy_key_enc from app.gif_settings');
     expect(stored.rows[0]!.giphy_key_enc).not.toContain(TEST_GIPHY_KEY);
+    // Kept: a later read (after a refresh) still says on.
+    expect((await superAdmin.get('/v1/admin/settings/gifs')).body.configured).toBe(true);
 
     const found = await client(app, alice).get('/v1/gifs/search?q=abc');
     expect(found.body.enabled).toBe(true);

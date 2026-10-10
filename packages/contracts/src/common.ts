@@ -56,6 +56,9 @@ export const ERROR_CODES = [
   // Phase 5
   /** The member's role or permissions in this group do not allow this. */
   'NOT_ALLOWED',
+  // Phase 14.2
+  /** GIPHY did not accept the API key, so it was not saved. */
+  'GIPHY_KEY_INVALID',
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
 export type ErrorCode = z.infer<typeof errorCodeSchema>;

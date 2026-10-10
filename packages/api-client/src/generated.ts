@@ -37,6 +37,7 @@ export const ErrorEnvelopeErrorCode = {
   FILE_INVALID: 'FILE_INVALID',
   FEATURE_UNAVAILABLE: 'FEATURE_UNAVAILABLE',
   NOT_ALLOWED: 'NOT_ALLOWED',
+  GIPHY_KEY_INVALID: 'GIPHY_KEY_INVALID',
 } as const;
 
 export type ErrorEnvelopeErrorFieldsItem = {

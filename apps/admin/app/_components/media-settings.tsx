@@ -107,14 +107,17 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
     setAdding(null);
   }
 
-  async function saveGifKey(event: FormEvent) {
-    event.preventDefault();
+  /** Saves a new key (GIPHY checks it first), or with `remove` turns GIF search off. */
+  async function saveGifKey(event: FormEvent | null, remove = false) {
+    event?.preventDefault();
+    const apiKey = remove ? '' : giphyKey.trim();
+    if (!remove && !apiKey) return;
     setBusy(true);
     setError(null);
     setDone(null);
     try {
-      setGifs(await adminSetGifKey({ apiKey: giphyKey.trim() }));
-      setDone(giphyKey.trim() ? 'The GIPHY key is saved. GIF search is on.' : 'The GIPHY key is removed. GIF search is off.');
+      setGifs(await adminSetGifKey({ apiKey }));
+      setDone(apiKey ? 'GIPHY accepted the key and it is saved. GIF search is on for everyone.' : 'The GIPHY key is removed. GIF search is off.');
       setGiphyKey('');
     } catch (caught) {
       fail(caught);
@@ -138,25 +141,38 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
           working if GIPHY removes it.
         </p>
         {gifs ? (
-          <p className="text-sm" data-testid="gif-key-status">
-            {gifs.configured ? 'On: a GIPHY key is saved (hidden).' : 'Off: no GIPHY key is saved.'}
-            {gifs.updatedAt ? ` Last changed ${formatDateTime(gifs.updatedAt)}${gifs.updatedBy ? ` by ${gifs.updatedBy.name}` : ''}.` : ''}
-          </p>
+          <div
+            className={`flex items-start gap-3 rounded-md border p-3.5 text-sm ${gifs.configured ? 'border-success/30 bg-success/10' : 'border-line bg-surface'}`}
+            data-testid="gif-key-status"
+          >
+            <Icon name={gifs.configured ? 'check_circle' : 'info'} size={20} className={`shrink-0 ${gifs.configured ? 'text-success' : 'text-ink-secondary'}`} />
+            <span>
+              <span className="font-semibold">{gifs.configured ? 'GIF search is on.' : 'GIF search is off.'}</span>{' '}
+              {gifs.configured ? 'A GIPHY key is saved. For safety it is never shown again, so the box below stays empty.' : 'No GIPHY key is saved.'}
+              {gifs.updatedAt ? ` Last changed ${formatDateTime(gifs.updatedAt)}${gifs.updatedBy ? ` by ${gifs.updatedBy.name}` : ''}.` : ''}
+            </span>
+          </div>
         ) : null}
         {canChange ? (
           <form className="flex flex-col gap-3" onSubmit={(event) => void saveGifKey(event)}>
             <TextField
               id="giphy-key"
-              label="GIPHY API key"
+              label={gifs?.configured ? 'Replace the GIPHY API key' : 'GIPHY API key'}
               value={giphyKey}
               autoComplete="off"
+              placeholder={gifs?.configured ? 'Saved key hidden. Paste a new key only to replace it.' : 'Paste the API key from developers.giphy.com'}
               onChange={(event) => setGiphyKey(event.target.value)}
-              hint="From developers.giphy.com. Leave empty and save to turn GIF search off."
+              hint="GIPHY checks the key before it is saved."
             />
-            <div>
-              <Button type="submit" disabled={busy}>
-                Save GIF setting
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" disabled={busy || !giphyKey.trim()}>
+                Save key
               </Button>
+              {gifs?.configured ? (
+                <Button variant="danger" disabled={busy} onClick={() => void saveGifKey(null, true)}>
+                  Turn GIF search off
+                </Button>
+              ) : null}
             </div>
           </form>
         ) : null}

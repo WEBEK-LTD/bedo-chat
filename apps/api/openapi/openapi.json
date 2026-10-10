@@ -78,7 +78,8 @@
                   "LIMIT_REACHED",
                   "FILE_INVALID",
                   "FEATURE_UNAVAILABLE",
-                  "NOT_ALLOWED"
+                  "NOT_ALLOWED",
+                  "GIPHY_KEY_INVALID"
                 ]
               },
               "message": {

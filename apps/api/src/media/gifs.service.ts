@@ -68,6 +68,22 @@ export class GifsService {
 
   /** Sets (or with an empty value, removes) the GIPHY key. The key is never returned, logged or audited. */
   async setKey(adminId: string, apiKey: string, info: RequestInfo): Promise<GifSettingsResponse> {
+    if (apiKey) {
+      // Phase 14.2: the key is tried with GIPHY before it is saved, so a wrong key is reported at once.
+      try {
+        await this.provider.search(apiKey, null, 0, 1);
+      } catch (error) {
+        const status = error instanceof GifProviderError ? error.status : null;
+        if (status === 401 || status === 403) {
+          throw new AppError(HttpStatus.BAD_REQUEST, 'GIPHY_KEY_INVALID');
+        }
+        // A rate limit means GIPHY knows the key; anything else (GIPHY unreachable) saves nothing.
+        if (status !== 429) {
+          this.logger.warn(`GIPHY key check failed: ${error instanceof Error ? error.message : String(error)}`);
+          throw new AppError(HttpStatus.SERVICE_UNAVAILABLE, 'SERVICE_UNAVAILABLE');
+        }
+      }
+    }
     await this.database.db.transaction().execute(async (trx) => {
       await trx
         .updateTable('app.gif_settings')

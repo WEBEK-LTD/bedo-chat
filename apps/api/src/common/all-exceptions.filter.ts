@@ -53,6 +53,7 @@ const SAFE_MESSAGES: Record<ErrorCode, string> = {
   FILE_INVALID: 'The file could not be accepted.',
   FEATURE_UNAVAILABLE: 'This is not available right now.',
   NOT_ALLOWED: 'You are not allowed to do this in this group.',
+  GIPHY_KEY_INVALID: 'GIPHY did not accept this API key.',
 };
 
 /**

@@ -12,11 +12,19 @@ export interface GifItem {
   mp4Url: string;
   /** Animated preview for the picker (WebP or GIF). */
   previewUrl: string;
-  /** First frame (JPEG/GIF): the sent message's preview. */
+  /** First frame when GIPHY sends one, otherwise the animated preview (not stored; kept for reference). */
   stillUrl: string;
 }
 
-export class GifProviderError extends Error {}
+export class GifProviderError extends Error {
+  /** GIPHY's HTTP status when it answered with an error (401/403: the key is not accepted). */
+  constructor(
+    message: string,
+    readonly status: number | null = null,
+  ) {
+    super(message);
+  }
+}
 
 /** GIF search (O-09). Only the API talks to GIPHY; browsers never do (their address stays private). */
 export abstract class GifProvider {
@@ -72,8 +80,10 @@ export class GiphyProvider extends GifProvider {
   private toItem(gif: GiphyGif): GifItem | null {
     const fixed = gif.images?.fixed_height;
     const preview = gif.images?.fixed_height_small ?? fixed;
+    // Phase 14.2: the messaging bundle GIPHY sends for searches has no still frames, so a still is optional (before,
+    // every search result was dropped and the picker said "No GIFs found").
     const still = gif.images?.fixed_height_still ?? gif.images?.fixed_height_small_still;
-    if (!gif.id || !/^[A-Za-z0-9]{1,64}$/.test(gif.id) || !fixed?.mp4 || !still?.url || !preview) {
+    if (!gif.id || !/^[A-Za-z0-9]{1,64}$/.test(gif.id) || !fixed?.mp4 || !preview) {
       return null;
     }
     const previewUrl = preview.webp ?? preview.url;
@@ -83,8 +93,8 @@ export class GiphyProvider extends GifProvider {
       width: Math.max(1, Math.min(20000, Number(fixed.width) || 1)),
       height: Math.max(1, Math.min(20000, Number(fixed.height) || 1)),
       mp4Url: fixed.mp4,
-      previewUrl: previewUrl ?? still.url,
-      stillUrl: still.url,
+      previewUrl: previewUrl ?? fixed.webp ?? fixed.url ?? still?.url ?? '',
+      stillUrl: still?.url ?? previewUrl ?? fixed.url ?? '',
     };
     return this.isMediaUrl(item.mp4Url) && this.isMediaUrl(item.previewUrl) && this.isMediaUrl(item.stillUrl) ? item : null;
   }
@@ -104,7 +114,7 @@ export class GiphyProvider extends GifProvider {
     }
     if (!response.ok) {
       await response.body?.cancel();
-      throw new GifProviderError(`GIPHY answered ${response.status}`);
+      throw new GifProviderError(`GIPHY answered ${response.status}`, response.status);
     }
     return response.json();
   }

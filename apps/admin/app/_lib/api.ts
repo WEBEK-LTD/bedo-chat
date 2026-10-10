@@ -88,6 +88,10 @@ export function errorMessage(error: unknown): string {
       return 'The recovery token is incorrect.';
     case 'RECOVERY_TOKEN_USED':
       return 'This recovery token has already saved a key. To save a different key, run the recovery SQL again for a new token.';
+    case 'GIPHY_KEY_INVALID':
+      return 'GIPHY did not accept this key, so it was not saved. Copy the API key of your app at developers.giphy.com and try again.';
+    case 'SERVICE_UNAVAILABLE':
+      return 'The service could not be reached, so nothing was saved. Try again in a moment.';
     case 'VALIDATION_FAILED':
       return error.fields?.[0]?.message ? `Please check the details: ${error.fields[0].message}.` : 'Please check the details and try again.';
     default:
