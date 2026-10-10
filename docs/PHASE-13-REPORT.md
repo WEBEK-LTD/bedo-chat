@@ -108,3 +108,12 @@ From now on each new migration comes with its own small update script for the li
 there and refuses to run twice). Tests: `apps/api/test/open-signup.integration.test.ts` (4),
 `packages/db/test/owner-sql-update-scripts.integration.test.ts` (2), and a browser test in
 `packages/e2e/test/admin-console.e2e.test.ts` (a new number signs up after the switch).
+
+## Phase 13.4 — recording the updates already in the live database
+
+`update-20261018120000.sql` stopped on the live database: its list of applied updates (`app_meta.schema_migrations`)
+showed only migrations 1-6, although migrations 7-17 were all in place (they had been run without being recorded).
+`docs/owner-sql/record-live-migrations.sql` (one time) checks each of them with the same result checks as
+`apply-updates.sql`, sets the API login's two limits and turns off Supabase's automatic row level security on Bedo
+Chat's tables, then records them. After it, the update scripts run in order. Tested in
+`packages/db/test/owner-sql-record.integration.test.ts` against a database in exactly that state.
