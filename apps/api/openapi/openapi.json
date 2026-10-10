@@ -6890,6 +6890,17 @@
           "revoked"
         ]
       },
+      "UpdateInviteLinkBody": {
+        "type": "object",
+        "properties": {
+          "requiresApproval": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "requiresApproval"
+        ]
+      },
       "JoinRequestsResponse": {
         "type": "object",
         "properties": {
@@ -8169,6 +8180,255 @@
           "activeSessions",
           "pushDevices",
           "pendingScheduledMessages"
+        ]
+      },
+      "AdminMonitoring": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "up",
+              "problem",
+              "not_reporting",
+              "not_started"
+            ]
+          },
+          "monitoringSince": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastCheckAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "serverRegion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "uptime": {
+            "type": "object",
+            "properties": {
+              "day": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "week": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "month": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "day",
+              "week",
+              "month"
+            ]
+          },
+          "databaseMs": {
+            "type": "object",
+            "properties": {
+              "last": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "average": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "last",
+              "average"
+            ]
+          },
+          "storage": {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "ms": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "checkedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "ok",
+              "ms",
+              "checkedAt"
+            ]
+          },
+          "whatsappFailuresDay": {
+            "type": "integer"
+          },
+          "whatsappAlerts": {
+            "type": "boolean"
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "start": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "ok",
+                    "problem",
+                    "missing",
+                    "none"
+                  ]
+                }
+              },
+              "required": [
+                "start",
+                "state"
+              ]
+            }
+          },
+          "incidents": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "outage",
+                    "storage",
+                    "whatsapp",
+                    "database_slow"
+                  ]
+                },
+                "startedAt": {
+                  "type": "string"
+                },
+                "endedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "detail": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "alerted": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "startedAt",
+                "endedAt",
+                "detail",
+                "alerted"
+              ]
+            }
+          }
+        },
+        "required": [
+          "status",
+          "monitoringSince",
+          "lastCheckAt",
+          "serverRegion",
+          "uptime",
+          "databaseMs",
+          "storage",
+          "whatsappFailuresDay",
+          "whatsappAlerts",
+          "timeline",
+          "incidents"
+        ]
+      },
+      "AdminMonitoringCheck": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "checkedAt": {
+            "type": "string"
+          },
+          "databaseMs": {
+            "type": "number"
+          },
+          "storageOk": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "storageMs": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "serverRegion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ok",
+          "checkedAt",
+          "databaseMs",
+          "storageOk",
+          "storageMs",
+          "serverRegion"
+        ]
+      },
+      "AdminMonitoringSettingsBody": {
+        "type": "object",
+        "properties": {
+          "whatsappAlerts": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "whatsappAlerts"
         ]
       },
       "AdminSpeedCheck": {
@@ -16405,6 +16665,80 @@
       }
     },
     "/v1/groups/{id}/invites/{linkId}": {
+      "patch": {
+        "operationId": "updateInviteLink",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Turn admin approval on or off for an invite link (Phase 15)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "linkId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateInviteLinkBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteLink"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "operationId": "revokeInviteLink",
         "tags": [
@@ -18023,6 +18357,156 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminStats"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/monitoring": {
+      "get": {
+        "operationId": "adminMonitoring",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Site monitoring: status, uptime, timeline and incidents (Phase 14.5)",
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMonitoring"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/monitoring/check": {
+      "post": {
+        "operationId": "adminMonitoringCheck",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Check the site now (Phase 14.5)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMonitoringCheck"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/monitoring/settings": {
+      "put": {
+        "operationId": "adminMonitoringSettings",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Turn WhatsApp monitoring alerts on or off (Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminMonitoringSettingsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
                 }
               }
             }

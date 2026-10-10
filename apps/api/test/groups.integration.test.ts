@@ -222,6 +222,21 @@ describe.runIf(enabled)('Phase 5 groups (real Postgres, runtime role)', () => {
     expect(requests.body.requests.map((entry: { user: { id: string } }) => entry.user.id)).toEqual([quiet.id]);
     expect((await api(owner).post(`/v1/groups/${group.id}/requests/${requests.body.requests[0].id}/approve`)).body.requests).toEqual([]);
     expect((await api(quiet).get(`/v1/chats/${group.id}`)).body.group.role).toBe('member');
+    // Phase 15: approval is switched on a link without changing it; only admins who may invite can do it.
+    const open = await api(owner).post(`/v1/groups/${group.id}/invites`, { requiresApproval: false });
+    expect((await api(member).patch(`/v1/groups/${group.id}/invites/${open.body.id}`, { requiresApproval: true })).status).toBe(403);
+    const switched = await api(owner).patch(`/v1/groups/${group.id}/invites/${open.body.id}`, { requiresApproval: true });
+    expect(switched.body).toMatchObject({ id: open.body.id, code: open.body.code, requiresApproval: true });
+    expect((await api(outsider).post(`/v1/invites/${open.body.code}/join`)).body).toEqual({ status: 'requested', chatId: null });
+    expect((await api(owner).get(`/v1/chats/${group.id}`)).body.group.pendingRequests).toBe(1);
+    const back = await api(owner).patch(`/v1/groups/${group.id}/invites/${open.body.id}`, { requiresApproval: false });
+    expect(back.body.requiresApproval).toBe(false);
+    const waiting = await api(owner).get(`/v1/groups/${group.id}/requests`);
+    await api(owner).post(`/v1/groups/${group.id}/requests/${waiting.body.requests[0].id}/decline`);
+    expect((await api(owner).get(`/v1/chats/${group.id}`)).body.group.pendingRequests).toBe(0);
+    await api(owner).del(`/v1/groups/${group.id}/invites/${open.body.id}`);
+    expect((await api(owner).patch(`/v1/groups/${group.id}/invites/${open.body.id}`, { requiresApproval: true })).status).toBe(404);
+
     // Revoked links stop working.
     await api(owner).del(`/v1/groups/${group.id}/invites/${approval.body.id}`);
     expect((await api(outsider).get(`/v1/invites/${approval.body.code}`)).status).toBe(404);

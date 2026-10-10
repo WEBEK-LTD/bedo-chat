@@ -21,6 +21,30 @@ interface SessionValue {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
+/**
+ * Why this tab was signed out, when it was a blocked or deleted account: the server forgets the session at once (its
+ * cookie is cleared), so after a reload only this tab still knows why and can say so on the sign-in page.
+ */
+const REASON_KEY = 'bedo_signed_out_reason';
+
+function keepReason(reason: SignedOutReason | null): void {
+  try {
+    if (reason === 'account_blocked' || reason === 'account_deleted') window.sessionStorage.setItem(REASON_KEY, reason);
+    else if (reason === null) window.sessionStorage.removeItem(REASON_KEY);
+  } catch {
+    // Storage blocked: the reason is shown only until the page reloads.
+  }
+}
+
+function keptReason(): SignedOutReason | null {
+  try {
+    const value = window.sessionStorage.getItem(REASON_KEY);
+    return value === 'account_blocked' || value === 'account_deleted' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Holds the signed-in account for both screens; the session is restored from the refresh cookie on load. */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SessionState>({ status: 'loading' });
@@ -29,7 +53,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     // Phase 3: the local message cache belongs to the session and is erased whenever it ends.
     session.onSignedOut((reason) => {
       void clearCache();
-      setState({ status: 'signedOut', reason });
+      // A request still in flight when the account was found blocked or deleted ends with "session ended" (the server
+      // already forgot the session): the real reason, found first, is kept.
+      const kept = keptReason();
+      const final = reason === 'session_ended' && kept ? kept : reason;
+      keepReason(final);
+      setState({ status: 'signedOut', reason: final });
     });
     let cancelled = false;
     let settled = false;
@@ -43,6 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       .then((response) => {
         settled = true;
         if (cancelled) return;
+        keepReason(null);
         setState({ status: 'signedIn', me: response.user });
       })
       .catch((error: unknown) => {
@@ -54,7 +84,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           void loadAccount().then((me) => !cancelled && setState(me && me.profileComplete ? { status: 'signedIn', me } : { status: 'signedOut', reason: null }));
           return;
         }
-        const reason = code === 'ACCOUNT_DELETED' ? 'account_deleted' : code === 'ACCOUNT_BLOCKED' ? 'account_blocked' : null;
+        // A blocked or deleted account found earlier in this tab keeps its explanation after a reload.
+        const reason = code === 'ACCOUNT_DELETED' ? 'account_deleted' : code === 'ACCOUNT_BLOCKED' ? 'account_blocked' : keptReason();
+        keepReason(reason);
         if (error instanceof ApiError) void clearCache();
         setState({ status: 'signedOut', reason });
       });
@@ -70,6 +102,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const signedIn = useCallback((response: AuthenticatedResponse) => {
+    keepReason(null);
     session.setSession(response);
     setState({ status: 'signedIn', me: response.user });
   }, []);

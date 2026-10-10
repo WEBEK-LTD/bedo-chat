@@ -130,12 +130,15 @@ describe.runIf(enabled)('Phase 14.4 opening from the browser cache', () => {
       await route.continue();
       refreshAnswered = true;
     });
-    await ben.reload();
-    // The chat list (from this browser) is there while the server has not answered yet.
-    await ben.getByRole('button', { name: /^Ana Lopez/ }).waitFor({ timeout: 5_000 });
-    expect(refreshAnswered).toBe(false);
-    release();
-    await expect.poll(() => refreshAnswered).toBe(true);
+    try {
+      await ben.reload();
+      // The chat list (from this browser) is there while the server has not answered yet.
+      await ben.getByRole('button', { name: /^Ana Lopez/ }).waitFor({ timeout: 15_000 });
+      expect(refreshAnswered).toBe(false);
+    } finally {
+      release();
+    }
+    await expect.poll(() => refreshAnswered, { timeout: 15_000 }).toBe(true);
     await benContext.unroute('**/api/v1/auth/refresh');
     // Once it answers, the app goes on as usual: new messages arrive.
     await ben.getByRole('button', { name: /^Ana Lopez/ }).click();

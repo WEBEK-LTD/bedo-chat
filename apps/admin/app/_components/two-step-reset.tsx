@@ -3,7 +3,8 @@
 import { adminResetTwoStep } from '@bedo/api-client';
 import { type FormEvent, useState } from 'react';
 import { ApiError, errorMessage } from '../_lib/api';
-import { Button, FormError, Notice, TextArea, TextField } from './ui';
+import { Button, FormError, Notice, TextArea } from './ui';
+import { PhoneField } from '@bedo/ui';
 
 /** 2-Step Verification reset (D-12): only after checking the person's identity; the check is recorded. */
 export function TwoStepReset({ onSessionError }: { onSessionError: (error: unknown) => void }) {
@@ -50,7 +51,7 @@ export function TwoStepReset({ onSessionError }: { onSessionError: (error: unkno
         how you checked it: this is kept in the account&apos;s security history.
       </Notice>
       <form className="flex flex-col gap-4" onSubmit={review} noValidate>
-        <TextField id="reset-phone" label="Account phone number" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <PhoneField id="reset-phone" label="Account phone number" value={phone} onChange={setPhone} autoComplete="off" />
         <TextArea
           id="reset-reason"
           label="How was the identity checked?"

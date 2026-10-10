@@ -73,6 +73,39 @@ export interface AccessSettingsTable {
   updated_at: Date | null;
 }
 
+/** Site monitoring (Phase 14.5). */
+export type SiteCheckKind = 'heartbeat' | 'manual';
+export type SiteIncidentKind = 'outage' | 'storage' | 'whatsapp' | 'database_slow';
+
+export interface SiteChecksTable {
+  id: Generated<string>;
+  checked_at: Generated<Date>;
+  kind: SiteCheckKind;
+  ok: boolean;
+  database_ms: number | null;
+  storage_ms: number | null;
+  storage_ok: boolean | null;
+  server_region: string | null;
+  detail: string | null;
+}
+
+export interface SiteIncidentsTable {
+  id: Generated<string>;
+  kind: SiteIncidentKind;
+  started_at: Date;
+  ended_at: Date | null;
+  detail: string | null;
+  alerted_at: Date | null;
+  recovery_alerted_at: Date | null;
+}
+
+export interface MonitoringSettingsTable {
+  id: Generated<boolean>;
+  whatsapp_alerts: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Date | null;
+}
+
 export interface OtpSettingsTable {
   id: Generated<boolean>;
   provider: Generated<'waabek'>;
@@ -693,6 +726,9 @@ export interface Database {
   'app.admin_sessions': AdminSessionsTable;
   'app.otp_settings': OtpSettingsTable;
   'app.access_settings': AccessSettingsTable;
+  'app.site_checks': SiteChecksTable;
+  'app.site_incidents': SiteIncidentsTable;
+  'app.monitoring_settings': MonitoringSettingsTable;
   'app.admin_bootstrap': AdminBootstrapTable;
   'app.otp_settings_recovery': OtpSettingsRecoveryTable;
   'app.admin_password_setup': AdminPasswordSetupTable;

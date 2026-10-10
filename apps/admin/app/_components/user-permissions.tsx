@@ -3,7 +3,8 @@
 import { adminSetUserPermissions, adminUserPermissions, type AdminUserPermissionsResponse } from '@bedo/api-client';
 import { type FormEvent, useState } from 'react';
 import { errorMessage } from '../_lib/api';
-import { Button, FormError, Notice, TextField } from './ui';
+import { Button, FormError, Notice } from './ui';
+import { PhoneField } from '@bedo/ui';
 
 const LABELS = {
   createGroups: 'Create groups',
@@ -61,7 +62,7 @@ export function UserPermissions({ canChange, onSessionError }: { canChange: bool
       <p className="text-sm text-ink-secondary">What one student may create. Everyone may create groups unless you turn it off; channels and scheduled messages need your permission.</p>
       <form className="flex items-end gap-2" onSubmit={(event) => void lookUp(event)}>
         <div className="flex-1">
-          <TextField id="permissions-phone" label="Phone number" type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <PhoneField id="permissions-phone" label="Phone number" value={phone} onChange={setPhone} autoComplete="off" />
         </div>
         <Button type="submit" disabled={busy || phone.trim().length < 5}>
           Look up

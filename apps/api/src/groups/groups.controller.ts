@@ -8,6 +8,7 @@ import {
   createChannelBodySchema,
   createGroupBodySchema,
   createInviteLinkBodySchema,
+  updateInviteLinkBodySchema,
   groupMembersQuerySchema,
   groupMembersResponseSchema,
   groupSettingsBodySchema,
@@ -169,6 +170,17 @@ export class GroupsController {
   @ResponseSchema(inviteLinkSchema)
   createInvite(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(createInviteLinkBodySchema)) body: z.infer<typeof createInviteLinkBodySchema>) {
     return this.groups.createInviteLink(auth, id, body);
+  }
+
+  @Patch(':id/invites/:linkId')
+  @ResponseSchema(inviteLinkSchema)
+  updateInvite(
+    @CurrentAuth() auth: AuthContext,
+    @Param('id', new IdPipe()) id: string,
+    @Param('linkId', new IdPipe()) linkId: string,
+    @Body(new ZodValidationPipe(updateInviteLinkBodySchema)) body: z.infer<typeof updateInviteLinkBodySchema>,
+  ) {
+    return this.groups.updateInviteLink(auth, id, linkId, body.requiresApproval);
   }
 
   @Delete(':id/invites/:linkId')

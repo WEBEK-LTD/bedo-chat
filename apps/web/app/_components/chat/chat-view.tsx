@@ -342,6 +342,21 @@ export function ChatView({
         </button>
       ) : null}
 
+      {/* Phase 15: admins who approve joins see waiting requests straight away. */}
+      {chat.group?.pendingRequests ? (
+        <button
+          type="button"
+          onClick={() => setDialog({ kind: 'info' })}
+          className="bedo-glass relative z-10 flex shrink-0 items-center gap-2 border-b border-line px-4 py-2 text-left text-sm font-medium text-accent transition-colors hover:bg-surface-hover"
+        >
+          <Icon name="group_add" size={18} className="shrink-0" />
+          <span className="flex-1">
+            {chat.group.pendingRequests === 1 ? '1 person asked to join' : `${chat.group.pendingRequests} people asked to join`}
+          </span>
+          <Icon name="chevron_right" size={18} className="shrink-0" />
+        </button>
+      ) : null}
+
       {searchOpen !== null ? <ChatSearch key={searchOpen} chatId={chat.id} initial={searchOpen} onClose={() => setSearchOpen(null)} onPick={(message) => void jumpTo(message)} /> : null}
 
       <div ref={scroller} onScroll={() => void onScroll()} className="bedo-wallpaper relative min-h-0 flex-1 overflow-y-auto px-3 py-2 md:px-8" aria-label="Messages" role="log">
@@ -349,7 +364,10 @@ export function ChatView({
         {messages.length === 0 && pending.length === 0 && uploads.length === 0 ? <p className="mx-auto my-8 w-fit rounded-full bg-scrim/30 px-4 py-1.5 text-sm text-white">No messages yet.</p> : null}
         {messages.map((message, index) => {
           const previous = messages[index - 1];
+          const next = messages[index + 1];
           const newDay = !previous || dayLabel(previous.createdAt) !== dayLabel(message.createdAt);
+          // Phase 15: the sender's picture under the last of their messages in a row (Telegram style).
+          const lastOfRun = !next || next.senderId !== message.senderId || dayLabel(next.createdAt) !== dayLabel(message.createdAt);
           return (
             <Fragment key={message.id}>
               {newDay ? <p className="sticky top-1 z-[1] mx-auto my-2 w-fit rounded-full bg-scrim/30 px-3 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{dayLabel(message.createdAt)}</p> : null}
@@ -357,6 +375,7 @@ export function ChatView({
                 message={message}
                 chat={chat}
                 mine={message.senderId === myId}
+                showAvatar={lastOfRun}
                 pinned={pins.some((pin) => pin.id === message.id)}
                 selecting={selected !== null}
                 selected={selected?.includes(message.id) ?? false}

@@ -4,6 +4,7 @@ import { sql } from 'kysely';
 import { DatabaseService } from '../database/database.service.js';
 import { CHAT_MEDIA_BUCKET, MediaStorage } from '../storage/media-storage.js';
 import { DeferredTasks } from './deferred-tasks.service.js';
+import { MonitoringService } from './monitoring.service.js';
 
 /** Months of message partitions kept ready beyond the current one. */
 export const MESSAGE_PARTITIONS_AHEAD = 3;
@@ -29,6 +30,7 @@ export class MaintenanceService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(DeferredTasks) private readonly deferred: DeferredTasks,
     @Inject(MediaStorage) private readonly media: MediaStorage,
+    @Inject(MonitoringService) private readonly monitoring: MonitoringService,
   ) {}
 
   /** Called for every request; cheap unless a check is due. */
@@ -67,6 +69,7 @@ export class MaintenanceService {
       ['update log', () => this.pruneUpdateLog()],
       ['expired short-lived state', () => this.pruneExpiredState()],
       ['unused upload slots', () => this.pruneUnusedUploads()],
+      ['site monitoring history', () => this.monitoring.prune()],
     ] as const) {
       try {
         await task();

@@ -143,6 +143,16 @@ const RESULT_CHECKS = {
      or not has_column_privilege('bedo_runtime', 'app.access_settings', 'signup_mode', 'update') then
     raise exception 'Stopped: bedo_runtime privileges on app.access_settings are not as expected (nothing was kept)';
   end if;`,
+  '20261019120000': `
+  if (select count(*) from app.monitoring_settings) <> 1 then
+    raise exception 'Stopped: app.monitoring_settings does not hold its one row (nothing was kept)';
+  end if;
+  if not has_table_privilege('bedo_runtime', 'app.site_checks', 'insert') or has_table_privilege('bedo_runtime', 'app.site_checks', 'update')
+     or has_table_privilege('bedo_runtime', 'app.monitoring_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.site_incidents', 'ended_at', 'update')
+     or has_column_privilege('bedo_runtime', 'app.site_incidents', 'kind', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on the monitoring tables are not as expected (nothing was kept)';
+  end if;`,
 };
 
 /**

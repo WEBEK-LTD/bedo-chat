@@ -17,6 +17,7 @@ import { OtpRecovery } from './otp-recovery';
 import { PasswordSetup } from './password-setup';
 import { QrCode } from './qr-code';
 import { Button, FormError, TextField } from './ui';
+import { PhoneField } from '@bedo/ui';
 
 type Step =
   | { kind: 'checking' }
@@ -198,7 +199,7 @@ export function AdminLogin() {
 
       {step.kind === 'credentials' && (
         <form className="flex flex-col gap-4" onSubmit={submitCredentials} noValidate>
-          <TextField id="admin-phone" label="Phone number" type="tel" autoComplete="username" value={phone} onChange={(event) => setPhone(event.target.value)} autoFocus />
+          <PhoneField id="admin-phone" label="Phone number" value={phone} onChange={setPhone} autoComplete="username" autoFocus />
           <TextField
             id="admin-password"
             label="Password"

@@ -11,6 +11,7 @@ import { AuditHistory } from './audit-history';
 import { Broadcasts } from './broadcasts';
 import { Chats } from './chats';
 import { DeletionRequests } from './deletion-requests';
+import { Monitoring } from './monitoring';
 import { Overview } from './overview';
 import { Reports } from './reports';
 import { Users } from './users';
@@ -20,10 +21,11 @@ import { OtpSettings } from './otp-settings';
 import { PhoneList } from './phone-list';
 import { TwoStepReset } from './two-step-reset';
 
-type Section = 'overview' | 'users' | 'chats' | 'reports' | 'audit' | 'broadcasts' | 'phones' | 'deletions' | 'permissions' | 'two-step' | 'otp' | 'media' | 'account';
+type Section = 'overview' | 'monitoring' | 'users' | 'chats' | 'reports' | 'audit' | 'broadcasts' | 'phones' | 'deletions' | 'permissions' | 'two-step' | 'otp' | 'media' | 'account';
 
 const SECTIONS: Array<{ id: Section; label: string; icon: IconName; superAdminOnly?: boolean }> = [
   { id: 'overview', label: 'Overview', icon: 'dashboard' },
+  { id: 'monitoring', label: 'Site monitoring', icon: 'monitor_heart' },
   { id: 'users', label: 'Users', icon: 'group' },
   { id: 'chats', label: 'Groups and channels', icon: 'groups' },
   { id: 'reports', label: 'Reports', icon: 'flag' },
@@ -139,6 +141,7 @@ export function Dashboard() {
         <main className="min-w-0 flex-1 bg-surface-subtle p-4 md:p-8">
           <div className="mx-auto max-w-5xl">
           {section === 'overview' && <Overview onSessionError={onSessionError} />}
+          {section === 'monitoring' && <Monitoring canChange={canChange} onSessionError={onSessionError} />}
           {section === 'users' && <Users isSuperAdmin={canChange} onSessionError={onSessionError} />}
           {section === 'chats' && <Chats isSuperAdmin={canChange} onSessionError={onSessionError} />}
           {section === 'reports' && <Reports isSuperAdmin={canChange} onSessionError={onSessionError} />}

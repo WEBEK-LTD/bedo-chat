@@ -28,3 +28,12 @@ Admin Dashboard: 578 images from the 3D style of Fluent Emoji, converted from PN
 - Source: https://github.com/microsoft/fluentui-emoji
 - Licence: MIT License, Copyright (c) Microsoft Corporation — the full text is in
   `apps/admin/public/starter-stickers/LICENSE-Fluent-Emoji.txt`
+
+## flag-icons
+
+Country flags on the phone fields (Phase 15), served from `apps/web/public/flags`: the 4x3 SVG flags of flag-icons
+7.5.0, converted to 64 x 48 WebP pictures (Ascension and Tristan da Cunha use the flag of Saint Helena).
+
+- Source: https://github.com/lipis/flag-icons
+- Licence: MIT License, Copyright (c) 2013 Panayiotis Lipiridis — the full text is in
+  `apps/web/public/flags/LICENSE-flag-icons.txt`

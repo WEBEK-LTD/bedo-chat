@@ -5,6 +5,7 @@ import { type FormEvent, useState } from 'react';
 import { errorMessage } from '../../_lib/api';
 import { useMe, useSession } from '../../_lib/session';
 import { Button, FormError, Notice, TextField } from '../ui';
+import { PhoneField } from '@bedo/ui';
 
 /** Change phone number: a code is sent by WhatsApp to the new number, which must be on the academy list. */
 export function PhonePanel({ onDone }: { onDone: () => void }) {
@@ -53,16 +54,7 @@ export function PhonePanel({ onDone }: { onDone: () => void }) {
       </Notice>
       {!codeSent ? (
         <form className="flex flex-col gap-4" onSubmit={requestCode} noValidate>
-          <TextField
-            id="new-phone"
-            label="New phone number"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="+20 10 1234 5678"
-            value={newPhone}
-            onChange={(event) => setNewPhone(event.target.value)}
-          />
+          <PhoneField id="new-phone" label="New phone number" value={newPhone} onChange={setNewPhone} autoComplete="off" />
           <FormError message={error} />
           <Button type="submit" busy={busy} disabled={newPhone.trim().length < 5}>
             Send code

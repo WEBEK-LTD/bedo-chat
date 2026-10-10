@@ -14,6 +14,7 @@ import { AppError } from '../common/app-error.js';
 import { ResponseSchema } from '../common/response-schema.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { DISPATCH_HEADER, ScheduledService } from './scheduled.service.js';
+import { MonitoringService } from '../runtime/monitoring.service.js';
 
 const uuid = z.string().uuid();
 
@@ -78,15 +79,20 @@ export class ScheduledController {
  */
 @Controller('v1/internal')
 export class InternalDispatchController {
-  constructor(@Inject(ScheduledService) private readonly scheduled: ScheduledService) {}
+  constructor(
+    @Inject(ScheduledService) private readonly scheduled: ScheduledService,
+    @Inject(MonitoringService) private readonly monitoring: MonitoringService,
+  ) {}
 
   @Post('dispatch')
   @HttpCode(200)
   @ResponseSchema(dispatchResponseSchema)
-  dispatch(@Headers(DISPATCH_HEADER) token: string | undefined) {
+  async dispatch(@Headers(DISPATCH_HEADER) token: string | undefined) {
     if (!this.scheduled.isDispatchToken(token)) {
       throw new AppError(HttpStatus.NOT_FOUND, 'NOT_FOUND');
     }
+    // Phase 14.5: this minute call also is the site monitoring's check (it came in through the public address).
+    await this.monitoring.heartbeat();
     return this.scheduled.dispatchDue();
   }
 }

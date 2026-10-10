@@ -148,11 +148,14 @@ describe.runIf(enabled)('Phase 5 groups in the browser', () => {
     await memberInfo.getByRole('button', { name: 'Close group info' }).click();
   });
 
-  it('lets someone join with an invite link opened before signing in', async () => {
+  it('lets someone ask to join with an invite link opened before signing in, and an admin approve it (Phase 15)', async () => {
     await owner.getByRole('button', { name: 'Chat actions' }).click();
     await owner.getByRole('menuitem', { name: 'Group info' }).click();
     const info = owner.getByRole('dialog', { name: 'Group info' });
     await info.getByRole('button', { name: 'New link', exact: true }).click();
+    // Phase 15: a new link asks the admins to approve each join unless they turn that off.
+    expect(await info.getByRole('checkbox', { name: /Admins approve each person who joins/ }).isChecked()).toBe(true);
+    await info.getByRole('button', { name: 'Create link' }).click();
     const link = (await info.getByRole('region', { name: 'Invite links' }).locator('.font-mono').first().textContent())!;
     expect(link).toMatch(/\/\?join=[A-Za-z0-9_-]{22}$/);
     await info.getByRole('button', { name: 'Close group info' }).click();
@@ -163,7 +166,19 @@ describe.runIf(enabled)('Phase 5 groups in the browser', () => {
     await dialog.getByText('Biology class').waitFor();
     // The count is hidden from members, so the preview does not show it either.
     expect(await dialog.getByText(/members/).count()).toBe(0);
-    await dialog.getByRole('button', { name: 'Join group' }).click();
+    await dialog.getByRole('button', { name: 'Ask to join' }).click();
+    await dialog.getByText('Your request was sent. An admin will review it.').waitFor();
+    await dialog.getByRole('button', { name: 'Close' }).click();
+
+    // The owner sees the request at the top of the chat and accepts it.
+    await owner.getByRole('button', { name: '1 person asked to join' }).click({ timeout: 10_000 });
+    const requests = owner.getByRole('dialog', { name: 'Group info' }).getByRole('region', { name: 'Join requests' });
+    await requests.getByText('Jade Newcomer').waitFor();
+    await requests.getByRole('button', { name: 'Approve' }).click();
+    await owner.getByRole('dialog', { name: 'Group info' }).getByRole('button', { name: 'Close group info' }).click();
+    await owner.getByRole('button', { name: '1 person asked to join' }).waitFor({ state: 'detached', timeout: 10_000 });
+
+    await joiner.getByRole('button', { name: /^Biology class/ }).click({ timeout: 10_000 });
     await joiner.getByRole('region', { name: 'Group Biology class' }).waitFor();
     await messages(joiner).getByText('Welcome').waitFor();
     expect(new URL(joiner.url()).search).toBe('');
@@ -182,7 +197,7 @@ describe.runIf(enabled)('Phase 5 groups in the browser', () => {
     await member.getByText(/The admins restricted you until/).waitFor({ timeout: 10_000 });
     expect(await composer(member).count()).toBe(0);
     const history = await query<{ action: string }>(stack.ownerUrl, `select action from audit.membership_events order by id`);
-    expect(history.rows.map((row) => row.action)).toEqual(['created', 'added', 'added', 'joined', 'restricted']);
+    expect(history.rows.map((row) => row.action)).toEqual(['created', 'added', 'added', 'request_approved', 'joined', 'restricted']);
   });
 
   it('caused no Content-Security-Policy violation or page error anywhere', () => {

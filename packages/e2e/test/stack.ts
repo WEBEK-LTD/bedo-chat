@@ -478,6 +478,8 @@ export interface Stack {
   clearCooldown(phone: string): Promise<void>;
   /** Everything the website's server process wrote (its logs, including the API's, at level info). */
   apiOutput(): string;
+  /** Phase 14.5: what the site's scheduled function does every minute (POST /api/v1/internal/dispatch with its token). */
+  minuteCall(): Promise<number>;
   stop(): Promise<void>;
 }
 
@@ -513,6 +515,7 @@ export async function startStack(options: { waabekKey?: boolean } = {}): Promise
   const services = startServices({ serviceKey, anonKey, jwtSecret });
   await services.listen();
 
+  const accessTokenSecret = randomBytes(32).toString('base64');
   const serverOutput: Buffer[] = [];
   const processes = [
     // The one site's server: Next.js (production build) with the API in its /api route. Its environment is
@@ -522,7 +525,7 @@ export async function startStack(options: { waabekKey?: boolean } = {}): Promise
       // Request logs are kept so tests can check that no password or token ever reaches them (D-34).
       LOG_LEVEL: 'info',
       DATABASE_URL: runtime.toString(),
-      ACCESS_TOKEN_SECRET: randomBytes(32).toString('base64'),
+      ACCESS_TOKEN_SECRET: accessTokenSecret,
       OTP_HMAC_SECRET: randomBytes(32).toString('base64'),
       ADMIN_TOTP_KEY: totpKey.toString('base64'),
       SETTINGS_ENCRYPTION_KEY: settingsKey.toString('base64'),
@@ -588,6 +591,12 @@ export async function startStack(options: { waabekKey?: boolean } = {}): Promise
     giphy: { gifs: services.gifs, keys: services.giphyKeys },
     async clearCooldown(phone) {
       await query(ownerUrl, 'delete from app.ephemeral where key = $1', [`rl:otp:cooldown:${phone}`]);
+    },
+    async minuteCall() {
+      const token = createHmac('sha256', accessTokenSecret).update('bedo scheduled dispatch v1').digest('hex');
+      const response = await fetch(`${SITE_URL}/api/v1/internal/dispatch`, { method: 'POST', headers: { 'x-bedo-dispatch': token } });
+      await response.arrayBuffer();
+      return response.status;
     },
     apiOutput() {
       return Buffer.concat(serverOutput).toString('utf8');

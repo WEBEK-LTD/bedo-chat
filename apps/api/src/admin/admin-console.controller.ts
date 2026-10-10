@@ -20,6 +20,9 @@ import {
   adminReportSchema,
   adminReportsQuerySchema,
   adminReportsResponseSchema,
+  adminMonitoringCheckSchema,
+  adminMonitoringSchema,
+  adminMonitoringSettingsBodySchema,
   adminSpeedCheckSchema,
   adminStatsSchema,
   adminUpdateChatBodySchema,
@@ -41,6 +44,7 @@ import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js'
 import type { AdminContext } from './admin-auth.service.js';
 import { AdminChatsService } from './admin-chats.service.js';
 import { AdminConsoleService } from './admin-console.service.js';
+import { MonitoringService } from '../runtime/monitoring.service.js';
 
 class IdPipe implements PipeTransform<unknown, string> {
   transform(value: unknown): string {
@@ -54,12 +58,37 @@ class IdPipe implements PipeTransform<unknown, string> {
 @Controller('v1/admin')
 @UseGuards(AdminAuthGuard)
 export class AdminConsoleController {
-  constructor(@Inject(AdminConsoleService) private readonly console: AdminConsoleService) {}
+  constructor(
+    @Inject(AdminConsoleService) private readonly console: AdminConsoleService,
+    @Inject(MonitoringService) private readonly monitoring: MonitoringService,
+  ) {}
 
   @Get('stats')
   @ResponseSchema(adminStatsSchema)
   stats() {
     return this.console.stats();
+  }
+
+  /** Phase 14.5: site monitoring, inside the dashboard. Every admin sees it and can check now. */
+  @Get('monitoring')
+  @ResponseSchema(adminMonitoringSchema)
+  monitoringSummary() {
+    return this.monitoring.summary();
+  }
+
+  @Post('monitoring/check')
+  @HttpCode(200)
+  @ResponseSchema(adminMonitoringCheckSchema)
+  monitoringCheck() {
+    return this.monitoring.checkNow();
+  }
+
+  @Put('monitoring/settings')
+  @AdminRoles('super_admin')
+  @ResponseSchema(okResponseSchema)
+  async monitoringSettings(@CurrentAdmin() admin: AdminContext, @Body(new ZodValidationPipe(adminMonitoringSettingsBodySchema)) body: z.infer<typeof adminMonitoringSettingsBodySchema>) {
+    await this.monitoring.setAlerts(admin.adminId, body.whatsappAlerts);
+    return { ok: true as const };
   }
 
   /** Phase 14.4: where the server runs and how far the database is (slow sending is almost always this). */

@@ -9,6 +9,7 @@ import { canPost, type DeliveryStatus, deliveryStatus, STATUS_LABEL, timeOf } fr
 import { PollView } from './groups';
 import { AttachmentView, ReactionChips, ReactionPicker, StickerView } from './media';
 import { ActionMenu, type MenuItem } from './menu';
+import { Avatar } from '../ui';
 
 const STATUS_ICON: Record<DeliveryStatus, IconName> = {
   sending: 'schedule',
@@ -93,11 +94,12 @@ export function MessageItem({
   message,
   chat,
   mine,
+  showAvatar = true,
   pinned,
   selecting,
   selected,
   ...actions
-}: { message: Message; chat: Chat; mine: boolean; pinned: boolean; selecting: boolean; selected: boolean } & MessageActions) {
+}: { message: Message; chat: Chat; mine: boolean; showAvatar?: boolean; pinned: boolean; selecting: boolean; selected: boolean } & MessageActions) {
   const canAct = !message.deleted;
   const canSend = canPost(chat);
   const group = chat.group;
@@ -121,9 +123,29 @@ export function MessageItem({
     ...(!mine && canAct && message.senderId !== chat.id && !(chat.peer?.deleted ?? message.sender?.deleted ?? false) ? [{ label: 'Report', icon: 'flag' as const, danger: true, onSelect: actions.onReport }] : []),
   ];
   const status = mine ? deliveryStatus(message, chat) : null;
+  // Phase 15: who sent it, with their picture: the other person in a private chat, the sender in a group. Not for
+  // one's own messages, nor channel posts (they come from the channel).
+  const author = mine
+    ? null
+    : chat.type === 'private'
+      ? chat.peer
+        ? { displayName: chat.peer.displayName, photoUrl: chat.peer.photoUrl }
+        : null
+      : chat.type === 'group' && message.sender
+        ? { displayName: message.sender.displayName, photoUrl: message.sender.photoUrl }
+        : null;
 
   return (
     <div id={`message-${message.id}`} className={`group flex items-start gap-2 rounded-sm py-0.5 transition-colors ${mine ? 'flex-row-reverse' : ''}`}>
+      {author ? (
+        <div className="w-[34px] shrink-0 self-end" aria-hidden={showAvatar ? undefined : true}>
+          {showAvatar ? (
+            <span title={author.displayName} data-testid="sender-avatar">
+              <Avatar name={author.displayName} photoUrl={author.photoUrl} size={34} />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {selecting ? (
         <button
           type="button"

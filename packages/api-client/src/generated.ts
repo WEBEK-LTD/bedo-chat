@@ -3405,6 +3405,10 @@ export interface InviteLink {
   revoked: boolean;
 }
 
+export interface UpdateInviteLinkBody {
+  requiresApproval: boolean;
+}
+
 export type JoinRequestsResponseRequestsItemUser = {
   id: string;
   deleted: boolean;
@@ -3960,6 +3964,110 @@ export interface AdminStats {
   activeSessions: number;
   pushDevices: number;
   pendingScheduledMessages: number;
+}
+
+export type AdminMonitoringStatus = typeof AdminMonitoringStatus[keyof typeof AdminMonitoringStatus];
+
+
+export const AdminMonitoringStatus = {
+  up: 'up',
+  problem: 'problem',
+  not_reporting: 'not_reporting',
+  not_started: 'not_started',
+} as const;
+
+export type AdminMonitoringUptime = {
+  /** @nullable */
+  day: number | null;
+  /** @nullable */
+  week: number | null;
+  /** @nullable */
+  month: number | null;
+};
+
+export type AdminMonitoringDatabaseMs = {
+  /** @nullable */
+  last: number | null;
+  /** @nullable */
+  average: number | null;
+};
+
+export type AdminMonitoringStorage = {
+  /** @nullable */
+  ok: boolean | null;
+  /** @nullable */
+  ms: number | null;
+  /** @nullable */
+  checkedAt: string | null;
+};
+
+export type AdminMonitoringTimelineItemState = typeof AdminMonitoringTimelineItemState[keyof typeof AdminMonitoringTimelineItemState];
+
+
+export const AdminMonitoringTimelineItemState = {
+  ok: 'ok',
+  problem: 'problem',
+  missing: 'missing',
+  none: 'none',
+} as const;
+
+export type AdminMonitoringTimelineItem = {
+  start: string;
+  state: AdminMonitoringTimelineItemState;
+};
+
+export type AdminMonitoringIncidentsItemKind = typeof AdminMonitoringIncidentsItemKind[keyof typeof AdminMonitoringIncidentsItemKind];
+
+
+export const AdminMonitoringIncidentsItemKind = {
+  outage: 'outage',
+  storage: 'storage',
+  whatsapp: 'whatsapp',
+  database_slow: 'database_slow',
+} as const;
+
+export type AdminMonitoringIncidentsItem = {
+  id: string;
+  kind: AdminMonitoringIncidentsItemKind;
+  startedAt: string;
+  /** @nullable */
+  endedAt: string | null;
+  /** @nullable */
+  detail: string | null;
+  alerted: boolean;
+};
+
+export interface AdminMonitoring {
+  status: AdminMonitoringStatus;
+  /** @nullable */
+  monitoringSince: string | null;
+  /** @nullable */
+  lastCheckAt: string | null;
+  /** @nullable */
+  serverRegion: string | null;
+  uptime: AdminMonitoringUptime;
+  databaseMs: AdminMonitoringDatabaseMs;
+  storage: AdminMonitoringStorage;
+  whatsappFailuresDay: number;
+  whatsappAlerts: boolean;
+  timeline: AdminMonitoringTimelineItem[];
+  incidents: AdminMonitoringIncidentsItem[];
+}
+
+export interface AdminMonitoringCheck {
+  ok: boolean;
+  checkedAt: string;
+  databaseMs: number;
+  /** @nullable */
+  storageOk: boolean | null;
+  /** @nullable */
+  storageMs: number | null;
+  /** @nullable */
+  serverRegion: string | null;
+}
+
+export interface AdminMonitoringSettingsBody {
+  whatsappAlerts: boolean;
 }
 
 export interface AdminSpeedCheck {
@@ -8788,6 +8896,47 @@ return apiFetch<InviteLink>(getCreateInviteLinkUrl(id),
 
 
 
+export const getUpdateInviteLinkUrl = (id: string,
+    linkId: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/invites/${linkId}`
+}
+
+/**
+ * @summary Turn admin approval on or off for an invite link (Phase 15)
+ */
+export const updateInviteLink = async (id: string,
+    linkId: string,
+    updateInviteLinkBody: UpdateInviteLinkBody, options?: Parameters<typeof apiFetch>[1]): Promise<InviteLink> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<InviteLink>(getUpdateInviteLinkUrl(id,linkId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateInviteLinkBody)
+  }
+);}
+
+
+
 export const getRevokeInviteLinkUrl = (id: string,
     linkId: string,) => {
 
@@ -9583,6 +9732,92 @@ export const adminStats = async ( options?: Parameters<typeof apiFetch>[1]): Pro
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export const getAdminMonitoringUrl = () => {
+
+
+
+
+  return `/v1/admin/monitoring`
+}
+
+/**
+ * @summary Site monitoring: status, uptime, timeline and incidents (Phase 14.5)
+ */
+export const adminMonitoring = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminMonitoring> => {
+
+  return apiFetch<AdminMonitoring>(getAdminMonitoringUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminMonitoringCheckUrl = () => {
+
+
+
+
+  return `/v1/admin/monitoring/check`
+}
+
+/**
+ * @summary Check the site now (Phase 14.5)
+ */
+export const adminMonitoringCheck = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminMonitoringCheck> => {
+
+  return apiFetch<AdminMonitoringCheck>(getAdminMonitoringCheckUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export const getAdminMonitoringSettingsUrl = () => {
+
+
+
+
+  return `/v1/admin/monitoring/settings`
+}
+
+/**
+ * @summary Turn WhatsApp monitoring alerts on or off (Super Admin)
+ */
+export const adminMonitoringSettings = async (adminMonitoringSettingsBody: AdminMonitoringSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<OkResponse>(getAdminMonitoringSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminMonitoringSettingsBody)
   }
 );}
 

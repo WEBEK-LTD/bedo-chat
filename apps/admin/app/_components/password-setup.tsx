@@ -2,7 +2,7 @@
 
 import { adminPasswordSetup } from '@bedo/api-client';
 import { ADMIN_PASSWORD_RULES } from '@bedo/contracts';
-import { Icon } from '@bedo/ui';
+import { Icon, PhoneField } from '@bedo/ui';
 import { type FormEvent, useState } from 'react';
 import { errorMessage } from '../_lib/api';
 import { Button, FormError, TextField } from './ui';
@@ -62,7 +62,7 @@ export function PasswordSetup({ initialPhone, onDone, onCancel }: { initialPhone
         </div>
       </header>
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
-        <TextField id="password-setup-phone" label="Admin phone number" type="tel" autoComplete="tel" value={phone} onChange={(event) => setPhone(event.target.value)} />
+        <PhoneField id="password-setup-phone" label="Admin phone number" value={phone} onChange={setPhone} autoComplete="tel" />
         <TextField
           id="password-setup-token"
           label="Setup token"

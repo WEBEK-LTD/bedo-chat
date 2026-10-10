@@ -253,6 +253,52 @@ export const adminSpeedCheckSchema = z.object({
 });
 export type AdminSpeedCheck = z.infer<typeof adminSpeedCheckSchema>;
 
+// ------------------------------------------------------------------------------------- site monitoring (Phase 14.5)
+
+export const MONITORING_INCIDENT_KINDS = ['outage', 'storage', 'whatsapp', 'database_slow'] as const;
+export type MonitoringIncidentKind = (typeof MONITORING_INCIDENT_KINDS)[number];
+/** A ten-minute step of the timeline: all checks fine, a problem, no check at all, or before monitoring started. */
+export const MONITORING_TIMELINE_STATES = ['ok', 'problem', 'missing', 'none'] as const;
+export type MonitoringTimelineState = (typeof MONITORING_TIMELINE_STATES)[number];
+
+export const adminMonitoringSchema = z.object({
+  /** up; problem (an open incident); not_reporting (no minute check for 3 minutes); not_started (never checked). */
+  status: z.enum(['up', 'problem', 'not_reporting', 'not_started']),
+  monitoringSince: z.string().nullable(),
+  lastCheckAt: z.string().nullable(),
+  serverRegion: z.string().nullable(),
+  /** Percent of minutes with a successful check (null before the first check). */
+  uptime: z.object({ day: z.number().nullable(), week: z.number().nullable(), month: z.number().nullable() }),
+  databaseMs: z.object({ last: z.number().nullable(), average: z.number().nullable() }),
+  storage: z.object({ ok: z.boolean().nullable(), ms: z.number().nullable(), checkedAt: z.string().nullable() }),
+  whatsappFailuresDay: z.number().int(),
+  whatsappAlerts: z.boolean(),
+  timeline: z.array(z.object({ start: z.string(), state: z.enum(MONITORING_TIMELINE_STATES) })),
+  incidents: z.array(
+    z.object({
+      id: z.string(),
+      kind: z.enum(MONITORING_INCIDENT_KINDS),
+      startedAt: z.string(),
+      endedAt: z.string().nullable(),
+      detail: z.string().nullable(),
+      alerted: z.boolean(),
+    }),
+  ),
+});
+export type AdminMonitoring = z.infer<typeof adminMonitoringSchema>;
+
+export const adminMonitoringCheckSchema = z.object({
+  ok: z.boolean(),
+  checkedAt: z.string(),
+  databaseMs: z.number(),
+  storageOk: z.boolean().nullable(),
+  storageMs: z.number().nullable(),
+  serverRegion: z.string().nullable(),
+});
+export type AdminMonitoringCheck = z.infer<typeof adminMonitoringCheckSchema>;
+
+export const adminMonitoringSettingsBodySchema = z.object({ whatsappAlerts: z.boolean() });
+
 // ------------------------------------------------------------------------------------- statistics
 
 export const adminStatsSchema = z.object({

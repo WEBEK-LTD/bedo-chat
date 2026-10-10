@@ -110,7 +110,9 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     secrets.push(passwordToken);
     await page.getByRole('button', { name: 'Set password with a setup token' }).click();
     await page.getByRole('heading', { name: 'Set password' }).waitFor();
-    expect(await page.getByLabel('Admin phone number').inputValue()).toBe(SUPER_PHONE);
+    // Phase 15: the number is carried over, shown as its country and the rest of the number.
+    expect(await page.getByLabel('Admin phone number').inputValue()).toBe(SUPER_PHONE.slice(3));
+    expect(await page.getByRole('button', { name: /^Country: / }).getAttribute('aria-label')).toBe('Country: Türkiye (+90)');
     await page.getByLabel('Setup token').fill('t'.repeat(43));
     await page.getByLabel('New password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByLabel('Confirm new password').fill(ADMIN_PASSWORD);
@@ -152,7 +154,8 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
   });
 
   it('signs in with phone and password and sets up the authenticator from the QR code and setup key', async () => {
-    expect(await page.getByLabel('Phone number').inputValue()).toBe(SUPER_PHONE);
+    expect(await page.getByLabel('Phone number').inputValue()).toBe(SUPER_PHONE.slice(3));
+    expect(await page.getByRole('button', { name: /^Country: / }).getAttribute('aria-label')).toBe('Country: Türkiye (+90)');
     await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await shot(page, '36-sign-in-password');
     await page.getByRole('button', { name: 'Continue' }).click();

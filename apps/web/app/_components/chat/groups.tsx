@@ -21,6 +21,7 @@ import {
   removeGroupPhoto,
   retractPollVote,
   revokeInviteLink,
+  updateInviteLink,
   sendMessage,
   startGroupPhotoUpload,
   transferGroupOwnership,
@@ -617,6 +618,8 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
   const [members, setMembers] = useState<GroupMember[] | null>(null);
   const [nextAfter, setNextAfter] = useState<string | null>(null);
   const [links, setLinks] = useState<InviteLink[] | null>(null);
+  /** Phase 15: the new-link form, with admin approval on unless the admin turns it off. */
+  const [newLink, setNewLink] = useState<{ approval: boolean } | null>(null);
   const [requests, setRequests] = useState<Array<{ id: string; user: PublicUser; requestedAt: string }> | null>(null);
   const [adding, setAdding] = useState<Peer[] | null>(null);
   const [restricting, setRestricting] = useState<GroupMember | null>(null);
@@ -830,22 +833,46 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
           <section className="border-t border-line px-4 py-3" aria-label="Invite links">
             <div className="mb-2 flex items-center">
               <h3 className="flex-1 text-sm font-medium">Invite links</h3>
-              <button
-                type="button"
-                className="flex items-center gap-1 text-sm text-accent"
-                onClick={() => void run(async () => setLinks([cast<InviteLink>(await createInviteLink(chat.id, { requiresApproval: false })), ...(links ?? [])]), 'Invite link created.')}
-              >
-                <Icon name="link" size={18} />
-                New link
-              </button>
+              {newLink ? null : (
+                <button type="button" className="flex items-center gap-1 text-sm font-medium text-accent" onClick={() => setNewLink({ approval: true })}>
+                  <Icon name="link" size={18} />
+                  New link
+                </button>
+              )}
             </div>
-            <button
-              type="button"
-              className="mb-2 text-xs text-accent"
-              onClick={() => void run(async () => setLinks([cast<InviteLink>(await createInviteLink(chat.id, { requiresApproval: true })), ...(links ?? [])]), 'Invite link created: joining needs approval.')}
-            >
-              New link with admin approval
-            </button>
+            {newLink ? (
+              <div className="mb-3 flex flex-col gap-3 rounded-md border border-line bg-surface-subtle p-3" aria-label="New invite link">
+                <label className="flex items-start gap-3 text-sm">
+                  <input type="checkbox" className="mt-0.5 size-4" checked={newLink.approval} onChange={(event) => setNewLink({ approval: event.target.checked })} />
+                  <span>
+                    <span className="block font-medium">Admins approve each person who joins</span>
+                    <span className="block text-xs text-ink-secondary">
+                      {newLink.approval ? 'People who open the link send a request; an admin accepts or declines it.' : 'Anyone with the link joins at once.'}
+                    </span>
+                  </span>
+                </label>
+                <div className="flex justify-end gap-2">
+                  <Button variant="ghost" className="h-8 px-3" onClick={() => setNewLink(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="h-8 px-3"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(
+                        async () => {
+                          setLinks([cast<InviteLink>(await createInviteLink(chat.id, { requiresApproval: newLink.approval })), ...(links ?? [])]);
+                          setNewLink(null);
+                        },
+                        newLink.approval ? 'Invite link created: joining needs approval.' : 'Invite link created: anyone with it joins at once.',
+                      )
+                    }
+                  >
+                    Create link
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             <ul className="flex flex-col gap-2">
               {links.filter((link) => !link.revoked).length === 0 ? <li className="text-sm text-ink-secondary">No active links.</li> : null}
               {links
@@ -854,9 +881,27 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
                   <li key={link.id} className="flex items-center gap-2 text-sm">
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-mono text-xs">{inviteUrl(link.code)}</span>
-                      <span className="block text-xs text-ink-secondary">
-                        {link.usageCount} joined{link.requiresApproval ? ' · needs approval' : ''}
-                      </span>
+                      <span className="block text-xs text-ink-secondary">{link.usageCount} joined</span>
+                      <label className="mt-1 flex items-center gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          className="size-3.5"
+                          checked={link.requiresApproval}
+                          disabled={busy}
+                          aria-label={`Admins approve joins through ${inviteUrl(link.code)}`}
+                          onChange={(event) => {
+                            const approval = event.target.checked;
+                            void run(
+                              async () => {
+                                const updated = cast<InviteLink>(await updateInviteLink(chat.id, link.id, { requiresApproval: approval }));
+                                setLinks((current) => (current ?? []).map((item) => (item.id === updated.id ? updated : item)));
+                              },
+                              approval ? 'Joining through this link now needs approval.' : 'Anyone with this link now joins at once.',
+                            );
+                          }}
+                        />
+                        Admins approve each join
+                      </label>
                     </span>
                     <button
                       type="button"

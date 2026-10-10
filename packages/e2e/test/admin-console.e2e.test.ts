@@ -173,6 +173,9 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard in the browser', () => {
     await admin.getByText('The account is suspended and every session has ended.').waitFor();
     await ben.reload();
     await ben.getByText('This account is blocked. Contact the academy.').waitFor({ timeout: 20_000 });
+    // Phase 15: the server has forgotten the session by now; this tab still says why after another reload.
+    await ben.reload();
+    await ben.getByText('This account is blocked. Contact the academy.').waitFor({ timeout: 20_000 });
     await shot(admin, '103-admin-user-suspended');
     await admin.getByRole('button', { name: 'Reactivate', exact: true }).click();
     await giveReason(admin, 'Reactivate');

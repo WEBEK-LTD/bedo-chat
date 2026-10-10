@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } fr
 import { errorMessage, formatDateTime } from '../_lib/api';
 import { SignupAccess } from './signup-access';
 import { Button, FormError, Notice, TextArea, TextField } from './ui';
+import { PhoneField } from '@bedo/ui';
 
 
 const STATUS_LABELS: Record<string, string> = {
@@ -169,7 +170,7 @@ export function PhoneList({ canChange, onSessionError }: { canChange: boolean; o
           <section className="flex flex-col gap-4 border-t border-line pt-6">
             <h2 className="font-semibold">Add a number</h2>
             <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end" onSubmit={add} noValidate>
-              <TextField id="add-phone" label="Phone number" type="tel" placeholder="+20 10 1234 5678" value={phone} onChange={(event) => setPhone(event.target.value)} />
+              <PhoneField id="add-phone" label="Phone number" value={phone} onChange={setPhone} autoComplete="off" />
               <TextField id="add-note" label="Note (optional)" maxLength={200} value={note} onChange={(event) => setNote(event.target.value)} />
               <Button type="submit" busy={addBusy} disabled={phone.trim().length < 5}>
                 Add

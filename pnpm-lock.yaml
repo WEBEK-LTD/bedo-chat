@@ -265,6 +265,10 @@ importers:
   packages/server-crypto: {}
 
   packages/ui:
+    dependencies:
+      libphonenumber-js:
+        specifier: ^1.13.13
+        version: 1.13.13
     devDependencies:
       '@material-symbols/svg-400':
         specifier: ^0.40.0

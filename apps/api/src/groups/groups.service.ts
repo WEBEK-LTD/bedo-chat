@@ -688,6 +688,23 @@ export class GroupsService {
     return this.linkView(row);
   }
 
+  /** Phase 15: an admin who may invite switches approval on or off for a link; the link itself stays the same. */
+  async updateInviteLink(auth: AuthContext, groupId: string, linkId: string, requiresApproval: boolean): Promise<InviteLink> {
+    await this.limits.groupActions(auth.userId);
+    const access = await this.groupAccess(this.db, auth.userId, groupId);
+    this.permissions.assertRight(access, 'invite_users');
+    const row = await this.db
+      .updateTable('app.invite_links')
+      .set({ requires_approval: requiresApproval })
+      .where('id', '=', linkId)
+      .where('conversation_id', '=', groupId)
+      .where('revoked_at', 'is', null)
+      .returningAll()
+      .executeTakeFirst();
+    if (!row) throw notFound();
+    return this.linkView(row);
+  }
+
   async revokeInviteLink(auth: AuthContext, groupId: string, linkId: string): Promise<InviteLink[]> {
     const access = await this.groupAccess(this.db, auth.userId, groupId);
     this.permissions.assertRight(access, 'invite_users');
@@ -735,6 +752,17 @@ export class GroupsService {
     };
   }
 
+  /** The members who may approve join requests: the owner and admins with that right. */
+  private async approvers(db: Executor, groupId: string): Promise<string[]> {
+    const rows = await db
+      .selectFrom('app.conversation_members')
+      .select('user_id')
+      .where('conversation_id', '=', groupId)
+      .where((eb) => eb.or([eb('role', '=', 'owner'), eb.and([eb('role', '=', 'admin'), eb(sql`'approve_requests' = any(admin_rights)`, '=', sql`true`)])]))
+      .execute();
+    return rows.map((row) => row.user_id);
+  }
+
   async join(auth: AuthContext, code: string): Promise<{ status: 'joined' | 'requested'; chatId: string | null }> {
     await this.limits.groupActions(auth.userId);
     const status = await this.permissions.userStatus(this.db, auth.userId);
@@ -753,13 +781,7 @@ export class GroupsService {
           .values({ conversation_id: groupId, user_id: auth.userId, invite_link_id: link.id })
           .onConflict((conflict) => conflict.columns(['conversation_id', 'user_id']).where('status', '=', 'pending').doNothing())
           .execute();
-        const approvers = await trx
-          .selectFrom('app.conversation_members')
-          .select('user_id')
-          .where('conversation_id', '=', groupId)
-          .where((eb) => eb.or([eb('role', '=', 'owner'), eb.and([eb('role', '=', 'admin'), eb(sql`'approve_requests' = any(admin_rights)`, '=', sql`true`)])]))
-          .execute();
-        updates.addFor(approvers.map((row) => row.user_id), { kind: 'chat.info', chatId: groupId });
+        updates.addFor(await this.approvers(trx, groupId), { kind: 'chat.info', chatId: groupId });
         return { status: 'requested' as const, chatId: null };
       }
       if ((await this.memberCount(trx, groupId)) >= memberLimitOf(link.type)) throw new AppError(HttpStatus.CONFLICT, 'LIMIT_REACHED');
@@ -823,7 +845,8 @@ export class GroupsService {
         updates.add({ userId: request.user_id, kind: 'chat.info', chatId: groupId });
         await this.announceMembers(trx, updates, access);
       }
-      updates.add({ userId: auth.userId, kind: 'chat.info', chatId: groupId });
+      // Phase 15: every admin who approves sees the waiting count go down, not only the one who decided.
+      updates.addFor(new Set([auth.userId, ...(await this.approvers(trx, groupId))]), { kind: 'chat.info', chatId: groupId });
     });
     if (approvedUser) this.notifications.addedToChat(groupId, [approvedUser], auth.userId);
     return this.joinRequests(auth.userId, groupId);

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
 import { ApiError, browserDeviceName, errorMessage } from '../_lib/api';
 import { useSession } from '../_lib/session';
+import { PhoneField } from '@bedo/ui';
 import { Button, FormError, Notice, TextField } from './ui';
 
 type Step =
@@ -132,23 +133,12 @@ export function LoginFlow() {
           <header>
             <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Sign in to Bedo Chat</h1>
             <p className="mt-2 text-sm text-ink-secondary">
-              Enter your phone number in international format. We will send a verification code to it by WhatsApp.
+              Choose your country and enter your phone number. We will send a verification code to it by WhatsApp.
             </p>
           </header>
           {signedOutMessage && !error ? <Notice>{signedOutMessage}</Notice> : null}
           <form className="flex flex-col gap-4" onSubmit={submitPhone} noValidate>
-            <TextField
-              id="phone"
-              label="Phone number"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              placeholder="+20 10 1234 5678"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              required
-              autoFocus
-            />
+            <PhoneField id="phone" label="Phone number" value={phone} onChange={setPhone} autoFocus />
             <FormError message={error} />
             <Button type="submit" busy={busy} disabled={phone.trim().length < 5}>
               Continue

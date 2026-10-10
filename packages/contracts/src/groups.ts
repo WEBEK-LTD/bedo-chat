@@ -182,6 +182,8 @@ export const createInviteLinkBodySchema = z.object({
   usageLimit: z.number().int().min(1).max(100000).optional(),
   requiresApproval: z.boolean().default(false),
 });
+/** Phase 15: switch an existing link between "admins approve each join" and "anyone with the link joins at once". */
+export const updateInviteLinkBodySchema = z.object({ requiresApproval: z.boolean() });
 export const inviteCodeSchema = z.string().regex(/^[A-Za-z0-9_-]{22}$/);
 
 /** What someone with a link sees before joining. The member count only when the group shows it to members. */

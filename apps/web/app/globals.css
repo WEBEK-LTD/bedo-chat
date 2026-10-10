@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @import '@bedo/ui/tokens.css';
+/* The shared components in @bedo/ui (phone field) use these utilities too. */
+@source '../../../packages/ui/src';
 
 /* Expose the design tokens to Tailwind utilities (bg-surface, text-secondary, border-line, ...). */
 @theme inline {
