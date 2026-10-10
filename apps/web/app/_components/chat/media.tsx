@@ -7,6 +7,7 @@ import { errorMessage } from '../../_lib/api';
 import { useMessagingStore } from '../../_lib/messaging/context';
 import { formatBytes, formatDuration, MEDIA_LABEL } from '../../_lib/messaging/media';
 import type { PendingUpload } from '../../_lib/messaging/store';
+import { CachedImg } from '../cached-img';
 import { Dialog } from './menu';
 
 /** A file link fetched when needed (links last 5 minutes, so they are fetched again after 4). */
@@ -67,7 +68,7 @@ export function AttachmentView({ message, attachment, onOpen }: { message: Messa
       return (
         <button type="button" onClick={onOpen} aria-label={attachment.kind === 'photo' ? 'Open photo' : 'Play video'} className="relative block overflow-hidden rounded-sm bg-surface-subtle" style={size}>
           {attachment.thumbnailUrl ? (
-            <img src={attachment.thumbnailUrl} alt="" className="size-full object-cover" style={size} />
+            <CachedImg src={attachment.thumbnailUrl} alt="" className="size-full object-cover" style={size} />
           ) : (
             <span className="grid size-full place-items-center text-ink-secondary">
               <Icon name={attachment.kind === 'photo' ? 'image' : 'movie'} size={36} />
@@ -157,7 +158,7 @@ function VideoNotePlayer({ message, attachment }: { message: Message; attachment
       {playing && url ? (
         <video ref={video} src={url} playsInline onEnded={() => setPlaying(false)} className="size-full object-cover" />
       ) : attachment.thumbnailUrl ? (
-        <img src={attachment.thumbnailUrl} alt="" className="size-full object-cover" />
+        <CachedImg src={attachment.thumbnailUrl} alt="" className="size-full object-cover" />
       ) : (
         <span className="grid size-full place-items-center text-ink-secondary">
           <Icon name="videocam" size={40} />
@@ -280,7 +281,7 @@ function AudioButton({ message }: { message: Message }) {
 
 export function StickerView({ sticker }: { sticker: Sticker }) {
   const scale = Math.min(1, 180 / Math.max(sticker.width, sticker.height));
-  return <img src={sticker.url} alt={`Sticker ${sticker.emoji}`} width={Math.round(sticker.width * scale)} height={Math.round(sticker.height * scale)} className="block" />;
+  return <CachedImg src={sticker.url} alt={`Sticker ${sticker.emoji}`} width={Math.round(sticker.width * scale)} height={Math.round(sticker.height * scale)} className="block" />;
 }
 
 /** Full-screen view of a photo or video, with save. */
@@ -310,7 +311,7 @@ export function MediaViewer({ message, onClose }: { message: Message; onClose: (
         ) : attachment.kind === 'video' ? (
           <video src={url} controls autoPlay playsInline className="max-h-full max-w-full" />
         ) : (
-          <img src={url} alt={message.text ?? 'Photo'} className="max-h-full max-w-full object-contain" />
+          <CachedImg src={url} alt={message.text ?? 'Photo'} className="max-h-full max-w-full object-contain" />
         )}
       </div>
       {message.text ? <p className="max-h-32 overflow-y-auto px-4 pb-4 text-center text-sm text-on-accent">{message.text}</p> : null}
@@ -473,7 +474,7 @@ export function MediaPanel({ chatId, onClose, onOpen, onJump }: { chatId: string
                 className="relative block aspect-square w-full overflow-hidden rounded-sm bg-surface-subtle"
               >
                 {message.attachment?.thumbnailUrl ? (
-                  <img src={message.attachment.thumbnailUrl} alt="" className="size-full object-cover" />
+                  <CachedImg src={message.attachment.thumbnailUrl} alt="" className="size-full object-cover" lazy />
                 ) : (
                   <span className="grid size-full place-items-center text-ink-secondary">
                     <Icon name={message.attachment?.kind === 'gif' ? 'gif_box' : message.attachment?.kind === 'photo' ? 'image' : 'movie'} size={28} />
@@ -628,7 +629,7 @@ export function ExpressionPicker({
                         onClick={() => document.getElementById(`sticker-pack-${pack.id}`)?.scrollIntoView({ block: 'start' })}
                         className="grid size-9 shrink-0 place-items-center rounded-sm hover:bg-surface-hover"
                       >
-                        <img src={pack.stickers[0].url} alt="" className="size-7 object-contain" />
+                        <CachedImg src={pack.stickers[0].url} alt="" className="size-7 object-contain" />
                       </button>
                     ) : null,
                   )}
@@ -640,7 +641,7 @@ export function ExpressionPicker({
                   <div className="grid grid-cols-4 gap-1">
                     {pack.stickers.map((sticker) => (
                       <button key={sticker.id} type="button" aria-label={`Send sticker ${sticker.emoji}`} onClick={() => onSticker(sticker)} className="grid aspect-square place-items-center rounded-sm p-1 hover:bg-surface-hover">
-                        <img src={sticker.url} alt={sticker.emoji} className="max-h-full max-w-full object-contain" loading="lazy" />
+                        <CachedImg src={sticker.url} alt={sticker.emoji} className="aspect-square max-h-full w-full object-contain" lazy />
                       </button>
                     ))}
                   </div>

@@ -3962,6 +3962,16 @@ export interface AdminStats {
   pendingScheduledMessages: number;
 }
 
+export interface AdminSpeedCheck {
+  /** @nullable */
+  serverRegion: string | null;
+  /** @nullable */
+  databaseRegion: string | null;
+  databaseRoundTripMs: number;
+  /** @nullable */
+  sameRegion: boolean | null;
+}
+
 export type AdminUsersResponseUsersItemStatus = typeof AdminUsersResponseUsersItemStatus[keyof typeof AdminUsersResponseUsersItemStatus];
 
 
@@ -9568,6 +9578,30 @@ export const getAdminStatsUrl = () => {
 export const adminStats = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminStats> => {
 
   return apiFetch<AdminStats>(getAdminStatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminSpeedCheckUrl = () => {
+
+
+
+
+  return `/v1/admin/speed-check`
+}
+
+/**
+ * @summary Server and database regions and one database round trip (Phase 14.4)
+ */
+export const adminSpeedCheck = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminSpeedCheck> => {
+
+  return apiFetch<AdminSpeedCheck>(getAdminSpeedCheckUrl(),
   {
     ...options,
     method: 'GET'

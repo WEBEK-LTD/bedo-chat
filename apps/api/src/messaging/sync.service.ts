@@ -38,20 +38,24 @@ export class SyncService {
 
   async since(userId: string, since: number): Promise<SyncResponse> {
     const db = this.database.db;
-    const state = await db.selectFrom('app.user_sync_state').select(['last_seq', 'pruned_through_seq']).where('user_id', '=', userId).executeTakeFirst();
-    const last = Number(state?.last_seq ?? 0);
+    // Phase 14.4: the counter and the entries are read at the same time (the entries are simply not used when the
+    // device has to re-fetch). The counter is read first in the same wave, so `hasMore` never misses entries.
+    const [state, rows] = await Promise.all([
+      db.selectFrom('app.user_sync_state').select(['last_seq', 'pruned_through_seq']).where('user_id', '=', userId).executeTakeFirst(),
+      db
+        .selectFrom('app.update_log')
+        .select(['seq', 'kind', 'conversation_id', 'message_id', 'data'])
+        .where('user_id', '=', userId)
+        .where('seq', '>', String(since))
+        .orderBy('seq')
+        .limit(MESSAGING_RULES.syncPageSize)
+        .execute(),
+    ]);
+    const last = Math.max(Number(state?.last_seq ?? 0), rows.length > 0 ? Number(rows[rows.length - 1]!.seq) : 0);
     const pruned = Number(state?.pruned_through_seq ?? 0);
     if (since > last || since < pruned || last - since > MESSAGING_RULES.resyncThreshold) {
       return { seq: last, updates: [], hasMore: false, resync: true, chats: [], messages: [], folders: null };
     }
-    const rows = await db
-      .selectFrom('app.update_log')
-      .select(['seq', 'kind', 'conversation_id', 'message_id', 'data'])
-      .where('user_id', '=', userId)
-      .where('seq', '>', String(since))
-      .orderBy('seq')
-      .limit(MESSAGING_RULES.syncPageSize)
-      .execute();
     const updates: Update[] = rows
       .filter((row) => KINDS.has(row.kind))
       .map((row) => ({

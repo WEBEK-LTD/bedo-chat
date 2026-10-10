@@ -4,6 +4,7 @@ import { adminStats } from '@bedo/api-client';
 import { Icon, type IconName } from '@bedo/ui';
 import { FormError } from './ui';
 import { SectionTitle, useLoader } from './console-ui';
+import { SpeedCheck } from './speed-check';
 
 function Tile({ icon, label, value, note }: { icon: IconName; label: string; value: number; note?: string }) {
   return (
@@ -35,6 +36,7 @@ export function Overview({ onSessionError }: { onSessionError: (error: unknown) 
           Refresh
         </button>
       </div>
+      <SpeedCheck onSessionError={onSessionError} />
       <FormError message={error} />
       {!stats ? (
         <p className="text-sm text-ink-secondary">Loading…</p>

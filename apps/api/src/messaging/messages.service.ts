@@ -11,6 +11,7 @@ import { sql, type Transaction } from 'kysely';
 import { AuditService, type Executor } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/user-auth.guard.js';
 import { AppError } from '../common/app-error.js';
+import { uuidV7 } from '../common/uuid-v7.js';
 import { DatabaseService } from '../database/database.service.js';
 import { FilesService, type VerifiedFile } from '../media/files.service.js';
 import { GifsService } from '../media/gifs.service.js';
@@ -106,9 +107,9 @@ export class MessagesService {
     return Number(row.last_seq) - count + 1;
   }
 
-  private async newIds(trx: Transaction<Database>, count: number): Promise<string[]> {
-    const { rows } = await sql<{ id: string }>`select app.uuid_v7() as id from generate_series(1, ${count})`.execute(trx);
-    return rows.map((row) => row.id);
+  private newIds(count: number): string[] {
+    // Phase 14.4: made in the API (same format as app.uuid_v7()), one database round trip fewer.
+    return Array.from({ length: count }, () => uuidV7());
   }
 
   /** Who of the chat's members should hear about a message (not those who hid it). */
@@ -123,15 +124,21 @@ export class MessagesService {
    * client id returns the stored message. A file is read back and checked before the message exists (Phase 4).
    */
   async send(auth: AuthContext, chatId: string, body: SendMessageBody, options: SendOptions = {}): Promise<Message> {
-    const previous = await this.existingRequest(auth.userId, body.clientId);
-    if (previous) {
-      return this.replay(auth.userId, previous, 'send', chatId);
+    // Phase 14.4: for text, stickers and polls a retry with the same client id is recognised inside the transaction
+    // (the request row is taken there), so a normal send makes fewer round trips to the database. A file or GIF is
+    // checked before the transaction, so a retry of one is answered first, before the file is looked at again.
+    const withFile = Boolean(body.fileId || body.gifId);
+    if (withFile) {
+      const previous = await this.existingRequest(auth.userId, body.clientId);
+      if (previous) {
+        return this.replay(auth.userId, previous, 'send', chatId);
+      }
     }
     if (!options.scheduled) {
       await this.limits.messages(auth.userId);
     }
     const kind = MessagesService.postKind(body);
-    {
+    if (withFile) {
       // Membership and the right to post are checked before any file is fetched or checked (and again below).
       const access = await this.permissions.chatAccess(this.database.db, auth.userId, chatId);
       await this.permissions.assertCanPost(this.database.db, auth.userId, access, kind);
@@ -155,6 +162,9 @@ export class MessagesService {
       messageId = await this.updateLog.run(async (trx, updates) => {
         const access = await this.permissions.chatAccess(trx, auth.userId, chatId);
         await this.permissions.assertCanPost(trx, auth.userId, access, kind);
+        if (body.poll && access.type === 'private') {
+          throw new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
+        }
         if (body.replyToId) {
           await this.assertVisibleInChat(trx, auth.userId, chatId, body.replyToId);
         }
@@ -162,7 +172,7 @@ export class MessagesService {
           await this.stickers.assertSendable(trx, body.stickerId);
         }
         const pollId = body.poll ? await this.polls.create(trx, chatId, auth.userId, body.poll) : null;
-        const [id] = await this.newIds(trx, 1);
+        const [id] = this.newIds(1);
         await this.claimRequest(trx, auth.userId, body.clientId, 'send', chatId, [id!]);
         if (verified && !(await this.files.markReady(trx, auth.userId, verified))) {
           throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
@@ -191,7 +201,9 @@ export class MessagesService {
         return id!;
       });
     } catch (error) {
-      if (error instanceof DuplicateRequest) {
+      // A retry of a message already stored is answered with it, even when something changed since (Phase 14.4: the
+      // stored request is looked up only when the send did not go through).
+      if (error instanceof DuplicateRequest || (!withFile && error instanceof AppError)) {
         const stored = await this.existingRequest(auth.userId, body.clientId);
         if (stored) {
           return this.replay(auth.userId, stored, 'send', chatId);
@@ -445,7 +457,7 @@ export class MessagesService {
         const perChat: Array<[string, string[]]> = [];
         for (const target of targets) {
           const access = accesses.get(target.chatId)!;
-          const ids = await this.newIds(trx, sources.length);
+          const ids = this.newIds(sources.length);
           await this.claimRequest(trx, auth.userId, target.clientId, 'forward', target.chatId, ids);
           const firstSeq = await this.allocateSeqs(trx, target.chatId, sources.length);
           // Phase 9: a forwarded poll is a new poll of the target chat (its own votes and voters).

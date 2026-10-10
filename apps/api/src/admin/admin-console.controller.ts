@@ -20,6 +20,7 @@ import {
   adminReportSchema,
   adminReportsQuerySchema,
   adminReportsResponseSchema,
+  adminSpeedCheckSchema,
   adminStatsSchema,
   adminUpdateChatBodySchema,
   adminUpdateChatMemberBodySchema,
@@ -59,6 +60,13 @@ export class AdminConsoleController {
   @ResponseSchema(adminStatsSchema)
   stats() {
     return this.console.stats();
+  }
+
+  /** Phase 14.4: where the server runs and how far the database is (slow sending is almost always this). */
+  @Get('speed-check')
+  @ResponseSchema(adminSpeedCheckSchema)
+  speedCheck() {
+    return this.console.speedCheck();
   }
 
   /** D-47: who can create an account. Every admin sees it; a Super Admin changes it. */

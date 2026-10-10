@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { UpdateKind } from '@bedo/contracts';
 import type { Database } from '@bedo/db';
-import { sql, type Transaction } from 'kysely';
+import { type RawBuilder, sql, type Transaction } from 'kysely';
 import { DatabaseService } from '../database/database.service.js';
 import { RealtimeService } from './realtime.service.js';
 
@@ -91,45 +91,61 @@ export class UpdateLogService {
       list.push(entry);
       byUser.set(entry.userId, list);
     }
+    // Phase 14.4: one statement instead of four. Each user's counter is created or moved on by the number of new
+    // entries (rows taken in user-id order, so concurrent changes cannot deadlock), and the entries get the numbers
+    // just below the new counter value.
     const userIds = [...byUser.keys()].sort();
-    await trx
-      .insertInto('app.user_sync_state')
-      .values(userIds.map((userId) => ({ user_id: userId })))
-      .onConflict((conflict) => conflict.column('user_id').doNothing())
-      .execute();
-    // Lock the counters in a fixed order so concurrent changes for the same users cannot deadlock.
-    const counters = await trx
-      .selectFrom('app.user_sync_state')
-      .select(['user_id', 'last_seq'])
-      .where('user_id', 'in', userIds)
-      .orderBy('user_id')
-      .forUpdate()
-      .execute();
-    const rows: Array<{ user_id: string; seq: string; kind: string; conversation_id: string | null; message_id: string | null; data: Record<string, unknown> }> = [];
-    const newLast: Array<{ userId: string; last: bigint }> = [];
-    for (const counter of counters) {
-      let seq = BigInt(counter.last_seq);
-      for (const entry of byUser.get(counter.user_id) ?? []) {
-        seq += 1n;
-        rows.push({
-          user_id: counter.user_id,
-          seq: seq.toString(),
+    const counts = sql.join(userIds.map((userId) => sql`(${userId}::uuid, ${byUser.get(userId)!.length}::bigint)`));
+    const rows: RawBuilder<unknown>[] = [];
+    for (const userId of userIds) {
+      const list = byUser.get(userId)!;
+      list.forEach((entry, index) => {
+        rows.push(
+          sql`(${userId}::uuid, ${index + 1}::bigint, ${list.length}::bigint, ${entry.kind}::text, ${entry.chatId ?? null}::uuid, ${entry.messageId ?? null}::uuid, ${JSON.stringify(entry.data ?? {})}::jsonb)`,
+        );
+      });
+    }
+    if (rows.length <= 1000) {
+      await sql`
+        with counters as (
+          insert into app.user_sync_state as s (user_id, last_seq)
+          select v.user_id, v.n from (values ${counts}) as v (user_id, n) order by v.user_id
+          on conflict (user_id) do update set last_seq = s.last_seq + excluded.last_seq
+          returning s.user_id, s.last_seq
+        )
+        insert into app.update_log (user_id, seq, kind, conversation_id, message_id, data)
+        select e.user_id, c.last_seq - e.total + e.ord, e.kind, e.conversation_id, e.message_id, e.data
+        from (values ${sql.join(rows)}) as e (user_id, ord, total, kind, conversation_id, message_id, data)
+        join counters as c on c.user_id = e.user_id
+      `.execute(trx);
+      return;
+    }
+    // Very large changes (over 1000 entries, e.g. a broadcast to many members): counters first, then the entries in
+    // chunks.
+    const allocated = await sql<{ user_id: string; last_seq: string }>`
+      insert into app.user_sync_state as s (user_id, last_seq)
+      select v.user_id, v.n from (values ${counts}) as v (user_id, n) order by v.user_id
+      on conflict (user_id) do update set last_seq = s.last_seq + excluded.last_seq
+      returning s.user_id, s.last_seq
+    `.execute(trx);
+    const lastByUser = new Map(allocated.rows.map((row) => [row.user_id, BigInt(row.last_seq)]));
+    const logRows: Array<{ user_id: string; seq: string; kind: string; conversation_id: string | null; message_id: string | null; data: Record<string, unknown> }> = [];
+    for (const userId of userIds) {
+      const list = byUser.get(userId)!;
+      const first = lastByUser.get(userId)! - BigInt(list.length);
+      list.forEach((entry, index) => {
+        logRows.push({
+          user_id: userId,
+          seq: (first + BigInt(index + 1)).toString(),
           kind: entry.kind,
           conversation_id: entry.chatId ?? null,
           message_id: entry.messageId ?? null,
           data: entry.data ?? {},
         });
-      }
-      newLast.push({ userId: counter.user_id, last: seq });
+      });
     }
-    for (let index = 0; index < rows.length; index += 1000) {
-      await trx.insertInto('app.update_log').values(rows.slice(index, index + 1000)).execute();
+    for (let index = 0; index < logRows.length; index += 1000) {
+      await trx.insertInto('app.update_log').values(logRows.slice(index, index + 1000)).execute();
     }
-    const values = sql.join(newLast.map((item) => sql`(${item.userId}::uuid, ${item.last.toString()}::bigint)`));
-    await sql`
-      update app.user_sync_state as s set last_seq = v.last_seq
-      from (values ${values}) as v(user_id, last_seq)
-      where s.user_id = v.user_id
-    `.execute(trx);
   }
 }

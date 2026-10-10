@@ -2,6 +2,7 @@
 
 import { Icon, type IconName } from '@bedo/ui';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
+import { CachedImg } from './cached-img';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -114,7 +115,7 @@ export function Avatar({ name, photoUrl, size = 40 }: { name: string | null; pho
     .join('');
   return photoUrl ? (
     // A plain <img>: the picture is a short-lived signed URL from private storage.
-    <img src={photoUrl} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
+    <CachedImg src={photoUrl} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" style={{ width: size, height: size }} />
   ) : (
     <span
       aria-hidden="true"

@@ -4,7 +4,7 @@ import { logout as apiLogout } from '@bedo/api-client';
 import type { AuthenticatedResponse, Me } from '@bedo/contracts';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { ApiError, session, type SignedOutReason } from './api';
-import { clearCache } from './messaging/cache';
+import { clearCache, loadAccount, saveAccount } from './messaging/cache';
 import { unsubscribeThisBrowser } from './push';
 
 type SessionState =
@@ -32,16 +32,30 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setState({ status: 'signedOut', reason });
     });
     let cancelled = false;
+    let settled = false;
+    // Phase 14.4: the account saved on this browser opens the app at once (chats and messages come from the local
+    // cache); the session is checked with the server at the same time and, if it has ended, the app signs out.
+    void loadAccount().then((me) => {
+      if (!cancelled && !settled && me && me.profileComplete) setState({ status: 'signedIn', me });
+    });
     session
       .refresh()
       .then((response) => {
-        if (!cancelled) setState({ status: 'signedIn', me: response.user });
+        settled = true;
+        if (cancelled) return;
+        setState({ status: 'signedIn', me: response.user });
       })
       .catch((error: unknown) => {
+        settled = true;
         if (cancelled) return;
         const code = error instanceof ApiError ? error.code : null;
+        if (code === 'NETWORK') {
+          // Offline: keep showing what this browser has (if anything); requests try the session again later.
+          void loadAccount().then((me) => !cancelled && setState(me && me.profileComplete ? { status: 'signedIn', me } : { status: 'signedOut', reason: null }));
+          return;
+        }
         const reason = code === 'ACCOUNT_DELETED' ? 'account_deleted' : code === 'ACCOUNT_BLOCKED' ? 'account_blocked' : null;
-        if (error instanceof ApiError && code !== 'NETWORK') void clearCache();
+        if (error instanceof ApiError) void clearCache();
         setState({ status: 'signedOut', reason });
       });
     return () => {
@@ -49,6 +63,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       session.onSignedOut(null);
     };
   }, []);
+
+  // The current account is kept for the next visit.
+  useEffect(() => {
+    if (state.status === 'signedIn') void saveAccount(state.me);
+  }, [state]);
 
   const signedIn = useCallback((response: AuthenticatedResponse) => {
     session.setSession(response);

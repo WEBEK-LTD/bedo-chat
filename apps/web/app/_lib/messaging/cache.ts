@@ -1,4 +1,5 @@
-import type { Chat, Folder, Message } from '@bedo/contracts';
+import type { Chat, Folder, Me, Message } from '@bedo/contracts';
+import { clearMediaCache } from '../media-cache';
 
 /**
  * Local cache (blueprint: Client apps, "Local cache"): recent chats and messages kept in this browser for a
@@ -38,6 +39,8 @@ export interface CachedState {
 const DB_NAME = 'bedo-chat';
 const STORE = 'state';
 const KEY = 'current';
+/** Phase 14.4: the signed-in account, so the app opens straight away on the next visit. */
+const ACCOUNT_KEY = 'account';
 /** Messages kept per chat in the cache. */
 export const CACHED_MESSAGES_PER_CHAT = 50;
 
@@ -107,4 +110,19 @@ export async function clearCache(): Promise<void> {
   generation += 1;
   closed = true;
   await run('readwrite', (store) => store.delete(KEY));
+  await run('readwrite', (store) => store.delete(ACCOUNT_KEY));
+  await clearMediaCache();
+}
+
+/**
+ * Phase 14.4: the account last signed in on this browser, shown at once on the next visit while the session is
+ * checked with the server in the background. Erased with the rest of the cache when the session ends.
+ */
+export async function loadAccount(): Promise<Me | null> {
+  const stored = await run<{ format: number; me: Me }>('readonly', (store) => store.get(ACCOUNT_KEY) as IDBRequest<{ format: number; me: Me }>);
+  return stored && stored.format === CACHE_FORMAT && stored.me?.id ? stored.me : null;
+}
+
+export async function saveAccount(me: Me): Promise<void> {
+  await run<unknown>('readwrite', (store) => store.put({ format: CACHE_FORMAT, me }, ACCOUNT_KEY) as IDBRequest<unknown>);
 }

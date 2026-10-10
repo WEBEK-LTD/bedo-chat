@@ -237,6 +237,22 @@ export const adminBroadcastSchema = z.object({
 });
 export const adminBroadcastsResponseSchema = z.object({ broadcasts: z.array(adminBroadcastSchema) });
 
+// ------------------------------------------------------------------------------------- speed check (Phase 14.4)
+
+/**
+ * Where the website's server runs and how long one database step takes from there. Region codes are the cloud's
+ * (AWS: us-east-2 is Ohio, ap-southeast-2 is Sydney); null when unknown (a local run).
+ */
+export const adminSpeedCheckSchema = z.object({
+  serverRegion: z.string().nullable(),
+  databaseRegion: z.string().nullable(),
+  /** The middle of three "select 1" round trips, in milliseconds. */
+  databaseRoundTripMs: z.number(),
+  /** True when both are known and the same; false when known and different. */
+  sameRegion: z.boolean().nullable(),
+});
+export type AdminSpeedCheck = z.infer<typeof adminSpeedCheckSchema>;
+
 // ------------------------------------------------------------------------------------- statistics
 
 export const adminStatsSchema = z.object({

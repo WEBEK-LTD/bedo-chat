@@ -8171,6 +8171,38 @@
           "pendingScheduledMessages"
         ]
       },
+      "AdminSpeedCheck": {
+        "type": "object",
+        "properties": {
+          "serverRegion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "databaseRegion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "databaseRoundTripMs": {
+            "type": "number"
+          },
+          "sameRegion": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "serverRegion",
+          "databaseRegion",
+          "databaseRoundTripMs",
+          "sameRegion"
+        ]
+      },
       "AdminUsersResponse": {
         "type": "object",
         "properties": {
@@ -17991,6 +18023,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminStats"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/speed-check": {
+      "get": {
+        "operationId": "adminSpeedCheck",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Server and database regions and one database round trip (Phase 14.4)",
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSpeedCheck"
                 }
               }
             }

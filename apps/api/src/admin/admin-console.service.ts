@@ -4,17 +4,20 @@ import {
   type SignupMode,
   ADMIN_CONSOLE_RULES,
   type AdminReport,
+  type AdminSpeedCheck,
   type AdminStats,
   type AdminUserDetail,
   type AdminUserRef,
   type AdminUserSummary,
   type AuditKind,
 } from '@bedo/contracts';
+import type { ApiEnv } from '@bedo/config';
 import type { Database, UserStatus } from '@bedo/db';
 import { sql, type Transaction } from 'kysely';
 import { type Actor, AuditService } from '../audit/audit.service.js';
 import { SessionsService } from '../auth/sessions.service.js';
 import { AppError } from '../common/app-error.js';
+import { API_ENV } from '../config/tokens.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { DatabaseService } from '../database/database.service.js';
 import { PushService } from '../delivery/push.service.js';
@@ -60,7 +63,36 @@ export class AdminConsoleService {
     @Inject(UpdateLogService) private readonly updateLog: UpdateLogService,
     @Inject(BroadcastsService) private readonly broadcasts: BroadcastsService,
     @Inject(AdminOperationsService) private readonly operations: AdminOperationsService,
+    @Inject(API_ENV) private readonly env: ApiEnv,
   ) {}
+
+  /**
+   * Phase 14.4: the server's cloud region (AWS_REGION, set by the platform on every server function), the
+   * database's region read from the Supabase pooler's host name (aws-0-ap-southeast-2.pooler.supabase.com), and the
+   * time of one database round trip. No secret leaves: only region names and a number.
+   */
+  async speedCheck(): Promise<AdminSpeedCheck> {
+    const times: number[] = [];
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const started = performance.now();
+      await sql`select 1`.execute(this.db);
+      times.push(performance.now() - started);
+    }
+    times.sort((a, b) => a - b);
+    const serverRegion = process.env.AWS_REGION?.trim() || null;
+    let databaseRegion: string | null;
+    try {
+      databaseRegion = /^aws-\d+-([a-z]{2}-[a-z]+-\d)\.pooler\.supabase\.com$/.exec(new URL(this.env.DATABASE_URL).hostname)?.[1] ?? null;
+    } catch {
+      databaseRegion = null;
+    }
+    return {
+      serverRegion,
+      databaseRegion,
+      databaseRoundTripMs: Math.round(times[1]! * 10) / 10,
+      sameRegion: serverRegion && databaseRegion ? serverRegion === databaseRegion : null,
+    };
+  }
 
   private get db() {
     return this.database.db;

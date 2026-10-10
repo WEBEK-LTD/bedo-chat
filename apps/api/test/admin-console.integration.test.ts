@@ -49,6 +49,24 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard (real Postgres, runtime role)'
     }
   });
 
+  it('reports where the server and the database run and one database round trip (Phase 14.4)', async () => {
+    const previous = process.env.AWS_REGION;
+    process.env.AWS_REGION = 'us-east-2';
+    try {
+      const check = await moderator.get('/v1/admin/speed-check');
+      expect(check.status).toBe(200);
+      // The test database is not a Supabase pooler, so its region is unknown; the server's comes from AWS_REGION.
+      expect(check.body).toMatchObject({ serverRegion: 'us-east-2', databaseRegion: null, sameRegion: null });
+      expect(check.body.databaseRoundTripMs).toBeGreaterThanOrEqual(0);
+      expect(check.body.databaseRoundTripMs).toBeLessThan(1000);
+      expect(JSON.stringify(check.body)).not.toMatch(/postgres|password|@/);
+    } finally {
+      if (previous === undefined) delete process.env.AWS_REGION;
+      else process.env.AWS_REGION = previous;
+    }
+    expect([401, 403]).toContain((await app.inject({ method: 'GET', url: '/v1/admin/speed-check' })).statusCode);
+  });
+
   it('finds users and shows their account; moderators suspend and reactivate, only Super Admins ban and delete', async () => {
     const dana = await newUser('Dana Console');
     const found = await moderator.get(`/v1/admin/users?q=${encodeURIComponent('Dana Con')}`);
