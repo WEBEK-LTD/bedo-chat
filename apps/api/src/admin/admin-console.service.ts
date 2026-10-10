@@ -1,5 +1,7 @@
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import {
+  type AdminAccessSettings,
+  type SignupMode,
   ADMIN_CONSOLE_RULES,
   type AdminReport,
   type AdminStats,
@@ -215,6 +217,36 @@ export class AdminConsoleService {
     }
     await this.audit.admin(trx, { adminId: admin.adminId, action: `user.${action}`, targetType: 'user', targetId: userId, ip: info.ip, userAgent: info.userAgent, metadata: { reason } });
     return notice;
+  }
+
+  // ---------------------------------------------------------------------- who can create an account
+
+  async accessSettings(): Promise<AdminAccessSettings> {
+    const row = await this.db
+      .selectFrom('app.access_settings as s')
+      .leftJoin('app.admin_accounts as a', 'a.id', 's.updated_by')
+      .select(['s.signup_mode', 's.updated_at', 'a.name'])
+      .executeTakeFirstOrThrow();
+    return { signupMode: row.signup_mode, updatedBy: row.name ?? null, updatedAt: iso(row.updated_at) };
+  }
+
+  /** D-47: recorded in the admin history with the previous mode. */
+  async setSignupMode(admin: AdminContext, mode: SignupMode, info: RequestInfo): Promise<AdminAccessSettings> {
+    await this.db.transaction().execute(async (trx) => {
+      const before = await trx.selectFrom('app.access_settings').select('signup_mode').forUpdate().executeTakeFirstOrThrow();
+      if (before.signup_mode === mode) return;
+      await trx.updateTable('app.access_settings').set({ signup_mode: mode, updated_by: admin.adminId, updated_at: sql`now()` }).execute();
+      await this.audit.admin(trx, {
+        adminId: admin.adminId,
+        action: 'settings.signup_mode',
+        targetType: 'setting',
+        targetId: 'signup_mode',
+        ip: info.ip,
+        userAgent: info.userAgent,
+        metadata: { from: before.signup_mode, to: mode },
+      });
+    });
+    return this.accessSettings();
   }
 
   // ------------------------------------------------------------------------------------- reports

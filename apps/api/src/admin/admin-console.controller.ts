@@ -1,5 +1,7 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import {
+  adminAccessSettingsBodySchema,
+  adminAccessSettingsSchema,
   adminAddChatMembersBodySchema,
   adminAuditQuerySchema,
   adminAuditResponseSchema,
@@ -57,6 +59,24 @@ export class AdminConsoleController {
   @ResponseSchema(adminStatsSchema)
   stats() {
     return this.console.stats();
+  }
+
+  /** D-47: who can create an account. Every admin sees it; a Super Admin changes it. */
+  @Get('settings/access')
+  @ResponseSchema(adminAccessSettingsSchema)
+  accessSettings() {
+    return this.console.accessSettings();
+  }
+
+  @Put('settings/access')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminAccessSettingsSchema)
+  setAccessSettings(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(adminAccessSettingsBodySchema)) body: z.infer<typeof adminAccessSettingsBodySchema>,
+    @Req() request: FastifyRequest,
+  ) {
+    return this.console.setSignupMode(admin, body.signupMode, requestInfo(request));
   }
 
   @Get('users')

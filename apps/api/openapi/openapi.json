@@ -9999,6 +9999,50 @@
           "finishedAt"
         ]
       },
+      "AdminAccessSettings": {
+        "type": "object",
+        "properties": {
+          "signupMode": {
+            "type": "string",
+            "enum": [
+              "open",
+              "academy_list"
+            ]
+          },
+          "updatedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "signupMode",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "AdminAccessSettingsBody": {
+        "type": "object",
+        "properties": {
+          "signupMode": {
+            "type": "string",
+            "enum": [
+              "open",
+              "academy_list"
+            ]
+          }
+        },
+        "required": [
+          "signupMode"
+        ]
+      },
       "GifSettingsResponse": {
         "type": "object",
         "properties": {
@@ -19103,6 +19147,107 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminBroadcast"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/access": {
+      "get": {
+        "operationId": "adminAccessSettings",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Who can create an account (D-47)",
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccessSettings"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "adminSetAccessSettings",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Anyone with WhatsApp, or academy list only (D-47, Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAccessSettingsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccessSettings"
                 }
               }
             }

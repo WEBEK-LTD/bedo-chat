@@ -275,7 +275,10 @@ export interface IntegrationEnv {
 
 const fakesByEnv = new WeakMap<ApiEnv, { waabek: FakeWaabek; push: FakePush; realtime: FakeRealtime; background: Background }>();
 
-export async function setupIntegrationEnv(overrides: Record<string, string> = {}, options: { waabekKey?: boolean } = {}): Promise<IntegrationEnv> {
+export async function setupIntegrationEnv(
+  overrides: Record<string, string> = {},
+  options: { waabekKey?: boolean; signupMode?: 'open' | 'academy_list' } = {},
+): Promise<IntegrationEnv> {
   const adminUrl = process.env.TEST_DATABASE_URL;
   if (!adminUrl) {
     throw new Error('TEST_DATABASE_URL is required for integration tests');
@@ -291,6 +294,8 @@ export async function setupIntegrationEnv(overrides: Record<string, string> = {}
   const runtime = new URL(ownerUrl);
   runtime.username = login;
   runtime.password = password;
+  // D-47: production starts open; most suites test the academy list (D-06), so it is their default here.
+  await query(ownerUrl, 'update app.access_settings set signup_mode = $1', [options.signupMode ?? 'academy_list']);
   if (options.waabekKey !== false) {
     // As if a Super Admin had saved it in the Admin Dashboard (D-32): one-time codes can be delivered.
     await query(ownerUrl, 'update app.otp_settings set waabek_api_key_enc = $1', [encryptWaabekApiKey(SETTINGS_KEY, TEST_WAABEK_KEY)]);

@@ -100,7 +100,7 @@ describe.runIf(enabled)('Phase 2 in the browser (one site: web + admin + API, Po
     await page.goto(`${WEB_URL}/login`);
     await page.getByLabel('Phone number').fill(UNLISTED);
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByText(`If ${UNLISTED} is registered with the academy`).waitFor();
+    await page.getByText(`If ${UNLISTED} can use Bedo Chat`).waitFor();
     await shot(page, '03-login-code');
     expect(await stack.codeCount(UNLISTED)).toBe(0);
   });

@@ -49,8 +49,7 @@ export function PhonePanel({ onDone }: { onDone: () => void }) {
   return (
     <div className="flex flex-col gap-4 p-4">
       <Notice>
-        Your current number is {me.phone}. The new number must be registered with the academy. Your previous number stays in
-        your account history.
+        Your current number is {me.phone}. Your previous number stays in your account history.
       </Notice>
       {!codeSent ? (
         <form className="flex flex-col gap-4" onSubmit={requestCode} noValidate>
@@ -71,7 +70,7 @@ export function PhonePanel({ onDone }: { onDone: () => void }) {
         </form>
       ) : (
         <form className="flex flex-col gap-4" onSubmit={verify} noValidate>
-          <p className="text-sm text-ink-secondary">If {newPhone.trim()} is registered with the academy, a code was sent to it by WhatsApp.</p>
+          <p className="text-sm text-ink-secondary">If {newPhone.trim()} can be used, a code was sent to it by WhatsApp.</p>
           <TextField
             id="new-phone-code"
             label="Verification code"

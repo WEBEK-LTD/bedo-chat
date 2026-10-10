@@ -206,6 +206,25 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard in the browser', () => {
     expect(views.rows).toEqual([{ reason: REASON }]);
   });
 
+  it('lets anyone with WhatsApp sign up once a Super Admin allows it (D-47)', async () => {
+    const NEWCOMER = '+201000010077';
+    await admin.getByRole('button', { name: 'Academy phone list' }).click();
+    const access = admin.getByRole('group', { name: 'Who can create an account' });
+    await access.getByLabel(/Only numbers on this list/).waitFor();
+    expect(await access.getByLabel(/Only numbers on this list/).isChecked()).toBe(true);
+    // The choice is saved first, then shown (a radio that follows the server).
+    await access.getByLabel(/Anyone with a WhatsApp number/).click();
+    await access.getByText(/Last changed .* by Head Office/).waitFor();
+    expect(await access.getByLabel(/Anyone with a WhatsApp number/).isChecked()).toBe(true);
+    await shot(admin, '106-admin-signup-open');
+    const newcomer = await newPage('newcomer');
+    await signIn(newcomer, NEWCOMER, 'New Student');
+    expect((await query(stack.ownerUrl, 'select count(*)::int as n from app.academy_phone_list where phone = $1', [NEWCOMER])).rows[0]!.n).toBe(0);
+    expect((await query(stack.ownerUrl, `select status from app.users where phone = $1`, [NEWCOMER])).rows).toEqual([{ status: 'active' }]);
+    await access.getByLabel(/Only numbers on this list/).click();
+    await expect.poll(async () => (await query(stack.ownerUrl, 'select signup_mode from app.access_settings')).rows[0]!.signup_mode).toBe('academy_list');
+  });
+
   it('shows a Moderator the shared areas only', async () => {
     const page = await newPage('moderator');
     await adminSignIn(page, MODERATOR, moderatorSecret);

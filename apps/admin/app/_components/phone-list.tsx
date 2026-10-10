@@ -3,6 +3,7 @@
 import { adminAddPhone, adminImportPhones, adminListPhones, type PhoneListImportResponse as ImportResult, type PhoneListResponseItemsItem as PhoneItem } from '@bedo/api-client';
 import { useCallback, useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { errorMessage, formatDateTime } from '../_lib/api';
+import { SignupAccess } from './signup-access';
 import { Button, FormError, Notice, TextArea, TextField } from './ui';
 
 
@@ -14,7 +15,10 @@ const STATUS_LABELS: Record<string, string> = {
   deleted: 'Deleted',
 };
 
-/** Academy phone list (D-06, P-11): view and search; Super Admins add one number or import a CSV. */
+/**
+ * Academy phone list (D-06, P-11): who can create an account (D-47), then the list: view and search; Super Admins
+ * add one number or import a CSV.
+ */
 export function PhoneList({ canChange, onSessionError }: { canChange: boolean; onSessionError: (error: unknown) => void }) {
   const [items, setItems] = useState<PhoneItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -103,7 +107,7 @@ export function PhoneList({ canChange, onSessionError }: { canChange: boolean; o
     <div className="flex max-w-4xl flex-col gap-8">
       <section className="flex flex-col gap-4">
         <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Academy phone list</h1>
-        <p className="text-sm text-ink-secondary">Only numbers on this list can sign in to Bedo Chat.</p>
+        <SignupAccess canChange={canChange} onSessionError={onSessionError} />
         <form
           className="flex gap-2"
           onSubmit={(event) => {

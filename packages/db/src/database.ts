@@ -64,6 +64,15 @@ export interface AdminAccountsTable {
 }
 
 /** OTP delivery settings (D-32): one row; the Waabek API key only ever encrypted. */
+export type SignupMode = 'open' | 'academy_list';
+/** D-47: who can create an account. One row. */
+export interface AccessSettingsTable {
+  id: Generated<boolean>;
+  signup_mode: Generated<SignupMode>;
+  updated_by: string | null;
+  updated_at: Date | null;
+}
+
 export interface OtpSettingsTable {
   id: Generated<boolean>;
   provider: Generated<'waabek'>;
@@ -683,6 +692,7 @@ export interface Database {
   'app.admin_accounts': AdminAccountsTable;
   'app.admin_sessions': AdminSessionsTable;
   'app.otp_settings': OtpSettingsTable;
+  'app.access_settings': AccessSettingsTable;
   'app.admin_bootstrap': AdminBootstrapTable;
   'app.otp_settings_recovery': OtpSettingsRecoveryTable;
   'app.admin_password_setup': AdminPasswordSetupTable;

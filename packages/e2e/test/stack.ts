@@ -496,6 +496,8 @@ export async function startStack(options: { waabekKey?: boolean } = {}): Promise
   await query(adminUrl, `create database ${dbName}`);
   const ownerUrl = Object.assign(new URL(adminUrl), { pathname: `/${dbName}` }).toString();
   await runMigrations({ connectionString: ownerUrl, migrationsDir: defaultMigrationsDir() });
+  // D-47: production starts open; the browser suites test the academy list (D-06) unless they switch it.
+  await query(ownerUrl, `update app.access_settings set signup_mode = 'academy_list'`);
   await query(adminUrl, `create role ${login} login password '${password}' in role bedo_runtime`);
   const runtime = new URL(ownerUrl);
   runtime.username = login;

@@ -132,8 +132,7 @@ export function LoginFlow() {
           <header>
             <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Sign in to Bedo Chat</h1>
             <p className="mt-2 text-sm text-ink-secondary">
-              Enter your phone number in international format. If it is registered with the academy, we will send a
-              verification code by WhatsApp.
+              Enter your phone number in international format. We will send a verification code to it by WhatsApp.
             </p>
           </header>
           {signedOutMessage && !error ? <Notice>{signedOutMessage}</Notice> : null}
@@ -163,8 +162,8 @@ export function LoginFlow() {
           <header>
             <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Enter the code</h1>
             <p className="mt-2 text-sm text-ink-secondary">
-              If <span className="font-medium text-ink">{step.phone}</span> is registered with the academy, a 6-digit
-              code was sent to it by WhatsApp. The code is valid for 5 minutes.
+              If <span className="font-medium text-ink">{step.phone}</span> can use Bedo Chat, a 6-digit code was sent to
+              it by WhatsApp. The code is valid for 5 minutes.
             </p>
           </header>
           <form className="flex flex-col gap-4" onSubmit={submitCode} noValidate>

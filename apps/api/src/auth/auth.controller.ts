@@ -62,7 +62,7 @@ export class AuthController {
   async requestCode(@Body(new ZodValidationPipe(otpRequestBodySchema)) body: OtpRequestBody, @Req() request: FastifyRequest) {
     const phone = requirePhone(body.phone);
     const db = this.database.db;
-    const [listed, user] = await Promise.all([this.accounts.isOnAcademyList(db, phone), this.accounts.findByPhone(db, phone)]);
+    const [listed, user] = await Promise.all([this.accounts.mayUseNumber(db, phone), this.accounts.findByPhone(db, phone)]);
     return this.otp.issue({
       purpose: 'sign_in',
       phone,
@@ -92,8 +92,8 @@ export class AuthController {
       info,
     });
 
-    // Second check: an account is only ever created for a number on the academy list (D-06).
-    if (!existing && !(await this.accounts.isOnAcademyList(this.database.db, phone))) {
+    // Second check: an account is only ever created for a number that may have one (D-06, D-47).
+    if (!existing && !(await this.accounts.mayUseNumber(this.database.db, phone))) {
       throw new AppError(HttpStatus.BAD_REQUEST, 'OTP_INVALID');
     }
     const user = existing ?? (await this.createAccount(phone));

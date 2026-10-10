@@ -31,9 +31,28 @@ export class AccountsService {
     return db.selectFrom('app.users').selectAll().where('id', '=', id).executeTakeFirst();
   }
 
-  async isOnAcademyList(db: Executor, phone: string): Promise<boolean> {
-    const row = await db.selectFrom('app.academy_phone_list').select('phone').where('phone', '=', phone).executeTakeFirst();
-    return Boolean(row);
+  /**
+   * Whether a number may get an account (sign-in of a new number, or a new number for an account). D-47: anyone
+   * with a WhatsApp number (the default), or, when a Super Admin chooses so, only numbers on the academy phone list
+   * (D-06). Either way never the number of an account deleted by an admin (D-14, D-24): its deletion is in the
+   * identity history as the number cleared.
+   */
+  async mayUseNumber(db: Executor, phone: string): Promise<boolean> {
+    const settings = await db.selectFrom('app.access_settings').select('signup_mode').executeTakeFirst();
+    if ((settings?.signup_mode ?? 'academy_list') === 'academy_list') {
+      const row = await db.selectFrom('app.academy_phone_list').select('phone').where('phone', '=', phone).executeTakeFirst();
+      return Boolean(row);
+    }
+    const deleted = await db
+      .selectFrom('audit.identity_history as h')
+      .innerJoin('app.users as u', 'u.id', 'h.user_id')
+      .select('h.user_id')
+      .where('h.field', '=', 'phone')
+      .where('h.old_value', '=', phone)
+      .where('h.new_value', 'is', null)
+      .where('u.status', '=', 'deleted')
+      .executeTakeFirst();
+    return !deleted;
   }
 
   async hasTwoStep(db: Executor, userId: string): Promise<boolean> {

@@ -4920,6 +4920,34 @@ export interface AdminBroadcast {
   finishedAt: string | null;
 }
 
+export type AdminAccessSettingsSignupMode = typeof AdminAccessSettingsSignupMode[keyof typeof AdminAccessSettingsSignupMode];
+
+
+export const AdminAccessSettingsSignupMode = {
+  open: 'open',
+  academy_list: 'academy_list',
+} as const;
+
+export interface AdminAccessSettings {
+  signupMode: AdminAccessSettingsSignupMode;
+  /** @nullable */
+  updatedBy: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type AdminAccessSettingsBodySignupMode = typeof AdminAccessSettingsBodySignupMode[keyof typeof AdminAccessSettingsBodySignupMode];
+
+
+export const AdminAccessSettingsBodySignupMode = {
+  open: 'open',
+  academy_list: 'academy_list',
+} as const;
+
+export interface AdminAccessSettingsBody {
+  signupMode: AdminAccessSettingsBodySignupMode;
+}
+
 /**
  * @nullable
  */
@@ -10126,6 +10154,68 @@ return apiFetch<AdminBroadcast>(getAdminSendBroadcastUrl(),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(adminBroadcastBody)
+  }
+);}
+
+
+
+export const getAdminAccessSettingsUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/access`
+}
+
+/**
+ * @summary Who can create an account (D-47)
+ */
+export const adminAccessSettings = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminAccessSettings> => {
+
+  return apiFetch<AdminAccessSettings>(getAdminAccessSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminSetAccessSettingsUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/access`
+}
+
+/**
+ * @summary Anyone with WhatsApp, or academy list only (D-47, Super Admin)
+ */
+export const adminSetAccessSettings = async (adminAccessSettingsBody: AdminAccessSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminAccessSettings> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminAccessSettings>(getAdminSetAccessSettingsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminAccessSettingsBody)
   }
 );}
 

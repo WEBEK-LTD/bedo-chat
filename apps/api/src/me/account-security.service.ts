@@ -31,7 +31,7 @@ export class AccountSecurityService {
   /** Same neutral answer whether or not the new number may be used (on the academy list and unused). */
   async requestPhoneChange(userId: string, newPhone: string, info: RequestInfo) {
     const [listed, holder, user] = await Promise.all([
-      this.accounts.isOnAcademyList(this.db, newPhone),
+      this.accounts.mayUseNumber(this.db, newPhone),
       this.accounts.findByPhone(this.db, newPhone),
       this.accounts.findById(this.db, userId),
     ]);
@@ -82,8 +82,8 @@ export class AccountSecurityService {
       if (taken) {
         throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
       }
-      // Second check: the new number must still be on the academy list (D-06).
-      if (!(await this.accounts.isOnAcademyList(trx, newPhone))) {
+      // Second check: the new number must still be one that may be used (D-06, D-47).
+      if (!(await this.accounts.mayUseNumber(trx, newPhone))) {
         throw new AppError(HttpStatus.BAD_REQUEST, 'OTP_INVALID');
       }
       await trx.updateTable('app.users').set({ phone: newPhone }).where('id', '=', userId).execute();

@@ -93,3 +93,18 @@ have no policies because no Supabase API role can reach them, so the API's own l
 (schemas `app`, `audit`, `app_meta`) only, after checking that `anon`, `authenticated` and `public` cannot use those
 schemas; `realtime.messages` keeps its row level security and device policy. `apply-updates.sql` does the same at
 its end and checks it. Tested in `apps/api/test/owner-rls.integration.test.ts`.
+
+## Phase 13.3 — anyone with WhatsApp can create an account (D-47)
+
+After go-live the owner decided that any student with a WhatsApp number can sign up without being added to the
+academy phone list. It is a setting at the top of the Admin Dashboard's Academy phone list ("Who can create an
+account"): **Anyone with a WhatsApp number** (the default) or **Only numbers on this list** (as before). A Super Admin
+changes it; it is recorded in the admin history. Numbers of accounts an admin deleted can never sign up again, and the
+code limits stay. The sign-in page no longer says "registered with the academy" (it now says the code is sent "if the
+number can use Bedo Chat").
+
+From now on each new migration comes with its own small update script for the live database:
+`docs/owner-sql/update-20261018120000.sql` (run once in the SQL Editor; it checks that every earlier migration is
+there and refuses to run twice). Tests: `apps/api/test/open-signup.integration.test.ts` (4),
+`packages/db/test/owner-sql-update-scripts.integration.test.ts` (2), and a browser test in
+`packages/e2e/test/admin-console.e2e.test.ts` (a new number signs up after the switch).

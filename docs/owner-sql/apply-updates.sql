@@ -15,7 +15,8 @@
 --   15  20261015120000_phase9_hardening
 --   16  20261016120000_phase10_admin
 --   17  20261017120000_phase13_launch
--- then sets the two limits on bedo_api, checks everything and records the 11 migrations.
+--   18  20261018120000_open_signup
+-- then sets the two limits on bedo_api, checks everything and records the 12 migrations.
 --
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- One request = one transaction: if any check or statement fails, NOTHING is kept and the message says why.
@@ -943,7 +944,31 @@ grant update (refresh_hash, previous_refresh_hash, device_name, ip, user_agent, 
   on app.sessions to bedo_runtime;
 -- End of the delivered migration file 20261017120000 ------------------------------------------------------------
 
--- Part 13: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
+-- Part 13: supabase/migrations/20261018120000_open_signup.sql, exactly as delivered -----------------------------
+-- Bedo Chat - who can create an account (D-47).
+--
+-- The owner decided on 2026-10-10 that any student with a WhatsApp number can create an account by signing in, without
+-- being added to the academy phone list first. A Super Admin can switch back to "only numbers on the academy phone list"
+-- in the Admin Dashboard at any time. In both modes the number of an account deleted by an admin (D-14, D-24) cannot
+-- create a new account, and the one-time-code limits stay as they are.
+create table app.access_settings (
+  id           boolean primary key default true check (id),
+  signup_mode  text not null default 'open' check (signup_mode in ('open', 'academy_list')),
+  updated_by   uuid references app.admin_accounts (id),
+  updated_at   timestamptz
+);
+comment on table app.access_settings is
+  'Who can create an account (D-47): anyone with a WhatsApp number (open) or only numbers on the academy phone list. One row.';
+insert into app.access_settings (id) values (true);
+create trigger access_settings_no_delete before delete on app.access_settings
+  for each row execute function app.forbid_mutation();
+create trigger access_settings_no_truncate before truncate on app.access_settings
+  for each statement execute function app.forbid_mutation();
+grant select on app.access_settings to bedo_runtime;
+grant update (signup_mode, updated_by, updated_at) on app.access_settings to bedo_runtime;
+-- End of the delivered migration file 20261018120000 ------------------------------------------------------------
+
+-- Part 14: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
 -- they are set on the login itself: no statement runs longer than 15 seconds, and no connection stays idle inside
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
@@ -966,7 +991,7 @@ begin
 end
 $bedo_rls$;
 
--- Part 14: check the result, then the bookkeeping rows ---------------------------------------------------
+-- Part 15: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$
 begin
   if not exists (select 1 from pg_constraint
@@ -1058,6 +1083,13 @@ begin
      or not has_column_privilege('bedo_runtime', 'app.sessions', 'revoked_at', 'update') then
     raise exception 'Stopped: bedo_runtime privileges after Phase 13 are not as expected (nothing was kept)';
   end if;
+  if (select count(*) from app.access_settings) <> 1 then
+    raise exception 'Stopped: app.access_settings does not hold its one row (nothing was kept)';
+  end if;
+  if has_table_privilege('bedo_runtime', 'app.access_settings', 'delete') or has_table_privilege('bedo_runtime', 'app.access_settings', 'insert')
+     or not has_column_privilege('bedo_runtime', 'app.access_settings', 'signup_mode', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on app.access_settings are not as expected (nothing was kept)';
+  end if;
   insert into app_meta.schema_migrations (version, name, checksum) values
     ('20261006120000', 'd35_admin_password_owner_sql',
      'ce35f75dc26b4277f010930fb95a29994ff2a5bc2ccaa91970c3e6349bdb7961'),
@@ -1080,13 +1112,15 @@ begin
     ('20261016120000', 'phase10_admin',
      '2195e79100fa8a6f7df9ea349e04288e2032db700d7843d4bf533cf64c3ca6b1'),
     ('20261017120000', 'phase13_launch',
-     '8781cf30f382057c5a769442ffe78bb627673780022523c9f8f7c653eb140f89');
+     '8781cf30f382057c5a769442ffe78bb627673780022523c9f8f7c653eb140f89'),
+    ('20261018120000', 'open_signup',
+     '9487561cec333a529aa6dbf755b3e498100292ca3f4ac2bd8196fffa77a88426');
 end
 $verify$;
 
 -- The result: every line should say "ok".
 select 'migrations recorded' as check_name,
-       case when (select count(*) from app_meta.schema_migrations) = 17 then 'ok' else 'NOT OK' end as result
+       case when (select count(*) from app_meta.schema_migrations) = 18 then 'ok' else 'NOT OK' end as result
 union all
 select 'bedo_api limits',
        case when (select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole

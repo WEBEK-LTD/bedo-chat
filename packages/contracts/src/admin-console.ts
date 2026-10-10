@@ -253,3 +253,16 @@ export const adminStatsSchema = z.object({
   pendingScheduledMessages: z.number().int(),
 });
 export type AdminStats = z.infer<typeof adminStatsSchema>;
+
+// ------------------------------------------------------------------------------- who can create an account
+
+/** D-47: anyone with a WhatsApp number (the default), or only numbers on the academy phone list (D-06). */
+export const SIGNUP_MODES = ['open', 'academy_list'] as const;
+export type SignupMode = (typeof SIGNUP_MODES)[number];
+export const adminAccessSettingsSchema = z.object({
+  signupMode: z.enum(SIGNUP_MODES),
+  updatedBy: z.string().nullable(),
+  updatedAt: timestamp.nullable(),
+});
+export type AdminAccessSettings = z.infer<typeof adminAccessSettingsSchema>;
+export const adminAccessSettingsBodySchema = z.object({ signupMode: z.enum(SIGNUP_MODES) });
