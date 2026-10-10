@@ -150,11 +150,27 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
       expect(wrongOrigin.statusCode).toBe(403);
     });
 
-    it('ends the admin session after 30 idle minutes and on sign-out', async () => {
+    it('keeps an admin signed in while the dashboard is used, and ends the session on sign-out (D-49)', async () => {
       const admin = await createAdmin('moderator');
       const cookie = await adminSignIn(admin);
+      const opened = await asAdmin(cookie, 'GET', '/v1/admin/session');
+      expect(opened.statusCode).toBe(200);
+      // Opening the dashboard renews the cookie for 400 days.
+      const renewed = String([opened.headers['set-cookie']].flat().find((line) => String(line).startsWith(`${ADMIN_SESSION_COOKIE}=`)));
+      expect(renewed).toMatch(/Max-Age=34560000/);
+
+      // No idle sign-out: hours away (before D-49: 30 minutes) and past the old 12-hour limit still signed in.
+      await query(
+        ctx.ownerUrl,
+        "update app.admin_sessions set last_active_at = now() - interval '200 days', created_at = now() - interval '300 days', expires_at = now() - interval '1 day' where admin_id = $1",
+        [admin.id],
+      );
       expect((await asAdmin(cookie, 'GET', '/v1/admin/session')).statusCode).toBe(200);
-      await query(ctx.ownerUrl, "update app.admin_sessions set last_active_at = now() - interval '31 minutes' where admin_id = $1", [admin.id]);
+      // Using it moved the session on: the last use is now.
+      const active = await query<{ seconds: number }>(ctx.ownerUrl, 'select extract(epoch from now() - last_active_at) as seconds from app.admin_sessions where admin_id = $1', [admin.id]);
+      expect(Number(active.rows[0]?.seconds)).toBeLessThan(60);
+      // Only 400 days without opening the dashboard at all ends it.
+      await query(ctx.ownerUrl, "update app.admin_sessions set last_active_at = now() - interval '401 days' where admin_id = $1", [admin.id]);
       expect((await asAdmin(cookie, 'GET', '/v1/admin/session')).statusCode).toBe(401);
 
       const fresh = await adminSignIn(admin, 1);

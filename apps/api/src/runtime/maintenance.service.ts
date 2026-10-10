@@ -78,14 +78,14 @@ export class MaintenanceService {
 
   /**
    * Retired refresh-token hashes exist only for reuse detection. They stop mattering once their session
-   * has ended (any token is refused then) or after the 30-day idle limit.
+   * has ended (any token is refused then) or after 30 days (D-49).
    */
   async pruneRetiredRefreshTokens(): Promise<number> {
     const result = await this.database.db
       .deleteFrom('app.retired_refresh_tokens')
       .where((eb) =>
         eb.or([
-          eb('retired_at', '<', sql<Date>`now() - make_interval(days => ${TOKEN_RULES.refreshTokenIdleDays})`),
+          eb('retired_at', '<', sql<Date>`now() - make_interval(days => ${TOKEN_RULES.retiredTokenDays})`),
           eb.exists(
             eb
               .selectFrom('app.sessions')

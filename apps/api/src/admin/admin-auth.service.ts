@@ -14,6 +14,8 @@ import { RateLimitService } from '../state/rate-limit.service.js';
 import { AdminBootstrapService } from './admin-bootstrap.service.js';
 import { base32Encode, decryptSecret, encryptSecret, generateTotpSecret, otpauthUri, TOTP_ISSUER, verifyTotp } from './totp.js';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 export interface AdminContext {
   adminId: string;
   sessionId: string;
@@ -212,7 +214,7 @@ export class AdminAuthService {
         .values({
           admin_id: admin.id,
           token_hash: hashToken(sessionToken),
-          expires_at: new Date(Date.now() + ADMIN_SESSION_RULES.absoluteHours * 60 * 60 * 1000),
+          expires_at: new Date(Date.now() + ADMIN_SESSION_RULES.sessionDays * DAY_MS),
           ip: info.ip,
           user_agent: info.userAgent,
         })
@@ -231,14 +233,13 @@ export class AdminAuthService {
     return { admin: { id: admin.id, name: admin.name, role: admin.role }, sessionToken };
   }
 
-  /** Session check on every admin request: absolute and idle limits (P-13). */
+  /** Session check on every admin request (D-49): a session in use is renewed, so an admin stays signed in. */
   async authenticate(sessionToken: string): Promise<AdminContext> {
     const row = await this.db
       .selectFrom('app.admin_sessions')
       .innerJoin('app.admin_accounts', 'app.admin_accounts.id', 'app.admin_sessions.admin_id')
       .select([
         'app.admin_sessions.id as session_id',
-        'app.admin_sessions.expires_at',
         'app.admin_sessions.last_active_at',
         'app.admin_sessions.revoked_at',
         'app.admin_accounts.id as admin_id',
@@ -253,8 +254,9 @@ export class AdminAuthService {
       !row ||
       row.revoked_at ||
       row.status !== 'active' ||
-      new Date(row.expires_at).getTime() <= now ||
-      now - new Date(row.last_active_at).getTime() > ADMIN_SESSION_RULES.idleMinutes * 60 * 1000
+      // Renewed by use (D-49): last_active_at moves forward at most once a minute, so the session lasts 400 days
+      // from the last use rather than from the sign-in (expires_at only records the first 400 days).
+      now - new Date(row.last_active_at).getTime() > ADMIN_SESSION_RULES.sessionDays * DAY_MS
     ) {
       throw new AppError(HttpStatus.UNAUTHORIZED, 'UNAUTHENTICATED');
     }

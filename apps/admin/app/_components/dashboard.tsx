@@ -57,7 +57,7 @@ export function Dashboard() {
       .catch(() => router.replace('/login'));
   }, [router]);
 
-  /** Any request that finds the session ended (idle 30 minutes, 12 hours, sign-out) goes back to sign-in. */
+  /** Any request that finds the session ended (sign-out, password change, 400 days unused) goes back to sign-in. */
   const onSessionError = useCallback(
     (error: unknown) => {
       if (error instanceof ApiError && error.code === 'UNAUTHENTICATED') {

@@ -64,7 +64,7 @@ function setAdminCookie(reply: FastifyReply, env: ApiEnv, token: string): void {
     secure: env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: publicCookiePath(ADMIN_SESSION_COOKIE_PATH),
-    maxAge: ADMIN_SESSION_RULES.absoluteHours * 60 * 60,
+    maxAge: ADMIN_SESSION_RULES.sessionDays * 24 * 60 * 60,
   });
 }
 
@@ -234,9 +234,12 @@ export class AdminController {
     });
   }
 
+  /** Opening the dashboard also renews the cookie (D-49), so an admin who keeps using it stays signed in. */
   @Get('session')
   @ResponseSchema(adminSessionResponseSchema)
-  session(@CurrentAdmin() admin: AdminContext) {
+  session(@CurrentAdmin() admin: AdminContext, @Req() request: FastifyRequest, @Res({ passthrough: true }) reply: FastifyReply) {
+    const token = request.cookies[ADMIN_SESSION_COOKIE];
+    if (token) setAdminCookie(reply, this.env, token);
     return { admin: { id: admin.adminId, name: admin.name, role: admin.role } };
   }
 

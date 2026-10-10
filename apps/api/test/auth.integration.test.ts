@@ -207,6 +207,10 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       expect(cookie).toMatch(/SameSite=Strict/i);
       // D-36: the API is always under /api on the site, so the cookie is scoped there.
       expect(cookie).toMatch(/Path=\/api\/v1\/auth(;|$)/);
+      // D-49: the device stays signed in; the cookie lasts 400 days and is renewed on every refresh.
+      expect(cookie).toMatch(/Max-Age=34560000/);
+      const session = await query<{ days: number }>(ctx.ownerUrl, 'select extract(epoch from expires_at - now()) / 86400 as days from app.sessions where user_id = $1', [body.user.id]);
+      expect(Number(session.rows[0]?.days)).toBeGreaterThan(399);
       const events = await query<{ event: string }>(ctx.ownerUrl, 'select event from audit.account_events where user_id = $1', [body.user.id]);
       expect(events.rows.map((row) => row.event)).toEqual(['created']);
       const identity = await query(ctx.ownerUrl, "select * from audit.identity_history where user_id = $1 and field = 'phone'", [body.user.id]);

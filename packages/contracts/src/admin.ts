@@ -4,10 +4,12 @@ import { platformSchema, userStatusSchema } from './me.js';
 export const ADMIN_SESSION_COOKIE = 'bedo_admin_session';
 export const ADMIN_SESSION_COOKIE_PATH = '/v1/admin';
 /**
- * Admin session limits (P-13). A sign-in that has to set up the authenticator first (Phase 3.1) has 10
+ * Admin session limits. D-49 (replacing P-13's 30 idle minutes and 12 hours): an admin stays signed in; the session
+ * is renewed whenever the dashboard is used and ends on sign-out, a password change, or after 400 days unused (the
+ * longest a browser keeps a cookie). A sign-in that has to set up the authenticator first (Phase 3.1) has 10
  * minutes after the password (D-34), to install an app and scan the QR code.
  */
-export const ADMIN_SESSION_RULES = { absoluteHours: 12, idleMinutes: 30, pendingTokenSeconds: 5 * 60, enrolmentSeconds: 10 * 60 } as const;
+export const ADMIN_SESSION_RULES = { sessionDays: 400, pendingTokenSeconds: 5 * 60, enrolmentSeconds: 10 * 60 } as const;
 
 export const adminRoleSchema = z.enum(['super_admin', 'moderator']);
 export const adminSchema = z.object({ id: z.string(), name: z.string(), role: adminRoleSchema });

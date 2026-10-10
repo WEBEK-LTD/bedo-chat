@@ -14,7 +14,14 @@ export const OTP_RULES = {
 /** Token lifetimes (P-01, P-02). */
 export const TOKEN_RULES = {
   accessTokenSeconds: 10 * 60,
-  refreshTokenIdleDays: 30,
+  /**
+   * D-49: a device stays signed in. The session (and its cookie) is renewed every time the app is used, and ends
+   * only on sign-out, from Devices, by an admin, or after 400 days without opening Bedo Chat at all (400 days is
+   * the longest a browser keeps a cookie).
+   */
+  refreshTokenIdleDays: 400,
+  /** Rotated-out refresh tokens are kept this long for reuse detection (an older one is simply unknown). */
+  retiredTokenDays: 30,
   twoStepTokenSeconds: 5 * 60,
   maxTwoStepPasswordAttempts: 5,
 } as const;
