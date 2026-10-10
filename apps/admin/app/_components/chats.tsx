@@ -109,7 +109,7 @@ export function Chats({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
             id="chats-search"
             value={q}
             onChange={(event) => setQ(event.target.value)}
-            className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none focus:border-accent"
+            className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15"
           />
         </div>
         <Button type="submit">Search</Button>
@@ -130,7 +130,7 @@ export function Chats({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
       ) : chats.length === 0 ? (
         <p className="text-sm text-ink-secondary">No groups or channels found.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-line rounded-md border border-line" aria-label="Groups and channels">
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm" aria-label="Groups and channels">
           {chats.map((chat) => (
             <li key={chat.id}>
               <button type="button" onClick={() => setSelected(chat.id)} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover">
@@ -296,7 +296,7 @@ function ChatDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             </p>
           </header>
           {done ? <Notice>{done}</Notice> : null}
-          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line p-4 text-sm md:grid-cols-2" aria-label="Details">
+          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line bg-surface shadow-sm p-4 text-sm md:grid-cols-2" aria-label="Details">
             <Field label="Owner">{personLabel(chat.owner)}</Field>
             <Field label="Created">{formatDateTime(chat.createdAt)}</Field>
             <Field label="Last message">{formatDateTime(chat.lastMessageAt)}</Field>
@@ -335,7 +335,7 @@ function ChatDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             {!members.data ? (
               <p className="text-sm text-ink-secondary">Loading…</p>
             ) : (
-              <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm" aria-label="Members">
+              <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm" aria-label="Members">
                 {members.data.members.map((member) => (
                   <li key={member.user.id} className="flex flex-col gap-2 px-3 py-2">
                     <div className="flex items-center gap-3">
@@ -443,7 +443,7 @@ function ChatSettings({ chat, onSaved, run }: { chat: AdminChatDetail; onSaved: 
     }
   }
   return (
-    <form className="flex max-w-xl flex-col gap-3 rounded-md border border-line p-4" onSubmit={(event) => void save(event)} aria-label="Settings">
+    <form className="flex max-w-xl flex-col gap-3 rounded-md border border-line bg-surface shadow-sm p-4" onSubmit={(event) => void save(event)} aria-label="Settings">
       <h2 className="font-semibold">Settings</h2>
       <TextField id="edit-title" label="Name" maxLength={128} value={title} onChange={(event) => setTitle(event.target.value)} />
       <TextArea id="edit-description" label="Description" maxLength={255} value={description} onChange={(event) => setDescription(event.target.value)} />

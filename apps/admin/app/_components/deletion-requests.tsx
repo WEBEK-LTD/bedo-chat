@@ -62,7 +62,7 @@ export function DeletionRequests({ canDecide, onSessionError }: { canDecide: boo
             role="tab"
             aria-selected={status === tab.id}
             onClick={() => setStatus(tab.id)}
-            className="h-9 rounded-sm px-3 text-sm hover:bg-surface-hover aria-selected:bg-surface-selected aria-selected:font-medium"
+            className="h-9 shrink-0 rounded-full px-3.5 text-sm text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink aria-selected:bg-accent-soft aria-selected:font-semibold aria-selected:text-accent"
           >
             {tab.label}
           </button>
@@ -74,7 +74,7 @@ export function DeletionRequests({ canDecide, onSessionError }: { canDecide: boo
       ) : items.length === 0 ? (
         <p className="text-sm text-ink-secondary">No {status} requests.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-line rounded-md border border-line">
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm">
           {items.map((item) => (
             <li key={item.id}>
               <button type="button" onClick={() => setSelected(item.id)} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover">
@@ -106,7 +106,7 @@ function History({ title, entries }: { title: string; entries: Array<{ at: strin
       {entries.length === 0 ? (
         <p className="text-sm text-ink-secondary">Nothing recorded.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm">
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm">
           {entries.map((entry, index) => (
             <li key={`${entry.at}-${index}`} className="grid gap-1 px-3 py-2 md:grid-cols-[180px_200px_1fr]">
               <span className="text-ink-secondary">{formatDateTime(entry.at)}</span>
@@ -163,7 +163,7 @@ function RequestDetail({
 
   return (
     <div className="flex max-w-5xl flex-col gap-6">
-      <button type="button" onClick={onBack} className="flex items-center gap-1 self-start rounded-sm px-2 py-1 text-sm text-ink-secondary hover:bg-surface-hover">
+      <button type="button" onClick={onBack} className="flex h-9 items-center gap-1 self-start rounded-full pl-2 pr-3.5 text-sm text-ink-secondary transition-colors hover:bg-surface hover:text-ink">
         <Icon name="arrow_back" size={20} />
         All requests
       </button>
@@ -180,7 +180,7 @@ function RequestDetail({
             </p>
           </header>
 
-          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line p-4 text-sm md:grid-cols-2">
+          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line bg-surface shadow-sm p-4 text-sm md:grid-cols-2">
             <p>
               <span className="text-ink-secondary">Request: </span>
               <span className="font-medium capitalize">{detail.request.status}</span>, sent {formatDateTime(detail.request.requestedAt)}
@@ -213,7 +213,7 @@ function RequestDetail({
             {detail.account.activeSessions.length === 0 ? (
               <p className="text-sm text-ink-secondary">None.</p>
             ) : (
-              <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm">
+              <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm">
                 {detail.account.activeSessions.map((session, index) => (
                   <li key={index} className="px-3 py-2">
                     {session.deviceName ?? 'Unknown device'} ({session.platform}) · {session.ip ?? 'unknown IP'} · last active{' '}

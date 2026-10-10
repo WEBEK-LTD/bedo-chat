@@ -76,11 +76,11 @@ export function AttachmentView({ message, attachment, onOpen }: { message: Messa
           {attachment.kind === 'video' ? (
             <>
               <span className="absolute inset-0 grid place-items-center">
-                <span className="grid size-12 place-items-center rounded-full bg-ink/60 text-on-accent">
+                <span className="grid size-12 place-items-center rounded-full bg-scrim/60 text-on-accent">
                   <Icon name="play_arrow" size={28} />
                 </span>
               </span>
-              <span className="absolute bottom-1 left-1 rounded-sm bg-ink/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
+              <span className="absolute bottom-1 left-1 rounded-sm bg-scrim/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
             </>
           ) : null}
         </button>
@@ -115,7 +115,7 @@ export function AttachmentView({ message, attachment, onOpen }: { message: Messa
             type="button"
             aria-label={`Download ${attachment.fileName ?? 'file'}`}
             onClick={() => void download(store, message.id).catch(() => undefined)}
-            className="grid size-9 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
           >
             <Icon name="download" size={20} />
           </button>
@@ -130,7 +130,7 @@ function GifPlayer({ message, attachment }: { message: Message; attachment: Atta
   return (
     <span className="relative block overflow-hidden rounded-sm bg-surface-subtle" style={size}>
       {url ? <video src={url} autoPlay loop muted playsInline className="size-full object-cover" style={size} aria-label="GIF" /> : null}
-      <span className="absolute bottom-1 left-1 rounded-sm bg-ink/60 px-1 text-[11px] font-medium text-on-accent">GIF</span>
+      <span className="absolute bottom-1 left-1 rounded-sm bg-scrim/60 px-1 text-[11px] font-medium text-on-accent">GIF</span>
     </span>
   );
 }
@@ -165,12 +165,12 @@ function VideoNotePlayer({ message, attachment }: { message: Message; attachment
       )}
       {playing ? null : (
         <span className="absolute inset-0 grid place-items-center">
-          <span className="grid size-12 place-items-center rounded-full bg-ink/60 text-on-accent">
+          <span className="grid size-12 place-items-center rounded-full bg-scrim/60 text-on-accent">
             <Icon name="play_arrow" size={28} />
           </span>
         </span>
       )}
-      <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-sm bg-ink/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
+      <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-sm bg-scrim/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
     </button>
   );
 }
@@ -295,12 +295,12 @@ export function MediaViewer({ message, onClose }: { message: Message; onClose: (
   }, [onClose]);
   if (!attachment) return null;
   return (
-    <div role="dialog" aria-modal="true" aria-label={MEDIA_LABEL[attachment.kind]} className="fixed inset-0 z-50 flex flex-col bg-ink/90">
+    <div role="dialog" aria-modal="true" aria-label={MEDIA_LABEL[attachment.kind]} className="fixed inset-0 z-50 flex flex-col bg-scrim/90">
       <header className="flex items-center justify-end gap-1 p-2">
-        <button type="button" aria-label="Save" onClick={() => void download(store, message.id).catch(() => undefined)} className="grid size-10 place-items-center rounded-sm text-on-accent hover:bg-ink/40">
+        <button type="button" aria-label="Save" onClick={() => void download(store, message.id).catch(() => undefined)} className="grid size-10 place-items-center rounded-sm text-on-accent hover:bg-scrim/40">
           <Icon name="download" />
         </button>
-        <button type="button" aria-label="Close" onClick={onClose} className="grid size-10 place-items-center rounded-sm text-on-accent hover:bg-ink/40">
+        <button type="button" aria-label="Close" onClick={onClose} className="grid size-10 place-items-center rounded-sm text-on-accent hover:bg-scrim/40">
           <Icon name="close" />
         </button>
       </header>
@@ -393,11 +393,11 @@ export function PendingUploadItem({ item, onRetry, onCancel }: { item: PendingUp
             </span>
           </span>
           {item.status === 'failed' ? (
-            <button type="button" aria-label="Retry" onClick={onRetry} className="grid size-8 place-items-center rounded-sm text-accent hover:bg-surface-hover">
+            <button type="button" aria-label="Retry" onClick={onRetry} className="grid size-8 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft">
               <Icon name="refresh" size={20} />
             </button>
           ) : null}
-          <button type="button" aria-label="Cancel" onClick={onCancel} className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+          <button type="button" aria-label="Cancel" onClick={onCancel} className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" size={20} />
           </button>
         </div>
@@ -480,7 +480,7 @@ export function MediaPanel({ chatId, onClose, onOpen, onJump }: { chatId: string
                   </span>
                 )}
                 {message.attachment?.kind === 'video' || message.attachment?.kind === 'video_note' ? (
-                  <span className="absolute bottom-1 left-1 rounded-sm bg-ink/60 px-1 text-[11px] text-on-accent">{formatDuration(message.attachment.durationMs)}</span>
+                  <span className="absolute bottom-1 left-1 rounded-sm bg-scrim/60 px-1 text-[11px] text-on-accent">{formatDuration(message.attachment.durationMs)}</span>
                 ) : null}
               </button>
             </li>

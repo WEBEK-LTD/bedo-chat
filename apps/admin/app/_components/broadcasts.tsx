@@ -57,7 +57,7 @@ export function Broadcasts({ onSessionError }: { onSessionError: (error: unknown
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <SectionTitle note="A notification on people's devices, not a chat message. Only devices that allow notifications receive it.">Broadcast notifications</SectionTitle>
-      <section className="flex flex-col gap-3 rounded-md border border-line p-4" aria-label="New notification">
+      <section className="flex flex-col gap-3 rounded-md border border-line bg-surface shadow-sm p-4" aria-label="New notification">
         <Tabs
           label="Send to"
           value={audience}
@@ -85,14 +85,14 @@ export function Broadcasts({ onSessionError }: { onSessionError: (error: unknown
                   <label htmlFor="broadcast-chat" className="text-sm font-medium">
                     Group or channel
                   </label>
-                  <input id="broadcast-chat" value={chatQuery} onChange={(event) => setChatQuery(event.target.value)} className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm" />
+                  <input id="broadcast-chat" value={chatQuery} onChange={(event) => setChatQuery(event.target.value)} className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15" />
                 </div>
                 <Button type="submit" variant="secondary">
                   Find
                 </Button>
               </div>
               {chatResults.length > 0 ? (
-                <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm">
+                <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm">
                   {chatResults.slice(0, 8).map((item) => (
                     <li key={item.id}>
                       <button
@@ -148,7 +148,7 @@ export function Broadcasts({ onSessionError }: { onSessionError: (error: unknown
         ) : history.data.length === 0 ? (
           <p className="text-sm text-ink-secondary">No notifications sent yet.</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm" aria-label="Sent notifications">
+          <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm" aria-label="Sent notifications">
             {history.data.map((item) => (
               <li key={item.id} className="flex flex-col gap-0.5 px-3 py-2">
                 <p className="font-medium">{item.title}</p>

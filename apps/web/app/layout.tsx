@@ -1,7 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies } from 'next/headers';
 import { connection } from 'next/server';
 import type { ReactNode } from 'react';
 import { SessionProvider } from './_lib/session';
+import { THEME_COOKIE, themeFromCookie } from './_lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -26,7 +28,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: '#ffffff',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#131c27' },
+  ],
 };
 
 /**
@@ -35,8 +40,10 @@ export const viewport: Viewport = {
  */
 export default async function RootLayout({ children }: { children: ReactNode }) {
   await connection();
+  // D-48: the theme the person chose (Settings -> Appearance), so the first paint is already right.
+  const theme = themeFromCookie((await cookies()).get(THEME_COOKIE)?.value);
   return (
-    <html lang="en" dir="ltr">
+    <html lang="en" dir="ltr" data-theme={theme}>
       <body>
         <SessionProvider>{children}</SessionProvider>
       </body>

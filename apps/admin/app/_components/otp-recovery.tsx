@@ -48,7 +48,7 @@ export function OtpRecovery({ onClosed }: { onClosed: () => void }) {
     });
 
   return (
-    <section aria-labelledby="otp-recovery-title" className="flex flex-col gap-4 rounded-md border border-line p-4">
+    <section aria-labelledby="otp-recovery-title" className="flex flex-col gap-4 rounded-md border border-line bg-surface shadow-sm p-4">
       <header className="flex items-start gap-3">
         <Icon name="key" className="mt-0.5 shrink-0 text-accent" />
         <div>

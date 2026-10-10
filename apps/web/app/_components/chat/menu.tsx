@@ -63,7 +63,7 @@ export function ActionMenu({ label, items, icon = 'more_vert', align = 'right' }
           setPlace({ x: 0, up: false });
           setOpen((value) => !value);
         }}
-        className="grid size-9 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+        className="grid size-9 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
       >
         <Icon name={icon} size={20} />
       </button>
@@ -73,7 +73,7 @@ export function ActionMenu({ label, items, icon = 'more_vert', align = 'right' }
           role="menu"
           aria-label={label}
           style={place.x ? { transform: `translateX(${Math.round(place.x)}px)` } : undefined}
-          className={`absolute z-30 min-w-48 max-w-[calc(100vw-16px)] rounded-md border border-line bg-surface py-1 shadow-sm ${place.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${align === 'right' ? 'right-0' : 'left-0'}`}
+          className={`bedo-fade-in absolute z-30 min-w-52 max-w-[calc(100vw-16px)] rounded-md border border-line bg-surface p-1.5 shadow-raised ${place.up ? 'bottom-full mb-1' : 'top-full mt-1'} ${align === 'right' ? 'right-0' : 'left-0'}`}
         >
           {items.map((item) => (
             <button
@@ -85,7 +85,7 @@ export function ActionMenu({ label, items, icon = 'more_vert', align = 'right' }
                 setOpen(false);
                 item.onSelect();
               }}
-              className={`flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-surface-hover disabled:opacity-50 ${item.danger ? 'text-danger' : 'text-ink'}`}
+              className={`flex w-full items-center gap-3 rounded-sm px-3 py-2 text-left text-sm transition-colors hover:bg-surface-hover disabled:opacity-50 ${item.danger ? 'text-danger' : 'text-ink'}`}
             >
               <Icon name={item.icon} size={20} className={item.danger ? 'text-danger' : 'text-ink-secondary'} />
               {item.label}
@@ -107,15 +107,15 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-ink/30 p-4" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="flex max-h-[85vh] w-full max-w-[420px] flex-col rounded-md bg-surface">
-        <header className="flex items-center gap-2 border-b border-line px-4 py-3">
-          <h2 className="flex-1 text-[length:var(--bedo-font-size-lg)] font-medium">{title}</h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="grid size-9 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+    <div className="bedo-fade-in fixed inset-0 z-40 grid place-items-center bg-scrim/40 p-4 backdrop-blur-[2px]" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="bedo-pop-in flex max-h-[85vh] w-full max-w-[420px] flex-col overflow-hidden rounded-md bg-surface shadow-raised">
+        <header className="flex items-center gap-2 px-5 pb-2 pt-4">
+          <h2 className="flex-1 text-[length:var(--bedo-font-size-lg)] font-semibold">{title}</h2>
+          <button type="button" aria-label="Close" onClick={onClose} className="grid size-9 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" size={20} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-2">{children}</div>
       </div>
     </div>
   );

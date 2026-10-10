@@ -1,39 +1,74 @@
 /*
- * Bedo Chat design tokens.
+ * Bedo Chat design tokens (D-48, Phase 14): a polished Telegram-like look in the Bedo Chat blue, light and dark.
  *
- * Colours below are neutral placeholders until the brand assets are supplied (open decision O-23:
- * logo, colours, typeface, dark theme). Components must use these variables, never raw values,
- * so the brand can be applied in one place.
+ * The theme follows the device (prefers-color-scheme) unless the person picks one: the student app sets
+ * <html data-theme="light|dark"> from its Appearance setting, the Admin Dashboard from its theme button. Components
+ * use these variables (through the Tailwind theme in each app's globals.css), never raw colours.
  */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('/fonts/figtree-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('/fonts/figtree-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+    U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
 :root {
+  color-scheme: light;
+
   /* Surfaces */
   --bedo-color-bg: #ffffff;
-  --bedo-color-bg-subtle: #f4f5f7;
-  --bedo-color-bg-hover: #eceef1;
-  --bedo-color-bg-selected: #e3e8f0;
-  --bedo-color-border: #dfe2e6;
+  --bedo-color-bg-subtle: #f1f4f9;
+  --bedo-color-bg-hover: #e8edf4;
+  --bedo-color-bg-selected: #e2eafc;
+  --bedo-color-border: #e0e6ee;
 
   /* Text */
-  --bedo-color-text: #16191d;
-  --bedo-color-text-secondary: #5f6670;
-  --bedo-color-text-disabled: #9aa1aa;
+  --bedo-color-text: #142030;
+  --bedo-color-text-secondary: #5d6c80;
+  --bedo-color-text-disabled: #a2aebd;
   --bedo-color-text-on-accent: #ffffff;
 
-  /* Accent and status (placeholders) */
+  /* Accent and status */
   --bedo-color-accent: #2f5bd3;
-  --bedo-color-accent-hover: #2549b0;
+  --bedo-color-accent-hover: #244bb5;
+  --bedo-color-accent-soft: #e6edfd;
   --bedo-color-focus-ring: #2f5bd3;
-  --bedo-color-danger: #c62828;
-  --bedo-color-success: #2e7d32;
+  --bedo-color-danger: #d1352b;
+  --bedo-color-success: #1f8a4c;
+  /* Behind dialogs and over photos: always dark, in both themes. */
+  --bedo-color-scrim: #0b1220;
 
-  /* Typography: system font stack until a typeface is chosen (O-23) */
-  --bedo-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* Chat: a faint dot grid on a cool tint behind the messages; incoming and outgoing bubbles. */
+  --bedo-color-wallpaper: #e3ebf6;
+  --bedo-color-wallpaper-dot: rgba(47, 91, 211, 0.14);
+  --bedo-color-bubble-in: #ffffff;
+  --bedo-color-bubble-out: #d8e5fd;
+  --bedo-color-bubble-out-text: #10223f;
+  --bedo-color-glass: rgba(255, 255, 255, 0.84);
+
+  --bedo-shadow-bubble: 0 1px 1.5px rgba(20, 32, 48, 0.13);
+  --bedo-shadow-raised: 0 12px 32px rgba(20, 32, 48, 0.16), 0 2px 6px rgba(20, 32, 48, 0.08);
+
+  /* Typography: Figtree (self-hosted, OFL), then the device's own font (for Arabic and other scripts). */
+  --bedo-font-sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --bedo-font-size-xs: 0.75rem;
   --bedo-font-size-sm: 0.875rem;
   --bedo-font-size-md: 0.9375rem;
   --bedo-font-size-lg: 1.125rem;
-  --bedo-font-size-xl: 1.375rem;
-  --bedo-line-height: 1.4;
+  --bedo-font-size-xl: 1.5rem;
+  --bedo-line-height: 1.45;
 
   /* Spacing (4px grid) */
   --bedo-space-1: 0.25rem;
@@ -43,15 +78,122 @@
   --bedo-space-6: 1.5rem;
   --bedo-space-8: 2rem;
 
-  /* Shape: restrained radii, flat surfaces, 1px dividers (spec §25) */
-  --bedo-radius-sm: 4px;
-  --bedo-radius-md: 8px;
+  /* Shape: soft corners; bubbles rounder still, with a tighter corner on the sender's side. */
+  --bedo-radius-sm: 10px;
+  --bedo-radius-md: 16px;
+  --bedo-radius-bubble: 18px;
   --bedo-border-width: 1px;
 
   /* Layout */
-  --bedo-header-height: 56px;
-  --bedo-chat-list-width: 360px;
-  --bedo-control-height: 40px;
+  --bedo-header-height: 60px;
+  --bedo-chat-list-width: 380px;
+  --bedo-control-height: 42px;
 
-  --bedo-transition-fast: 120ms ease-out;
+  --bedo-transition-fast: 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Dark: chosen in the app, or the device's setting when nothing was chosen. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bedo-color-bg: #131c27;
+  --bedo-color-bg-subtle: #18222f;
+  --bedo-color-bg-hover: #1f2b3a;
+  --bedo-color-bg-selected: #213459;
+  --bedo-color-border: #263341;
+  --bedo-color-text: #e6ecf3;
+  --bedo-color-text-secondary: #94a3b6;
+  --bedo-color-text-disabled: #5c6a7b;
+  --bedo-color-text-on-accent: #ffffff;
+  --bedo-color-accent: #4a7bec;
+  --bedo-color-accent-hover: #6390f2;
+  --bedo-color-accent-soft: #1c2c4c;
+  --bedo-color-focus-ring: #6390f2;
+  --bedo-color-danger: #f0675d;
+  --bedo-color-success: #4cc27c;
+  --bedo-color-scrim: #000000;
+  --bedo-color-wallpaper: #0e1620;
+  --bedo-color-wallpaper-dot: rgba(99, 144, 242, 0.13);
+  --bedo-color-bubble-in: #1b2633;
+  --bedo-color-bubble-out: #2b4e98;
+  --bedo-color-bubble-out-text: #f1f5ff;
+  --bedo-color-glass: rgba(19, 28, 39, 0.84);
+  --bedo-shadow-bubble: 0 1px 1.5px rgba(0, 0, 0, 0.35);
+  --bedo-shadow-raised: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bedo-color-bg: #131c27;
+    --bedo-color-bg-subtle: #18222f;
+    --bedo-color-bg-hover: #1f2b3a;
+    --bedo-color-bg-selected: #213459;
+    --bedo-color-border: #263341;
+    --bedo-color-text: #e6ecf3;
+    --bedo-color-text-secondary: #94a3b6;
+    --bedo-color-text-disabled: #5c6a7b;
+    --bedo-color-text-on-accent: #ffffff;
+    --bedo-color-accent: #4a7bec;
+    --bedo-color-accent-hover: #6390f2;
+    --bedo-color-accent-soft: #1c2c4c;
+    --bedo-color-focus-ring: #6390f2;
+    --bedo-color-danger: #f0675d;
+    --bedo-color-success: #4cc27c;
+    --bedo-color-scrim: #000000;
+    --bedo-color-wallpaper: #0e1620;
+    --bedo-color-wallpaper-dot: rgba(99, 144, 242, 0.13);
+    --bedo-color-bubble-in: #1b2633;
+    --bedo-color-bubble-out: #2b4e98;
+    --bedo-color-bubble-out-text: #f1f5ff;
+    --bedo-color-glass: rgba(19, 28, 39, 0.84);
+    --bedo-shadow-bubble: 0 1px 1.5px rgba(0, 0, 0, 0.35);
+    --bedo-shadow-raised: 0 12px 32px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Shared pieces both apps use (plain CSS, outside Tailwind's layers so either app can use them). */
+.bedo-glass {
+  background-color: var(--bedo-color-glass);
+  -webkit-backdrop-filter: saturate(1.6) blur(14px);
+  backdrop-filter: saturate(1.6) blur(14px);
+}
+
+/* Avatars without a picture: one of seven tones, picked from the name, the same on every device. */
+.bedo-tone-0 { background-image: linear-gradient(135deg, #ff8a7a, #e5484d); }
+.bedo-tone-1 { background-image: linear-gradient(135deg, #ffb35c, #f07b16); }
+.bedo-tone-2 { background-image: linear-gradient(135deg, #b39cf8, #7c5cd6); }
+.bedo-tone-3 { background-image: linear-gradient(135deg, #7fdc95, #2fa75a); }
+.bedo-tone-4 { background-image: linear-gradient(135deg, #6fd7e8, #1f9bb8); }
+.bedo-tone-5 { background-image: linear-gradient(135deg, #7ea6ff, #2f5bd3); }
+.bedo-tone-6 { background-image: linear-gradient(135deg, #ff94c2, #d6458a); }
+
+@keyframes bedo-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bedo-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.bedo-pop-in {
+  animation: bedo-pop-in 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+.bedo-fade-in {
+  animation: bedo-fade-in 160ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bedo-pop-in,
+  .bedo-fade-in {
+    animation: none;
+  }
 }

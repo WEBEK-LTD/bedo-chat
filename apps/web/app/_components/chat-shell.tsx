@@ -182,11 +182,11 @@ function ChatArea({
             type="button"
             aria-label="Settings"
             onClick={() => onOpenSettings('menu')}
-            className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+            className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
           >
             <Icon name="menu" />
           </button>
-          <label className="flex h-9 flex-1 items-center gap-2 rounded-sm bg-surface-subtle px-3 text-ink-secondary">
+          <label className="flex h-10 flex-1 items-center gap-2 rounded-full border border-transparent bg-surface-subtle px-3.5 text-ink-secondary transition-colors focus-within:border-accent/50 focus-within:bg-surface">
             <Icon name="search" size={20} />
             <span className="sr-only">Search</span>
             <input
@@ -199,26 +199,26 @@ function ChatArea({
             />
           </label>
           {mayCreateGroups ? (
-            <button type="button" aria-label="New group" onClick={() => setNewGroup(true)} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+            <button type="button" aria-label="New group" onClick={() => setNewGroup(true)} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
               <Icon name="group_add" />
             </button>
           ) : null}
           {mayCreateChannels ? (
-            <button type="button" aria-label="New channel" onClick={() => setNewChannel(true)} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+            <button type="button" aria-label="New channel" onClick={() => setNewChannel(true)} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
               <Icon name="campaign" />
             </button>
           ) : null}
         </header>
 
         {deletionRequested ? (
-          <div className="mx-2 mb-2 flex items-start gap-2 rounded-md bg-surface-subtle p-3 text-sm">
+          <div className="mx-3 mb-2 flex items-start gap-2 rounded-md bg-surface-subtle p-3 text-sm">
             <Icon name="info" size={20} className="shrink-0 text-ink-secondary" />
             <span>Account deletion requested. An administrator will review your request.</span>
           </div>
         ) : null}
 
         {alert ? (
-          <div role="status" className="mx-2 mb-2 flex flex-col gap-2 rounded-md border border-line p-3 text-sm">
+          <div role="status" className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-line bg-accent-soft/50 p-3 text-sm">
             <div className="flex items-start gap-2">
               <Icon name="shield" size={20} className="shrink-0 text-accent" />
               <span>{noticeText(alert)}</span>
@@ -254,7 +254,7 @@ function ChatArea({
         {settings}
       </aside>
 
-      <main className={`min-h-0 md:flex ${chat ? 'flex' : 'hidden'} ${chat ? 'flex-col' : 'items-center justify-center bg-surface-subtle'}`}>
+      <main className={`min-h-0 md:flex ${chat ? 'flex' : 'hidden'} ${chat ? 'flex-col' : 'bedo-wallpaper items-center justify-center'}`}>
         {chat ? (
           <ChatView
             chat={chat}
@@ -265,7 +265,7 @@ function ChatArea({
             onNotice={showNotice}
           />
         ) : (
-          <p className="text-sm text-ink-secondary">Select a chat to start messaging.</p>
+          <p className="rounded-full bg-scrim/30 px-4 py-1.5 text-sm font-medium text-white">Select a chat to start messaging.</p>
         )}
       </main>
 
@@ -302,7 +302,7 @@ function ChatArea({
         />
       ) : null}
       {notice ? (
-        <div role="status" className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink px-4 py-2 text-sm text-surface">
+        <div role="status" className="fixed inset-x-0 bottom-5 z-50 mx-auto w-fit max-w-[calc(100%-2rem)] rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-surface shadow-raised bedo-pop-in">
           {notice}
         </div>
       ) : null}

@@ -268,8 +268,8 @@ export function ChatView({
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label={channel ? `Channel ${chatTitle(chat)}` : group ? `Group ${chatTitle(chat)}` : `Chat with ${chatTitle(chat)}`}>
       {selected ? (
-        <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
-          <button type="button" aria-label="Cancel selection" onClick={() => setSelected(null)} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+        <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
+          <button type="button" aria-label="Cancel selection" onClick={() => setSelected(null)} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />
           </button>
           <span className="flex-1 text-sm font-medium">{selected.length} selected</span>
@@ -278,7 +278,7 @@ export function ChatView({
             aria-label="Copy selected"
             disabled={selectedMessages.every((message) => message.text === null)}
             onClick={() => void copy(selectedMessages.filter((message) => message.text).map((message) => message.text).join('\n\n')).then(() => setSelected(null))}
-            className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover disabled:opacity-40"
+            className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-40"
           >
             <Icon name="content_copy" />
           </button>
@@ -287,7 +287,7 @@ export function ChatView({
             aria-label="Forward selected"
             disabled={selected.length === 0 || selectedMessages.some((message) => message.deleted)}
             onClick={() => setDialog({ kind: 'forward', ids: selectedMessages.map((message) => message.id) })}
-            className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover disabled:opacity-40"
+            className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-40"
           >
             <Icon name="forward" />
           </button>
@@ -296,20 +296,20 @@ export function ChatView({
             aria-label="Delete selected"
             disabled={selected.length === 0}
             onClick={() => setDialog({ kind: 'delete', ids: selected })}
-            className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover disabled:opacity-40"
+            className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-40"
           >
             <Icon name="delete" />
           </button>
         </header>
       ) : (
-        <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
-          <button type="button" aria-label="Back to chats" onClick={onBack} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover md:hidden">
+        <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
+          <button type="button" aria-label="Back to chats" onClick={onBack} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink md:hidden">
             <Icon name="arrow_back" />
           </button>
-          <button type="button" onClick={() => setDialog({ kind: group ? 'info' : 'peer' })} className="flex min-w-0 flex-1 items-center gap-3 rounded-sm px-1 py-1 text-left hover:bg-surface-hover">
+          <button type="button" onClick={() => setDialog({ kind: group ? 'info' : 'peer' })} className="flex min-w-0 flex-1 items-center gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-surface-hover">
             <Avatar name={chatTitle(chat)} photoUrl={chatPhoto(chat)} size={40} />
             <span className="min-w-0">
-              <span className="block truncate font-medium">{chatTitle(chat)}</span>
+              <span className="block truncate font-semibold">{chatTitle(chat)}</span>
               <span className={`block truncate text-xs ${typing || status === 'online' ? 'text-accent' : 'text-ink-secondary'}`} aria-live="polite">
                 {status}
               </span>
@@ -331,7 +331,7 @@ export function ChatView({
             void jumpTo(currentPin);
             setPinIndex((index) => index + 1);
           }}
-          className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-2 text-left hover:bg-surface-hover"
+          className="bedo-glass relative z-10 flex shrink-0 items-center gap-2 border-b border-line px-4 py-2 text-left transition-colors hover:bg-surface-hover"
           aria-label="Pinned message"
         >
           <Icon name="keep" size={18} className="shrink-0 text-accent" />
@@ -344,15 +344,15 @@ export function ChatView({
 
       {searchOpen !== null ? <ChatSearch key={searchOpen} chatId={chat.id} initial={searchOpen} onClose={() => setSearchOpen(null)} onPick={(message) => void jumpTo(message)} /> : null}
 
-      <div ref={scroller} onScroll={() => void onScroll()} className="relative min-h-0 flex-1 overflow-y-auto bg-surface-subtle px-3 py-2" aria-label="Messages" role="log">
-        {loadingOlder ? <p className="py-2 text-center text-xs text-ink-secondary">Loading…</p> : null}
-        {messages.length === 0 && pending.length === 0 && uploads.length === 0 ? <p className="py-8 text-center text-sm text-ink-secondary">No messages yet.</p> : null}
+      <div ref={scroller} onScroll={() => void onScroll()} className="bedo-wallpaper relative min-h-0 flex-1 overflow-y-auto px-3 py-2 md:px-8" aria-label="Messages" role="log">
+        {loadingOlder ? <p className="mx-auto my-2 w-fit rounded-full bg-surface/80 px-3 py-0.5 text-xs text-ink-secondary">Loading…</p> : null}
+        {messages.length === 0 && pending.length === 0 && uploads.length === 0 ? <p className="mx-auto my-8 w-fit rounded-full bg-scrim/30 px-4 py-1.5 text-sm text-white">No messages yet.</p> : null}
         {messages.map((message, index) => {
           const previous = messages[index - 1];
           const newDay = !previous || dayLabel(previous.createdAt) !== dayLabel(message.createdAt);
           return (
             <Fragment key={message.id}>
-              {newDay ? <p className="py-2 text-center text-xs text-ink-secondary">{dayLabel(message.createdAt)}</p> : null}
+              {newDay ? <p className="sticky top-1 z-[1] mx-auto my-2 w-fit rounded-full bg-scrim/30 px-3 py-0.5 text-xs font-medium text-white backdrop-blur-sm">{dayLabel(message.createdAt)}</p> : null}
               <MessageItem
                 message={message}
                 chat={chat}
@@ -699,7 +699,7 @@ function Composer({
   }
 
   return (
-    <div className="relative shrink-0 border-t border-line bg-surface px-3 py-2">
+    <div className="relative shrink-0 border-t border-line bg-surface px-2 py-2 md:px-4">
       {recording?.kind === 'video_note' ? (
         <VideoNoteRecorder recorder={recording.recorder} onCancel={() => { recording.recorder.cancel(); setRecording(null); }} onSend={() => void finishRecording(recording.recorder, 'video_note')} />
       ) : null}
@@ -719,7 +719,7 @@ function Composer({
               if (mode.kind === 'edit') setText('');
               onModeChange({ kind: 'normal' });
             }}
-            className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+            className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
           >
             <Icon name="close" size={18} />
           </button>
@@ -807,23 +807,23 @@ function Composer({
           aria-expanded={picker}
           data-expression-toggle=""
           onClick={() => setPicker(!picker)}
-          className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+          className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
         >
           <Icon name="mood" size={22} />
         </button>
         {chat.scheduledCount > 0 && mode.kind !== 'edit' ? (
-          <button type="button" aria-label={`Scheduled messages (${chat.scheduledCount})`} onClick={onScheduled} className="grid size-10 shrink-0 place-items-center rounded-sm text-accent hover:bg-surface-hover">
+          <button type="button" aria-label={`Scheduled messages (${chat.scheduledCount})`} onClick={onScheduled} className="grid size-10 shrink-0 place-items-center rounded-full text-accent transition-colors hover:bg-accent-soft">
             <Icon name="schedule_send" size={22} />
           </button>
         ) : null}
         {mode.kind === 'edit' || !mayPoll ? null : (
-          <button type="button" aria-label="Create a poll" onClick={onPoll} className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+          <button type="button" aria-label="Create a poll" onClick={onPoll} className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="bar_chart" size={22} />
           </button>
         )}
         {mode.kind === 'edit' || !mayAttach ? null : (
           <>
-            <button type="button" aria-label="Attach files" onClick={() => filePicker.current?.click()} className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+            <button type="button" aria-label="Attach files" onClick={() => filePicker.current?.click()} className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
               <Icon name="attach_file" size={22} />
             </button>
             <input
@@ -866,14 +866,14 @@ function Composer({
             }
             if (event.key === 'Escape' && mode.kind !== 'normal') onModeChange({ kind: 'normal' });
           }}
-          className="max-h-40 min-h-10 flex-1 resize-none rounded-sm border border-line bg-surface px-3 py-2 text-[length:var(--bedo-font-size-md)] outline-none focus:border-accent field-sizing-content"
+          className="max-h-40 min-h-10 flex-1 resize-none rounded-[20px] border border-transparent bg-surface-subtle px-4 py-2 text-[length:var(--bedo-font-size-md)] outline-none transition-[border-color,background-color] placeholder:text-ink-secondary focus:border-accent/50 focus:bg-surface field-sizing-content"
         />
         {!trimmed && tray.length === 0 && mode.kind === 'normal' && mayAttach ? (
           <>
-            <button type="button" aria-label="Record a video message" onClick={() => void startRecording('video_note')} className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+            <button type="button" aria-label="Record a video message" onClick={() => void startRecording('video_note')} className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
               <Icon name="videocam" size={22} />
             </button>
-            <button type="button" aria-label="Record a voice message" onClick={() => void startRecording('voice')} className="grid size-10 shrink-0 place-items-center rounded-sm bg-accent text-on-accent hover:bg-accent-hover">
+            <button type="button" aria-label="Record a voice message" onClick={() => void startRecording('voice')} className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-sm transition-[background-color,transform] hover:bg-accent-hover active:scale-95">
               <Icon name="mic" size={20} />
             </button>
           </>
@@ -885,7 +885,7 @@ function Composer({
               aria-label="Schedule message"
               disabled={(tray.length > 0 ? !trayReady : !trimmed) || tooLong || busy}
               onClick={() => setScheduling(true)}
-              className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover disabled:opacity-40"
+              className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink disabled:opacity-40"
             >
               <Icon name="schedule" size={22} />
             </button>
@@ -894,7 +894,7 @@ function Composer({
             type="submit"
             aria-label={mode.kind === 'edit' ? 'Save' : 'Send'}
             disabled={(tray.length > 0 ? !trayReady : !trimmed) || tooLong || busy}
-            className="grid size-10 shrink-0 place-items-center rounded-sm bg-accent text-on-accent hover:bg-accent-hover disabled:opacity-40"
+            className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-on-accent shadow-sm transition-[background-color,transform] hover:bg-accent-hover active:scale-95 disabled:opacity-40"
           >
             <Icon name={mode.kind === 'edit' ? 'check' : 'send'} size={20} />
           </button>
@@ -925,7 +925,7 @@ function VoiceRecordingBar({ recorder, onCancel, onSend }: { recorder: Recorder;
   }, [recorder]);
   return (
     <div className="flex shrink-0 items-center gap-2 border-t border-line bg-surface px-3 py-2" role="status" aria-label="Recording a voice message">
-      <button type="button" aria-label="Cancel recording" onClick={onCancel} className="grid size-10 place-items-center rounded-sm text-danger hover:bg-surface-hover">
+      <button type="button" aria-label="Cancel recording" onClick={onCancel} className="grid size-10 place-items-center rounded-full text-danger transition-colors hover:bg-surface-hover">
         <Icon name="delete" size={22} />
       </button>
       <span className="size-2.5 animate-pulse rounded-full bg-danger" aria-hidden="true" />
@@ -935,7 +935,7 @@ function VoiceRecordingBar({ recorder, onCancel, onSend }: { recorder: Recorder;
           <span key={index} className="w-[3px] shrink-0 rounded-full bg-accent" style={{ height: `${Math.max(8, level)}%` }} />
         ))}
       </span>
-      <button type="button" aria-label="Send voice message" onClick={onSend} className="grid size-10 place-items-center rounded-sm bg-accent text-on-accent hover:bg-accent-hover">
+      <button type="button" aria-label="Send voice message" onClick={onSend} className="grid size-10 place-items-center rounded-full bg-accent text-on-accent shadow-sm transition-[background-color,transform] hover:bg-accent-hover active:scale-95">
         <Icon name="send" size={20} />
       </button>
     </div>
@@ -952,7 +952,7 @@ function VideoNoteRecorder({ recorder, onCancel, onSend }: { recorder: Recorder;
     return () => clearInterval(timer);
   }, [recorder]);
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-ink/70 p-4" role="dialog" aria-modal="true" aria-label="Recording a video message">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-scrim/70 p-4" role="dialog" aria-modal="true" aria-label="Recording a video message">
       <div className="flex flex-col items-center gap-4">
         <div className="size-64 overflow-hidden rounded-full border-4 border-accent bg-ink">
           <video ref={video} autoPlay muted playsInline className="size-full -scale-x-100 object-cover" />
@@ -1010,7 +1010,7 @@ function ChatSearch({ chatId, initial, onClose, onPick }: { chatId: string; init
           placeholder="Search in this chat"
           className="h-9 flex-1 bg-transparent text-sm outline-none"
         />
-        <button type="button" aria-label="Close search" onClick={onClose} className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+        <button type="button" aria-label="Close search" onClick={onClose} className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
           <Icon name="close" size={18} />
         </button>
       </div>
@@ -1036,10 +1036,10 @@ function PeerPanel({ chat, onClose, onReport, onNotice }: { chat: Chat; onClose:
   const state = useMessaging();
   const peer = chat.peer!;
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-scrim/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside role="dialog" aria-modal="true" aria-label="Profile" className="flex h-full w-full max-w-[360px] flex-col bg-surface">
         <header className="flex h-[var(--bedo-header-height)] items-center gap-2 border-b border-line px-2">
-          <button type="button" aria-label="Close profile" onClick={onClose} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+          <button type="button" aria-label="Close profile" onClick={onClose} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />
           </button>
           <h2 className="font-medium">Profile</h2>

@@ -15,9 +15,18 @@
   --color-accent-hover: var(--bedo-color-accent-hover);
   --color-on-accent: var(--bedo-color-text-on-accent);
   --color-danger: var(--bedo-color-danger);
+  --color-success: var(--bedo-color-success);
+  --color-accent-soft: var(--bedo-color-accent-soft);
+  --color-scrim: var(--bedo-color-scrim);
+  --color-bubble-in: var(--bedo-color-bubble-in);
+  --color-bubble-out: var(--bedo-color-bubble-out);
+  --color-on-bubble-out: var(--bedo-color-bubble-out-text);
+  --shadow-raised: var(--bedo-shadow-raised);
+  --shadow-bubble: var(--bedo-shadow-bubble);
   --font-sans: var(--bedo-font-sans);
   --radius-sm: var(--bedo-radius-sm);
   --radius-md: var(--bedo-radius-md);
+  --radius-bubble: var(--bedo-radius-bubble);
 }
 
 @layer base {
@@ -39,5 +48,43 @@
   :focus-visible {
     outline: 2px solid var(--bedo-color-focus-ring);
     outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--bedo-color-accent-soft);
+  }
+
+  /* Thin, quiet scrollbars that follow the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bedo-color-border) transparent;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--bedo-color-accent);
+  }
+}
+
+@layer components {
+  /* The chat background (D-48): a faint dot grid, like the squared paper of a notebook, on a cool tint. */
+  .bedo-wallpaper {
+    background-color: var(--bedo-color-wallpaper);
+    background-image: radial-gradient(var(--bedo-color-wallpaper-dot) 1.1px, transparent 1.3px);
+    background-size: 22px 22px;
+  }
+
+  .bedo-bubble {
+    border-radius: var(--bedo-radius-bubble);
+    box-shadow: var(--bedo-shadow-bubble);
+  }
+  .bedo-bubble-in {
+    background-color: var(--bedo-color-bubble-in);
+    border-bottom-left-radius: 6px;
+  }
+  .bedo-bubble-out {
+    background-color: var(--bedo-color-bubble-out);
+    color: var(--bedo-color-bubble-out-text);
+    border-bottom-right-radius: 6px;
   }
 }

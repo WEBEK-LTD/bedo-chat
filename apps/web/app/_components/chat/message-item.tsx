@@ -24,7 +24,7 @@ function StatusMark({ status }: { status: DeliveryStatus }) {
       name={STATUS_ICON[status]}
       size={16}
       title={STATUS_LABEL[status]}
-      className={status === 'seen' ? 'text-accent' : status === 'failed' ? 'text-danger' : 'text-ink-secondary'}
+      className={status === 'failed' ? 'text-danger' : undefined}
     />
   );
 }
@@ -137,7 +137,7 @@ export function MessageItem({
         </button>
       ) : null}
       <div
-        className={`relative max-w-[min(75%,560px)] rounded-md ${message.mentionsMe && !message.deleted ? 'ring-1 ring-accent ' : ''}${message.sticker && !message.deleted ? 'bg-transparent px-0' : `${mine ? 'bg-surface-selected' : 'bg-surface'} px-3`} py-1.5 ${message.deleted ? 'italic text-ink-secondary' : ''}`}
+        className={`relative max-w-[min(78%,560px)] ${message.mentionsMe && !message.deleted ? 'ring-2 ring-accent/60 ' : ''}${message.sticker && !message.deleted ? 'bg-transparent px-0' : `bedo-bubble ${mine ? 'bedo-bubble-out' : 'bedo-bubble-in'} px-3`} py-1.5 ${message.deleted ? 'italic opacity-75' : ''}`}
         onClick={selecting ? actions.onToggleSelect : undefined}
       >
         {picking ? (
@@ -150,7 +150,7 @@ export function MessageItem({
             onClose={() => setPicking(false)}
           />
         ) : null}
-        {message.sender && !mine && !message.deleted ? <p className="text-xs font-medium text-accent">{message.sender.displayName}</p> : null}
+        {message.sender && !mine && !message.deleted ? <p className="text-[13px] font-semibold text-accent">{message.sender.displayName}</p> : null}
         {message.mentionsMe && !message.deleted ? <span className="sr-only">Mentions you</span> : null}
         {message.forwardedFrom ? (
           <p className="flex items-center gap-1 text-xs text-accent">
@@ -159,9 +159,9 @@ export function MessageItem({
           </p>
         ) : null}
         {message.replyTo ? (
-          <button type="button" onClick={actions.onJumpToReply} className="mb-1 block w-full border-l-2 border-accent pl-2 text-left">
-            <span className="block text-xs font-medium text-accent">{message.replyTo.senderId === message.senderId ? 'Reply' : 'In reply to'}</span>
-            <span className="block truncate text-xs text-ink-secondary">{replyText(message.replyTo)}</span>
+          <button type="button" onClick={actions.onJumpToReply} className="mb-1 mt-0.5 block w-full rounded-[6px] border-l-[3px] border-accent bg-accent/10 py-1 pl-2 pr-2 text-left">
+            <span className="block text-xs font-semibold text-accent">{message.replyTo.senderId === message.senderId ? 'Reply' : 'In reply to'}</span>
+            <span className="block truncate text-xs opacity-80">{replyText(message.replyTo)}</span>
           </button>
         ) : null}
         {!message.deleted && message.attachment ? (
@@ -179,7 +179,7 @@ export function MessageItem({
           <RichText text={message.text} onHashtag={actions.onHashtag} />
         ) : null}
         <ReactionChips reactions={message.reactions} disabled={!canReact} onToggle={(emoji, isMine) => actions.onReact(isMine ? null : emoji)} />
-        <p className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-ink-secondary">
+        <p className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${mine ? 'opacity-70' : 'text-ink-secondary'}`}>
           {pinned ? <Icon name="keep" size={12} title="Pinned" /> : null}
           {message.editedAt && !message.deleted ? <span>edited</span> : null}
           <time dateTime={message.createdAt}>{timeOf(message.createdAt)}</time>
@@ -187,10 +187,10 @@ export function MessageItem({
         </p>
       </div>
       {selecting ? null : (
-        <div className={`flex items-center self-center opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 ${mine ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center self-center opacity-40 focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100 ${mine ? 'flex-row-reverse' : ''}`}>
           <ActionMenu label="Message actions" items={items} align={mine ? 'right' : 'left'} />
           {canAct && canReact ? (
-            <button type="button" aria-label="React" onClick={() => setPicking(true)} className="hidden size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover md:grid">
+            <button type="button" aria-label="React" onClick={() => setPicking(true)} className="hidden size-8 place-items-center rounded-full text-ink-secondary hover:bg-surface md:grid">
               <Icon name="add_reaction" size={18} />
             </button>
           ) : null}
@@ -204,9 +204,9 @@ export function MessageItem({
 export function PendingItem({ item, onRetry, onDiscard }: { item: PendingMessage; onRetry: () => void; onDiscard: () => void }) {
   return (
     <div className="flex flex-row-reverse items-start gap-2 py-0.5">
-      <div className="max-w-[min(75%,560px)] rounded-md bg-surface-selected px-3 py-1.5">
+      <div className="bedo-bubble bedo-bubble-out max-w-[min(78%,560px)] px-3 py-1.5">
         <p className="whitespace-pre-wrap break-words">{item.text}</p>
-        <p className="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-ink-secondary">
+        <p className="mt-0.5 flex items-center justify-end gap-1 text-[11px] opacity-70">
           <time dateTime={item.createdAt}>{timeOf(item.createdAt)}</time>
           <StatusMark status={item.status === 'failed' ? 'failed' : 'sending'} />
         </p>

@@ -7,12 +7,14 @@ import { SectionTitle, useLoader } from './console-ui';
 
 function Tile({ icon, label, value, note }: { icon: IconName; label: string; value: number; note?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-line p-4">
-      <span className="flex items-center gap-2 text-sm text-ink-secondary">
-        <Icon name={icon} size={20} />
+    <div className="flex flex-col gap-2 rounded-md border border-line bg-surface p-4 shadow-sm">
+      <span className="flex items-center gap-2.5 text-sm text-ink-secondary">
+        <span className="grid size-8 shrink-0 place-items-center rounded-[9px] bg-accent-soft text-accent">
+          <Icon name={icon} size={18} />
+        </span>
         {label}
       </span>
-      <span className="text-2xl font-semibold" aria-label={label}>
+      <span className="text-[1.75rem] font-bold leading-none tracking-tight tabular-nums" aria-label={label}>
         {value.toLocaleString()}
       </span>
       {note ? <span className="text-xs text-ink-secondary">{note}</span> : null}
@@ -28,7 +30,7 @@ export function Overview({ onSessionError }: { onSessionError: (error: unknown) 
     <div className="flex max-w-5xl flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <SectionTitle note="Counts only. Nothing here shows what anyone wrote.">Overview</SectionTitle>
-        <button type="button" onClick={reload} className="flex items-center gap-1 rounded-sm px-2 py-1 text-sm text-ink-secondary hover:bg-surface-hover">
+        <button type="button" onClick={reload} className="flex h-9 items-center gap-1.5 rounded-full px-3 text-sm text-ink-secondary transition-colors hover:bg-surface hover:text-ink">
           <Icon name="refresh" size={20} />
           Refresh
         </button>

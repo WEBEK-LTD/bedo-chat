@@ -74,7 +74,7 @@ export function Users({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
             value={q}
             placeholder="Phone, name or username"
             onChange={(event) => setQ(event.target.value)}
-            className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none focus:border-accent"
+            className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15"
           />
         </div>
         <Button type="submit">Search</Button>
@@ -86,7 +86,7 @@ export function Users({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
       ) : users.length === 0 ? (
         <p className="text-sm text-ink-secondary">No users found.</p>
       ) : (
-        <ul className="flex flex-col divide-y divide-line rounded-md border border-line" aria-label="Users">
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm" aria-label="Users">
           {users.map((user) => (
             <li key={user.id}>
               <button type="button" onClick={() => setSelected(user.id)} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-surface-hover">
@@ -146,7 +146,7 @@ function UserDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             </p>
           </header>
           {done ? <Notice>{done}</Notice> : null}
-          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line p-4 text-sm md:grid-cols-2" aria-label="Account">
+          <section className="grid gap-x-6 gap-y-2 rounded-md border border-line bg-surface shadow-sm p-4 text-sm md:grid-cols-2" aria-label="Account">
             <Field label="Joined">{formatDateTime(detail.user.createdAt)}</Field>
             <Field label="Last seen">{formatDateTime(detail.user.lastSeenAt)}</Field>
             <Field label="2-Step Verification">{detail.twoStepEnabled ? 'On' : 'Off'}</Field>
@@ -178,7 +178,7 @@ function UserDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             {detail.sessions.length === 0 ? (
               <p className="text-sm text-ink-secondary">None.</p>
             ) : (
-              <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm" aria-label="Signed-in devices">
+              <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm" aria-label="Signed-in devices">
                 {detail.sessions.map((session) => (
                   <li key={session.id} className="px-3 py-2">
                     {session.deviceName ?? 'Unknown device'} ({session.platform}) · {session.ip ?? 'unknown IP'} · signed in {formatDateTime(session.createdAt)} · last active{' '}
@@ -194,7 +194,7 @@ function UserDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             {detail.accountEvents.length === 0 ? (
               <p className="text-sm text-ink-secondary">Nothing recorded.</p>
             ) : (
-              <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm">
+              <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm">
                 {detail.accountEvents.map((entry, index) => (
                   <li key={`${entry.at}-${index}`} className="grid gap-1 px-3 py-2 md:grid-cols-[180px_200px_1fr]">
                     <span className="text-ink-secondary">{formatDateTime(entry.at)}</span>

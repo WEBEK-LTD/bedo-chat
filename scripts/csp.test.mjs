@@ -92,7 +92,7 @@ test('the proxy covers the web app pages, never the Admin Dashboard, the API or 
   // The matcher is a path pattern with one regular-expression group, as Next.js compiles it.
   const pattern = new RegExp(`^${source.replace(/\\\\/g, '\\')}$`);
   for (const page of ['/', '/login', '/missing-page']) assert.match(page, pattern, page);
-  for (const other of ['/admin', '/admin/', '/admin/login', '/api', '/api/v1/me', '/_next/static/chunks/a.js', '/sw.js', '/favicon.ico', '/manifest.webmanifest', '/icons/icon-192.png']) {
+  for (const other of ['/admin', '/admin/', '/admin/login', '/api', '/api/v1/me', '/_next/static/chunks/a.js', '/sw.js', '/favicon.ico', '/manifest.webmanifest', '/icons/icon-192.png', '/fonts/figtree-latin-wght-normal.woff2']) {
     assert.doesNotMatch(other, pattern, other);
   }
 });

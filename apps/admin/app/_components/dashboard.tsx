@@ -5,6 +5,7 @@ import { Icon, type IconName } from '@bedo/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../_lib/api';
+import { applyTheme, savedTheme, THEME_ORDER, type ThemeChoice } from '../_lib/theme';
 import { AccountPassword } from './account-password';
 import { AuditHistory } from './audit-history';
 import { Broadcasts } from './broadcasts';
@@ -78,7 +79,7 @@ export function Dashboard() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center justify-between gap-2 border-b border-line px-2 md:gap-4 md:px-4">
+      <header className="bedo-glass sticky top-0 z-20 flex h-[var(--bedo-header-height)] shrink-0 items-center justify-between gap-2 border-b border-line px-2 md:gap-4 md:px-4">
         <span className="flex min-w-0 items-center gap-2 font-semibold">
           {/* Phase 13: on a phone the sections are behind this button. */}
           <button
@@ -87,18 +88,21 @@ export function Dashboard() {
             aria-expanded={menuOpen}
             aria-controls="admin-sections"
             onClick={() => setMenuOpen((value) => !value)}
-            className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover md:hidden"
+            className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover md:hidden"
           >
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
-          <Icon name="admin_panel_settings" className="hidden shrink-0 text-accent md:block" />
+          <span className="hidden size-8 shrink-0 place-items-center rounded-[9px] bg-accent text-on-accent md:grid">
+            <Icon name="admin_panel_settings" size={20} />
+          </span>
           <span className="truncate">Bedo Chat Admin</span>
         </span>
-        <div className="flex shrink-0 items-center gap-3 text-sm">
-          <span className="hidden text-ink-secondary sm:inline">
+        <div className="flex shrink-0 items-center gap-1 text-sm md:gap-2">
+          <span className="mr-1 hidden text-ink-secondary sm:inline">
             {admin.name} · {ROLE_LABELS[admin.role]}
           </span>
-          <button type="button" onClick={() => void signOut()} className="flex items-center gap-1 whitespace-nowrap rounded-sm px-2 py-1 text-ink-secondary hover:bg-surface-hover">
+          <ThemeButton />
+          <button type="button" onClick={() => void signOut()} className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="logout" size={20} />
             Sign out
           </button>
@@ -107,7 +111,7 @@ export function Dashboard() {
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav
           id="admin-sections"
-          className={`${menuOpen ? 'flex' : 'hidden'} shrink-0 flex-col gap-1 border-b border-line p-2 md:flex md:w-60 md:border-r md:border-b-0`}
+          className={`${menuOpen ? 'flex' : 'hidden'} shrink-0 flex-col gap-0.5 border-b border-line bg-surface p-2 md:sticky md:top-[var(--bedo-header-height)] md:flex md:h-[calc(100dvh-var(--bedo-header-height))] md:w-64 md:overflow-y-auto md:border-r md:border-b-0 md:p-3`}
           aria-label="Sections"
         >
           {/* On a phone: the signed-in admin, since the header has no room for the name. */}
@@ -125,14 +129,15 @@ export function Dashboard() {
                 setSection(item.id);
                 setMenuOpen(false);
               }}
-              className="flex h-10 items-center gap-3 rounded-sm px-3 text-left text-sm hover:bg-surface-hover aria-[current=page]:bg-surface-selected aria-[current=page]:font-medium"
+              className="group flex h-10 shrink-0 items-center gap-3 rounded-sm px-3 text-left text-sm transition-colors hover:bg-surface-hover aria-[current=page]:bg-accent-soft aria-[current=page]:font-semibold aria-[current=page]:text-accent"
             >
-              <Icon name={item.icon} size={20} className="text-ink-secondary" />
+              <Icon name={item.icon} size={20} className="text-ink-secondary group-aria-[current=page]:text-accent" />
               {item.label}
             </button>
           ))}
         </nav>
-        <main className="min-w-0 flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="min-w-0 flex-1 bg-surface-subtle p-4 md:p-8">
+          <div className="mx-auto max-w-5xl">
           {section === 'overview' && <Overview onSessionError={onSessionError} />}
           {section === 'users' && <Users isSuperAdmin={canChange} onSessionError={onSessionError} />}
           {section === 'chats' && <Chats isSuperAdmin={canChange} onSessionError={onSessionError} />}
@@ -146,8 +151,40 @@ export function Dashboard() {
           {section === 'permissions' && <UserPermissions canChange={canChange} onSessionError={onSessionError} />}
           {section === 'media' && <MediaSettings canChange={canChange} onSessionError={onSessionError} />}
           {section === 'account' && <AccountPassword onSessionError={onSessionError} />}
+        </div>
         </main>
       </div>
     </div>
+  );
+}
+
+const THEME_LABELS: Record<ThemeChoice, { label: string; icon: IconName }> = {
+  system: { label: 'Theme: same as device', icon: 'brightness_auto' },
+  light: { label: 'Theme: light', icon: 'light_mode' },
+  dark: { label: 'Theme: dark', icon: 'dark_mode' },
+};
+
+/** Light, dark, or the device's setting (D-48); each press moves to the next. */
+function ThemeButton() {
+  const [choice, setChoice] = useState<ThemeChoice>('system');
+  useEffect(() => {
+    const saved = savedTheme();
+    setChoice(saved);
+    applyTheme(saved);
+  }, []);
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(choice) + 1) % THEME_ORDER.length]!;
+  return (
+    <button
+      type="button"
+      aria-label={`${THEME_LABELS[choice].label}. Switch to ${THEME_LABELS[next].label.replace('Theme: ', '')}`}
+      title={THEME_LABELS[choice].label}
+      onClick={() => {
+        setChoice(next);
+        applyTheme(next);
+      }}
+      className="grid size-9 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
+    >
+      <Icon name={THEME_LABELS[choice].icon} size={20} />
+    </button>
   );
 }

@@ -147,7 +147,7 @@ export function ChatList({
                       {channel.description ? ` · ${channel.description}` : ''}
                     </span>
                   </span>
-                  <button type="button" aria-label={`Join ${channel.title}`} onClick={() => void joinChannel(channel)} className="h-8 shrink-0 rounded-sm bg-accent px-3 text-sm font-medium text-on-accent hover:bg-accent-hover">
+                  <button type="button" aria-label={`Join ${channel.title}`} onClick={() => void joinChannel(channel)} className="h-8 shrink-0 rounded-full bg-accent px-3.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-hover">
                     Join
                   </button>
                 </li>
@@ -176,7 +176,7 @@ export function ChatList({
                     type="button"
                     aria-label={`Messages from ${displayName(peer)}`}
                     onClick={() => setFrom(peer)}
-                    className="mx-1 grid size-9 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-selected"
+                    className="mx-1 grid size-9 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover"
                   >
                     <Icon name="search" size={20} />
                   </button>
@@ -199,7 +199,7 @@ export function ChatList({
 
   return (
     <>
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2" role="tablist" aria-label="Folders">
+      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-2 pb-2" role="tablist" aria-label="Folders">
         <TabButton active={tab.kind === 'all'} onClick={() => setTab({ kind: 'all' })}>
           All chats
         </TabButton>
@@ -212,19 +212,19 @@ export function ChatList({
           type="button"
           aria-label="Edit folders"
           onClick={() => setEditingFolders(true)}
-          className="ml-auto grid size-8 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+          className="ml-auto grid size-8 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
         >
           <Icon name="create_new_folder" size={20} />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto py-1.5">
         {tab.kind === 'archived' ? (
-          <button type="button" onClick={() => setTab({ kind: 'all' })} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-accent hover:bg-surface-hover">
+          <button type="button" onClick={() => setTab({ kind: 'all' })} className="mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-medium text-accent transition-colors hover:bg-surface-hover">
             <Icon name="arrow_back" size={20} />
             Archived chats
           </button>
         ) : archivedCount > 0 && tab.kind === 'all' ? (
-          <button type="button" onClick={() => setTab({ kind: 'archived' })} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-ink-secondary hover:bg-surface-hover">
+          <button type="button" onClick={() => setTab({ kind: 'archived' })} className="mx-2 flex w-[calc(100%-1rem)] items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-ink-secondary transition-colors hover:bg-surface-hover">
             <Icon name="archive" size={20} />
             <span className="flex-1">Archived chats</span>
             <span>{archivedCount}</span>
@@ -248,7 +248,7 @@ export function ChatList({
 }
 
 function SectionTitle({ children }: { children: string }) {
-  return <h3 className="px-4 pb-1 pt-3 text-xs font-medium uppercase text-ink-secondary">{children}</h3>;
+  return <h3 className="px-4 pb-1 pt-3 text-sm font-semibold text-accent">{children}</h3>;
 }
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
@@ -258,7 +258,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`shrink-0 border-b-2 px-3 py-2 text-sm ${active ? 'border-accent font-medium text-accent' : 'border-transparent text-ink-secondary hover:text-ink'}`}
+      className={`shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors ${active ? 'bg-accent-soft font-semibold text-accent' : 'text-ink-secondary hover:bg-surface-hover hover:text-ink'}`}
     >
       {children}
     </button>
@@ -291,21 +291,21 @@ function ChatRow({ chat, myId, selected, onSelect, onNotice }: { chat: Chat; myI
     }),
   ];
   return (
-    <li className={`group flex items-center ${selected ? 'bg-surface-selected' : 'hover:bg-surface-hover'}`}>
-      <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center gap-3 py-2 pl-3 text-left" aria-current={selected || undefined}>
+    <li className={`group mx-2 flex items-center rounded-md transition-colors ${selected ? 'bg-accent-soft' : 'hover:bg-surface-hover'}`}>
+      <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-2 pl-2.5 text-left" aria-current={selected || undefined}>
         <Avatar name={chatTitle(chat)} photoUrl={chatPhoto(chat)} size={48} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             {chat.type === 'channel' ? <Icon name="campaign" size={16} className="shrink-0 text-ink-secondary" /> : chat.group ? <Icon name="group" size={16} className="shrink-0 text-ink-secondary" /> : null}
-            <span className="min-w-0 flex-1 truncate font-medium">{chatTitle(chat)}</span>
+            <span className="min-w-0 flex-1 truncate font-semibold">{chatTitle(chat)}</span>
             {isMuted(chat) ? <Icon name="notifications_off" size={14} className="shrink-0 text-ink-secondary" title="Muted" /> : null}
-            <span className="shrink-0 text-xs text-ink-secondary">{listTime(chat.lastMessageAt)}</span>
+            <span className={`shrink-0 text-xs ${chat.unreadCount > 0 && !isMuted(chat) ? 'font-medium text-accent' : 'text-ink-secondary'}`}>{listTime(chat.lastMessageAt)}</span>
           </span>
           <span className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate text-sm text-ink-secondary">{(state.typing[chat.id] ?? 0) > Date.now() ? 'typing…' : preview(chat, myId)}</span>
             {chat.pinned ? <Icon name="keep" size={16} className="shrink-0 text-ink-secondary" title="Pinned" /> : null}
             {chat.unreadCount > 0 ? (
-              <span className="min-w-5 shrink-0 rounded-full bg-accent px-1.5 text-center text-xs font-medium text-on-accent" aria-label={`${chat.unreadCount} unread`}>
+              <span className={`grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-center text-xs font-semibold ${isMuted(chat) ? 'bg-ink-secondary/60 text-surface' : 'bg-accent text-on-accent'}`} aria-label={`${chat.unreadCount} unread`}>
                 {chat.unreadCount >= 1000 ? '999+' : chat.unreadCount}
               </span>
             ) : chat.markedUnread ? (

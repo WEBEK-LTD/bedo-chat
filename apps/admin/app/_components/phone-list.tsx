@@ -121,14 +121,14 @@ export function PhoneList({ canChange, onSessionError }: { canChange: boolean; o
             placeholder="Search numbers"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className="h-[var(--bedo-control-height)] flex-1 rounded-sm border border-line bg-surface px-3 text-sm outline-none focus:border-accent"
+            className="h-[var(--bedo-control-height)] flex-1 rounded-sm border border-line bg-surface px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15"
           />
           <Button type="submit" variant="secondary">
             Search
           </Button>
         </form>
         <FormError message={error} />
-        <div className="overflow-x-auto rounded-md border border-line">
+        <div className="overflow-x-auto rounded-md border border-line bg-surface shadow-sm">
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-subtle text-ink-secondary">
               <tr>

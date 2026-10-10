@@ -43,7 +43,7 @@ export function SignupAccess({ canChange, onSessionError }: { canChange: boolean
   }
 
   return (
-    <fieldset className="flex flex-col gap-2 rounded-md border border-line p-4" aria-label="Who can create an account">
+    <fieldset className="flex flex-col gap-2 rounded-md border border-line bg-surface shadow-sm p-4" aria-label="Who can create an account">
       <legend className="px-1 text-sm font-medium">Who can create an account</legend>
       {!settings ? (
         <p className="text-sm text-ink-secondary">Loading…</p>

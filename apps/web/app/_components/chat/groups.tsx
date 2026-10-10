@@ -386,7 +386,7 @@ export function PollComposer({ chatId, onClose, onNotice }: { chatId: string; on
                 className="h-9 flex-1 rounded-sm border border-line bg-surface px-3 text-sm outline-none focus:border-accent"
               />
               {options.length > 2 ? (
-                <button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => setOptions(options.filter((_, at) => at !== index))} className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+                <button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => setOptions(options.filter((_, at) => at !== index))} className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
                   <Icon name="close" size={18} />
                 </button>
               ) : null}
@@ -697,15 +697,15 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-ink/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="fixed inset-0 z-40 flex justify-end bg-scrim/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
       <aside role="dialog" aria-modal="true" aria-label={`${Noun} info`} className="flex h-full w-full max-w-[400px] flex-col overflow-y-auto bg-surface">
-        <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
-          <button type="button" aria-label={`Close ${noun} info`} onClick={onClose} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+        <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
+          <button type="button" aria-label={`Close ${noun} info`} onClick={onClose} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />
           </button>
           <h2 className="flex-1 font-medium">{Noun} info</h2>
           {canEdit && !editing ? (
-            <button type="button" aria-label={`Edit ${noun}`} onClick={() => setEditing(true)} className="grid size-10 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+            <button type="button" aria-label={`Edit ${noun}`} onClick={() => setEditing(true)} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
               <Icon name="edit" />
             </button>
           ) : null}
@@ -862,7 +862,7 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
                       type="button"
                       aria-label="Copy invite link"
                       onClick={() => void navigator.clipboard.writeText(inviteUrl(link.code)).then(() => onNotice('Link copied.'))}
-                      className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+                      className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
                     >
                       <Icon name="content_copy" size={18} />
                     </button>
@@ -870,7 +870,7 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
                       type="button"
                       aria-label="Revoke invite link"
                       onClick={() => void run(async () => setLinks(cast<InviteLink[]>((await revokeInviteLink(chat.id, link.id)).links)), 'Link revoked.')}
-                      className="grid size-8 place-items-center rounded-sm text-danger hover:bg-surface-hover"
+                      className="grid size-8 place-items-center rounded-full text-danger transition-colors hover:bg-surface-hover"
                     >
                       <Icon name="link_off" size={18} />
                     </button>

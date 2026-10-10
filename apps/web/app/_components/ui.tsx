@@ -6,10 +6,10 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-on-accent hover:bg-accent-hover',
-  secondary: 'border border-line bg-surface text-ink hover:bg-surface-hover',
-  danger: 'border border-line bg-surface text-danger hover:bg-surface-hover',
-  ghost: 'text-accent hover:bg-surface-hover',
+  primary: 'bg-accent text-on-accent shadow-sm hover:bg-accent-hover active:scale-[0.98]',
+  secondary: 'border border-line bg-surface text-ink hover:bg-surface-hover active:scale-[0.98]',
+  danger: 'border border-line bg-surface text-danger hover:bg-surface-hover active:scale-[0.98]',
+  ghost: 'text-accent hover:bg-accent-soft',
 };
 
 export function Button({
@@ -26,7 +26,7 @@ export function Button({
       {...props}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      className={`h-[var(--bedo-control-height)] rounded-sm px-4 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_STYLES[variant]} ${className}`}
+      className={`h-[var(--bedo-control-height)] rounded-sm px-4 text-sm font-semibold transition-[background-color,transform] duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${BUTTON_STYLES[variant]} ${className}`}
     >
       {children}
     </button>
@@ -39,7 +39,7 @@ export function IconButton({ icon, label, onClick }: { icon: IconName; label: st
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="grid size-10 shrink-0 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+      className="grid size-10 shrink-0 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
     >
       <Icon name={icon} />
     </button>
@@ -64,7 +64,7 @@ export function TextField({
         {...props}
         aria-invalid={error ? true : undefined}
         aria-describedby={hint || error ? `${id}-help` : undefined}
-        className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-[length:var(--bedo-font-size-md)] outline-none focus:border-accent aria-[invalid=true]:border-danger"
+        className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-[length:var(--bedo-font-size-md)] outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15 aria-[invalid=true]:border-danger"
       />
       {error ? (
         <p id={`${id}-help`} className="text-sm text-danger">
@@ -91,11 +91,18 @@ export function FormError({ message }: { message: string | null }) {
 
 export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warning'; children: ReactNode }) {
   return (
-    <div className="flex items-start gap-3 rounded-md bg-surface-subtle p-3 text-sm">
+    <div className="flex items-start gap-3 rounded-md bg-surface-subtle p-3.5 text-sm">
       <Icon name={tone === 'warning' ? 'warning' : 'info'} size={20} className={`shrink-0 ${tone === 'warning' ? 'text-danger' : 'text-ink-secondary'}`} />
       <div className="min-w-0 flex-1">{children}</div>
     </div>
   );
+}
+
+/** D-48: one of seven tones for an avatar without a picture, from the name, the same on every device. */
+export function avatarTone(seed: string | null): string {
+  let hash = 0;
+  for (const char of seed ?? '') hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return `bedo-tone-${hash % 7}`;
 }
 
 export function Avatar({ name, photoUrl, size = 40 }: { name: string | null; photoUrl: string | null; size?: number }) {
@@ -111,8 +118,8 @@ export function Avatar({ name, photoUrl, size = 40 }: { name: string | null; pho
   ) : (
     <span
       aria-hidden="true"
-      className="grid shrink-0 place-items-center rounded-full bg-accent font-medium text-on-accent"
-      style={{ width: size, height: size, fontSize: size * 0.4 }}
+      className={`grid shrink-0 place-items-center rounded-full font-semibold text-white ${avatarTone(name)}`}
+      style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
       {initials || <Icon name="person" size={size * 0.6} />}
     </span>

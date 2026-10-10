@@ -70,7 +70,7 @@ export function UserPermissions({ canChange, onSessionError }: { canChange: bool
       <FormError message={error} />
       {done ? <Notice>{done}</Notice> : null}
       {found ? (
-        <section aria-label="Permissions" className="flex flex-col gap-3 rounded-md border border-line p-4">
+        <section aria-label="Permissions" className="flex flex-col gap-3 rounded-md border border-line bg-surface shadow-sm p-4">
           <p className="text-sm">
             <span className="font-medium">{found.user.name ?? 'No name yet'}</span> · {found.user.phone} · {found.user.status}
           </p>

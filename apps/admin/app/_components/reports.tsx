@@ -89,7 +89,7 @@ function ReportCard({ report, isSuperAdmin, onDecided, onSessionError }: { repor
 
   const options: Decision[] = ['dismissed', ...(message && !message.deleted ? (['message_removed'] as const) : []), 'user_suspended', ...(isSuperAdmin ? (['user_banned'] as const) : [])];
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-line p-4 text-sm" aria-label={`Report about ${report.reportedUser.name ?? report.reportedUser.phone ?? 'a user'}`}>
+    <li className="flex flex-col gap-3 rounded-md border border-line bg-surface shadow-sm p-4 text-sm" aria-label={`Report about ${report.reportedUser.name ?? report.reportedUser.phone ?? 'a user'}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="font-medium">{REASON_LABELS[report.reason] ?? report.reason}</p>
         <p className="text-xs text-ink-secondary">{formatDateTime(report.createdAt)}</p>

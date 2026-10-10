@@ -58,7 +58,7 @@ export function Tabs<T extends string>({ value, options, onChange, label }: { va
           role="tab"
           aria-selected={value === option.id}
           onClick={() => onChange(option.id)}
-          className="h-9 rounded-sm px-3 text-sm hover:bg-surface-hover aria-selected:bg-surface-selected aria-selected:font-medium"
+          className="h-9 shrink-0 rounded-full px-3.5 text-sm text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink aria-selected:bg-accent-soft aria-selected:font-semibold aria-selected:text-accent"
         >
           {option.label}
         </button>
@@ -74,7 +74,7 @@ export function StatusBadge({ status }: { status: string }) {
 
 export function BackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex items-center gap-1 self-start rounded-sm px-2 py-1 text-sm text-ink-secondary hover:bg-surface-hover">
+    <button type="button" onClick={onClick} className="flex h-9 items-center gap-1 self-start rounded-full pl-2 pr-3.5 text-sm text-ink-secondary transition-colors hover:bg-surface hover:text-ink">
       <Icon name="arrow_back" size={20} />
       {label}
     </button>
@@ -188,11 +188,11 @@ export function UserPicker({ id, label, onPick, exclude = [] }: { id: string; la
         value={q}
         placeholder="Phone, name or username"
         onChange={(event) => setQ(event.target.value)}
-        className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none focus:border-accent"
+        className="h-[var(--bedo-control-height)] rounded-sm border border-line bg-surface px-3 text-sm outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-3 focus:ring-accent/15"
       />
       <FormError message={error} />
       {results.length > 0 ? (
-        <ul className="flex flex-col divide-y divide-line rounded-md border border-line text-sm" aria-label={`${label} results`}>
+        <ul className="flex flex-col divide-y divide-line rounded-md border border-line bg-surface shadow-sm text-sm" aria-label={`${label} results`}>
           {results
             .filter((user) => !exclude.includes(user.id))
             .slice(0, 8)

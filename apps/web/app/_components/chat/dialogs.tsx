@@ -94,14 +94,14 @@ export function FoldersDialog({ chats, onClose, onNotice }: { chats: Chat[]; onC
               <Icon name="folder" size={20} className="text-ink-secondary" />
               <span className="min-w-0 flex-1 truncate">{folder.name}</span>
               <span className="text-xs text-ink-secondary">{folder.chatIds.length}</span>
-              <button type="button" aria-label={`Edit ${folder.name}`} onClick={() => setEditing({ id: folder.id, name: folder.name, chatIds: folder.chatIds })} className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover">
+              <button type="button" aria-label={`Edit ${folder.name}`} onClick={() => setEditing({ id: folder.id, name: folder.name, chatIds: folder.chatIds })} className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
                 <Icon name="edit" size={18} />
               </button>
               <button
                 type="button"
                 aria-label={`Delete ${folder.name}`}
                 onClick={() => void store.deleteFolder(folder.id).catch((caught: unknown) => onNotice(errorMessage(caught)))}
-                className="grid size-8 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
+                className="grid size-8 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink"
               >
                 <Icon name="delete" size={18} />
               </button>

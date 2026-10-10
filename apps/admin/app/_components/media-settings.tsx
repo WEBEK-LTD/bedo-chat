@@ -179,7 +179,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
         {packs === null ? <p className="text-sm text-ink-secondary">Loading…</p> : null}
         {packs?.length === 0 ? <p className="text-sm text-ink-secondary">No sticker packs yet.</p> : null}
         {packs?.map((pack) => (
-          <article key={pack.id} className="flex flex-col gap-3 rounded-md border border-line p-4" aria-label={`Pack ${pack.name}`}>
+          <article key={pack.id} className="flex flex-col gap-3 rounded-md border border-line bg-surface shadow-sm p-4" aria-label={`Pack ${pack.name}`}>
             <header className="flex items-center gap-2">
               <h3 className="flex-1 font-medium">
                 {pack.name}
@@ -222,7 +222,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
               {pack.stickers
                 .filter((sticker) => !sticker.removed)
                 .map((sticker) => (
-                  <li key={sticker.id} className="relative flex flex-col items-center gap-1 rounded-sm border border-line p-2">
+                  <li key={sticker.id} className="relative flex flex-col items-center gap-1 rounded-sm border border-line bg-surface p-2">
                     <StickerImage id={sticker.id} emoji={sticker.emoji} />
                     <span className="text-xs text-ink-secondary">
                       {sticker.emoji} · {sticker.width}×{sticker.height}
