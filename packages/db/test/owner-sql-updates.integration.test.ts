@@ -96,13 +96,31 @@ describe.runIf(enabled)('owner SQL: every update in one run (real Postgres)', ()
   });
 
   it('applies every later migration, sets the login limits and reports every check ok', async () => {
-    const results = await run(database.url, await readFile(SCRIPT, 'utf8'));
+    // As newer Supabase projects do: row level security switched on for every new table.
+    await run(
+      database.url,
+      `create function public.test_auto_rls() returns event_trigger language plpgsql as $$
+       declare item record;
+       begin
+         for item in select * from pg_event_trigger_ddl_commands() where command_tag = 'CREATE TABLE' and object_type = 'table' loop
+           execute format('alter table %s enable row level security', item.object_identity);
+         end loop;
+       end $$;
+       create event trigger test_auto_rls on ddl_command_end when tag in ('CREATE TABLE') execute function public.test_auto_rls();`,
+    );
+    let results: Awaited<ReturnType<typeof run>>;
+    try {
+      results = await run(database.url, await readFile(SCRIPT, 'utf8'));
+    } finally {
+      await run(database.url, 'drop event trigger test_auto_rls; drop function public.test_auto_rls()');
+    }
     const report = results.at(-1)!.rows as Array<{ check_name: string; result: string }>;
     expect(report).toEqual([
       { check_name: 'migrations recorded', result: 'ok' },
       { check_name: 'bedo_api limits', result: 'ok' },
       { check_name: 'private realtime policy', result: 'ok' },
       { check_name: 'other realtime.messages policies (should be none)', result: 'ok' },
+      { check_name: 'Bedo Chat tables with row level security on (should be none)', result: 'ok' },
       { check_name: 'storage buckets (profile-photos, chat-media private; stickers public)', result: 'ok' },
     ]);
     // The migrator now sees every migration applied, with matching checksums.

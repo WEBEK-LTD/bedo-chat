@@ -89,7 +89,7 @@ describe.runIf(enabled)('Phase 7 notifications and badges in the browser', () =>
     await shot(phone, '70-badge-phone');
     // Reading on the laptop clears the badge on the phone too.
     await laptop.getByRole('button', { name: /^Sara Sender/ }).click();
-    await laptop.getByText('Class moved to 3pm').waitFor();
+    await laptop.getByRole('log', { name: 'Messages' }).getByText('Class moved to 3pm').waitFor();
     await titleIs(laptop, 'Bedo Chat');
     await titleIs(phone, 'Bedo Chat');
   });

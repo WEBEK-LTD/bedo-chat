@@ -153,6 +153,11 @@ select 'other realtime.messages policies (should be none)',
             else 'NOT OK: ' || (select string_agg(policyname, ', ') from pg_policies where schemaname = 'realtime'
                                 and tablename = 'messages' and policyname <> 'bedo_device_receives_own_channel') end
 union all
+select 'Bedo Chat tables with row level security on (should be none)',
+       case when not exists (select 1 from pg_class c join pg_namespace n on n.oid = c.relnamespace
+                             where n.nspname in ('app', 'audit', 'app_meta') and c.relkind in ('r', 'p') and c.relrowsecurity)
+            then 'ok' else 'NOT OK' end
+union all
 select 'storage buckets (profile-photos, chat-media private; stickers public)',
        case when (select count(*) from storage.buckets where (id in ('profile-photos', 'chat-media') and not public)
                   or (id = 'stickers' and public)) = 3 then 'ok' else 'NOT OK' end`;
@@ -288,6 +293,23 @@ ${parts}
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
 alter role bedo_api set idle_in_transaction_session_timeout = '30s';
+
+-- Newer Supabase projects switch row level security on for every new table. Bedo Chat's tables have no policies (no
+-- Supabase API role can reach them, checked above), so with it on the API's own login could not use them: turned off
+-- on Bedo Chat's tables only (docs/owner-sql/fix-row-level-security.sql does the same on its own).
+do $bedo_rls$
+declare
+  item record;
+begin
+  for item in
+    select n.nspname, c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname in ('app', 'audit', 'app_meta') and c.relkind in ('r', 'p') and (c.relrowsecurity or c.relforcerowsecurity)
+  loop
+    execute format('alter table %I.%I no force row level security', item.nspname, item.relname);
+    execute format('alter table %I.%I disable row level security', item.nspname, item.relname);
+  end loop;
+end
+$bedo_rls$;
 
 -- Part ${updates.length + 3}: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$

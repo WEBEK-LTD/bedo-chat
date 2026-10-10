@@ -82,3 +82,14 @@ authenticator, the Waabek, GIPHY or Web Push keys), since new keys could not rea
 `apps/api/test/netlify-variables.integration.test.ts` (the new password works, every value passes the API's own
 checks, a second run makes new values, the refusal leaves the old password working). `docs/DEPLOYMENT.md` section 0,
 step 3, uses it.
+
+## Phase 13.2 — Supabase's automatic row level security
+
+With the variables in place the site started, and `/api/health/ready` answered `ok`, but the admin sign-in failed:
+"new row violates row-level security policy for table rate_counters" (and the hourly housekeeping on
+`maintenance_runs`). Newer Supabase projects switch row level security on for every new table; Bedo Chat's tables
+have no policies because no Supabase API role can reach them, so the API's own login was locked out of the tables
+`apply-updates.sql` had created. `docs/owner-sql/fix-row-level-security.sql` turns it off on Bedo Chat's tables
+(schemas `app`, `audit`, `app_meta`) only, after checking that `anon`, `authenticated` and `public` cannot use those
+schemas; `realtime.messages` keeps its row level security and device policy. `apply-updates.sql` does the same at
+its end and checks it. Tested in `apps/api/test/owner-rls.integration.test.ts`.

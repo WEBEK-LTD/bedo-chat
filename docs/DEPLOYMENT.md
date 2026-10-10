@@ -57,7 +57,12 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
       password, the tables that replace Redis, the private realtime policy, then each later phase: media, ...;
       the file lists them), sets the limits of `bedo_api` and records them; if anything is not as expected it stops
       and keeps nothing. The file is generated from `supabase/migrations` (`node scripts/build-owner-sql.mjs`).
-   2. Paste [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql), change the three values at the
+   2. If requests fail with "new row violates row-level security policy" (newer Supabase projects switch row level
+      security on for every new table), paste
+      [`docs/owner-sql/fix-row-level-security.sql`](owner-sql/fix-row-level-security.sql) → **Run**: both lines say
+      `ok`. It turns it off on Bedo Chat's own tables only, after checking no Supabase API role can reach them; safe
+      to run again. (`apply-updates.sql` now does the same at its end.)
+   3. Paste [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql), change the three values at the
       top (section 4d) → **Run** → delete the query afterwards (it holds the password).
 5. **Supabase settings**: Project Settings → **Realtime** → turn **off** "Allow public access" (only devices with a
    token from the API can then listen, each on its own channel). Authentication → Sign In / Providers → turn off
