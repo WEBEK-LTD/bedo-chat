@@ -162,6 +162,26 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard in the browser', () => {
     expect(ban.rows).toEqual([{ by_admin: true }]);
   });
 
+  it('creates a channel for everyone: every student has it without being added (Phase 15.1, D-52)', async () => {
+    // Back from the group of the test before to the list.
+    await admin.getByRole('main').getByRole('button', { name: 'Groups and channels' }).click();
+    await admin.getByRole('button', { name: 'New group or channel' }).click();
+    await admin.getByRole('tab', { name: 'Channel' }).click();
+    await admin.getByLabel('Name', { exact: true }).fill('Academy news');
+    // On by default for a channel; nobody is picked as a subscriber.
+    await expect.poll(async () => admin.getByRole('checkbox', { name: /^Everyone in the academy/ }).isChecked()).toBe(true);
+    expect(await admin.getByLabel('Add subscribers', { exact: true }).count()).toBe(0);
+    await admin.getByLabel('Owner', { exact: true }).fill('Ana');
+    await admin.getByRole('button', { name: /^Ana Lopez/ }).click();
+    await admin.getByLabel('Reason (kept in the admin history)').fill(REASON);
+    await admin.getByRole('button', { name: 'Create channel' }).click();
+    await admin.getByRole('heading', { name: 'Academy news' }).waitFor();
+    await admin.getByText(/^Channel for everyone · \d+ subscribers$/).waitFor();
+    await admin.getByText('Everyone in the academy, new accounts too').waitFor();
+    await ben.getByRole('button', { name: /^Academy news/ }).waitFor({ timeout: 20_000 });
+    await shot(admin, '102b-admin-channel-everyone');
+  });
+
   it('suspends an account (signed out at once) and reactivates it', async () => {
     await admin.getByRole('button', { name: 'Users', exact: true }).click();
     await admin.getByLabel('Search users').fill('Ben');

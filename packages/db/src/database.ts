@@ -346,6 +346,8 @@ export interface GroupSettingsTable {
   default_permissions: Generated<string[]>;
   hide_member_count: Generated<boolean>;
   hide_member_list: Generated<boolean>;
+  /** D-52: channels only; every academy account is a subscriber. */
+  academy_wide: Generated<boolean>;
   updated_at: Generated<Date>;
 }
 

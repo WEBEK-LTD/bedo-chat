@@ -8794,6 +8794,9 @@
                 "public": {
                   "type": "boolean"
                 },
+                "everyone": {
+                  "type": "boolean"
+                },
                 "memberCount": {
                   "type": "integer"
                 },
@@ -8861,6 +8864,7 @@
                 "type",
                 "title",
                 "public",
+                "everyone",
                 "memberCount",
                 "owner",
                 "createdAt",
@@ -8906,6 +8910,10 @@
             "type": "boolean",
             "default": false
           },
+          "everyone": {
+            "type": "boolean",
+            "default": false
+          },
           "memberIds": {
             "type": "array",
             "items": {
@@ -8945,6 +8953,9 @@
             "type": "string"
           },
           "public": {
+            "type": "boolean"
+          },
+          "everyone": {
             "type": "boolean"
           },
           "memberCount": {
@@ -9160,6 +9171,7 @@
           "type",
           "title",
           "public",
+          "everyone",
           "memberCount",
           "owner",
           "createdAt",
@@ -9181,6 +9193,9 @@
             "type": "string"
           },
           "isPublic": {
+            "type": "boolean"
+          },
+          "everyone": {
             "type": "boolean"
           },
           "defaultPermissions": {

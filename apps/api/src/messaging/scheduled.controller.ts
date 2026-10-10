@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Inject, Logger, Param, Patch, type PipeTransform, Post, UseGuards } from '@nestjs/common';
 import {
   dispatchResponseSchema,
   messageSchema,
@@ -79,10 +79,24 @@ export class ScheduledController {
  */
 @Controller('v1/internal')
 export class InternalDispatchController {
+  private readonly logger = new Logger(InternalDispatchController.name);
+
   constructor(
     @Inject(ScheduledService) private readonly scheduled: ScheduledService,
     @Inject(MonitoringService) private readonly monitoring: MonitoringService,
   ) {}
+
+  /**
+   * D-52: anyone still missing from a channel for everyone (an account active again after a suspension, a channel
+   * switched on by the database update) is added, and their devices show the channel.
+   */
+  private async joinEveryone(): Promise<void> {
+    try {
+      await this.scheduled.joinEveryoneChannels();
+    } catch (error) {
+      this.logger.error(`Joining channels for everyone failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
 
   @Post('dispatch')
   @HttpCode(200)
@@ -93,6 +107,7 @@ export class InternalDispatchController {
     }
     // Phase 14.5: this minute call also is the site monitoring's check (it came in through the public address).
     await this.monitoring.heartbeat();
+    await this.joinEveryone();
     return this.scheduled.dispatchDue();
   }
 }

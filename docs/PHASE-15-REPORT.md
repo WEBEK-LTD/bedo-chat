@@ -52,3 +52,38 @@ Built on Phase 14.5 (branch `phase-15-groups-login`). Decision: **D-51**. No dat
 ## For the owner
 
 No SQL. Upload the repository with GitHub Desktop.
+
+## Phase 15.1 — channels for everyone (D-52)
+
+The owner asked that the channels the admin makes show for every student, including new accounts, without adding
+anyone by hand; groups stay as they are.
+
+- Migration `20261020120000_everyone_channels.sql`: `app.group_settings.academy_wide`. Channels already made in the
+  Admin Dashboard (recorded as `channel.created` by an admin) are switched on.
+- `apps/api/src/groups/everyone-channels.ts`: one statement adds every active account missing from an academy-wide
+  channel as a subscriber, with the membership history (`details.everyone`); not people who left or were removed, and
+  never past the channel's subscriber limit. Used when an admin makes the channel or turns the switch on, when an
+  account is created, and on the site's minute call (catches up on accounts active again and the channels switched on
+  by the update).
+- Admin Dashboard → Groups and channels: "Everyone in the academy" on a new channel (on by default; the subscriber
+  picker is not needed then) and in a channel's settings; the list and the channel say "Channel for everyone".
+- API: `everyone` in the admin chat create, update and read bodies (super admin only, channels only).
+- Owner SQL: `docs/owner-sql/update-20261020120000.sql`. Every update script now also says what to choose if
+  Supabase asks about row level security (what turned it on for the monitoring tables).
+
+Checks: new `everyone-channels.integration.test.ts` (made with everyone in it; a new account joins at once; leavers
+and removed people stay out; an account active again joins on the minute call; off and on again; plain channels and
+groups untouched, a group cannot have it); `admin-console.e2e.test.ts` makes a channel for everyone in the dashboard
+and a student who was never added sees it. Typecheck, lint, unit, integration and all browser tests pass.
+
+For the owner: run `docs/owner-sql/update-20261020120000.sql` once in the Supabase SQL Editor, then upload the
+repository with GitHub Desktop.
+
+## Phase 15.2 — channels for everyone without waiting for the scheduler
+
+On the live site the channel switched on by the database update did not show for students. Joining no longer
+depends on the scheduled function alone: the whole chat list (`GET /v1/chats`) first adds the account to every
+channel for everyone it is missing from, and every server instance catches up on all of them at most once a minute
+while requests come in (next to the scheduled messages check). Each join is announced in the update log, so the
+person's other devices show the channel too. Test: a channel switched on directly in the database shows in a
+student's chat list at once, and their other devices are told.

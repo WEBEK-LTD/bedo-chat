@@ -5,6 +5,8 @@
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- It needs every earlier update applied (it checks), and refuses to run twice. One request = one transaction:
 -- if any check fails, NOTHING is kept and the message says why. Expected result: every line says "ok".
+-- If Supabase asks about row level security before running, choose to run it WITHOUT turning row level security on
+-- (Bedo Chat's tables keep it off; if it was turned on, docs/owner-sql/fix-row-level-security.sql turns it off again).
 -- =====================================================================================================
 
 do $preflight$

@@ -153,6 +153,14 @@ const RESULT_CHECKS = {
      or has_column_privilege('bedo_runtime', 'app.site_incidents', 'kind', 'update') then
     raise exception 'Stopped: bedo_runtime privileges on the monitoring tables are not as expected (nothing was kept)';
   end if;`,
+  '20261020120000': `
+  if not exists (select 1 from information_schema.columns where table_schema = 'app' and table_name = 'group_settings' and column_name = 'academy_wide')
+     or not has_column_privilege('bedo_runtime', 'app.group_settings', 'academy_wide', 'update') then
+    raise exception 'Stopped: app.group_settings.academy_wide is missing or bedo_runtime cannot set it (nothing was kept)';
+  end if;
+  if exists (select 1 from app.group_settings s join app.conversations c on c.id = s.conversation_id where s.academy_wide and c.type <> 'channel') then
+    raise exception 'Stopped: a group was marked for everyone; only channels can be (nothing was kept)';
+  end if;`,
 };
 
 /**
@@ -275,6 +283,8 @@ export function buildUpdateScripts() {
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- It needs every earlier update applied (it checks), and refuses to run twice. One request = one transaction:
 -- if any check fails, NOTHING is kept and the message says why. Expected result: every line says "ok".
+-- If Supabase asks about row level security before running, choose to run it WITHOUT turning row level security on
+-- (Bedo Chat's tables keep it off; if it was turned on, docs/owner-sql/fix-row-level-security.sql turns it off again).
 -- =====================================================================================================
 
 do $preflight$

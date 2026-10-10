@@ -24,6 +24,12 @@ import { BackButton, Field, PERMISSION_LABELS, personLabel, ReasonAction, RIGHT_
 
 type Filter = 'all' | 'group' | 'channel';
 
+/** D-52: what kind of chat it is, as the admin sees it. */
+function kindLabel(chat: { type: string; public: boolean; everyone: boolean }): string {
+  if (chat.type !== 'channel') return 'Group';
+  return chat.everyone ? 'Channel for everyone' : chat.public ? 'Public channel' : 'Private channel';
+}
+
 function countLabel(count: number, type: string): string {
   const word = type === 'channel' ? 'subscriber' : 'member';
   return `${count} ${count === 1 ? word : `${word}s`}`;
@@ -141,7 +147,7 @@ export function Chats({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
                     {chat.deleted ? <span className="ml-2 text-xs text-danger">Deleted</span> : null}
                   </p>
                   <p className="truncate text-sm text-ink-secondary">
-                    {chat.type === 'channel' ? (chat.public ? 'Public channel' : 'Private channel') : 'Group'} · {countLabel(chat.memberCount, chat.type)} · owner{' '}
+                    {kindLabel(chat)} · {countLabel(chat.memberCount, chat.type)} · owner{' '}
                     {chat.owner?.name ?? '—'}
                   </p>
                 </div>
@@ -174,6 +180,8 @@ function CreateChat({ onCancel, onCreated, onSessionError }: { onCancel: () => v
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  // D-52: a channel made here reaches everyone in the academy unless the admin turns it off.
+  const [everyone, setEveryone] = useState(true);
   const [owner, setOwner] = useState<UserItem | null>(null);
   const [members, setMembers] = useState<UserItem[]>([]);
   const [reason, setReason] = useState('');
@@ -192,7 +200,8 @@ function CreateChat({ onCancel, onCreated, onSessionError }: { onCancel: () => v
         ...(description.trim() ? { description: description.trim() } : {}),
         ownerUserId: owner.id,
         isPublic: type === 'channel' && isPublic,
-        memberIds: members.map((member) => member.id),
+        everyone: type === 'channel' && everyone,
+        memberIds: type === 'channel' && everyone ? [] : members.map((member) => member.id),
         reason: reason.trim(),
       });
       onCreated(chat.id);
@@ -220,10 +229,21 @@ function CreateChat({ onCancel, onCreated, onSessionError }: { onCancel: () => v
       <TextField id="chat-title" label="Name" maxLength={128} value={title} onChange={(event) => setTitle(event.target.value)} />
       <TextArea id="chat-description" label="Description (optional)" maxLength={255} value={description} onChange={(event) => setDescription(event.target.value)} />
       {type === 'channel' ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
-          Public channel (anyone in the academy can find and join it)
-        </label>
+        <>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5" checked={everyone} onChange={(event) => setEveryone(event.target.checked)} />
+            <span>
+              Everyone in the academy
+              <span className="block text-ink-secondary">Every student is a subscriber, and new accounts join it automatically. Only the channel&apos;s admins post.</span>
+            </span>
+          </label>
+          {everyone ? null : (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
+              Public channel (anyone in the academy can find and join it)
+            </label>
+          )}
+        </>
       ) : null}
       {owner ? (
         <p className="flex items-center gap-2 text-sm">
@@ -235,8 +255,10 @@ function CreateChat({ onCancel, onCreated, onSessionError }: { onCancel: () => v
       ) : (
         <UserPicker id="chat-owner" label="Owner" onPick={setOwner} />
       )}
-      <UserPicker id="chat-members" label={type === 'channel' ? 'Add subscribers' : 'Add members'} exclude={[...(owner ? [owner.id] : []), ...members.map((member) => member.id)]} onPick={(user) => setMembers((list) => [...list, user])} />
-      {members.length > 0 ? (
+      {type === 'channel' && everyone ? null : (
+        <UserPicker id="chat-members" label={type === 'channel' ? 'Add subscribers' : 'Add members'} exclude={[...(owner ? [owner.id] : []), ...members.map((member) => member.id)]} onPick={(user) => setMembers((list) => [...list, user])} />
+      )}
+      {members.length > 0 && !(type === 'channel' && everyone) ? (
         <ul className="flex flex-wrap gap-2 text-sm" aria-label="Chosen members">
           {members.map((member) => (
             <li key={member.id} className="flex items-center gap-1 rounded-sm bg-surface-subtle px-2 py-1">
@@ -291,7 +313,7 @@ function ChatDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
           <header className="flex flex-col gap-1">
             <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">{chat.title}</h1>
             <p className="text-sm text-ink-secondary">
-              {chat.type === 'channel' ? (chat.public ? 'Public channel' : 'Private channel') : 'Group'} · {countLabel(chat.memberCount, chat.type)}
+              {kindLabel(chat)} · {countLabel(chat.memberCount, chat.type)}
               {chat.deleted ? ' · Deleted' : ''}
             </p>
           </header>
@@ -300,6 +322,7 @@ function ChatDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             <Field label="Owner">{personLabel(chat.owner)}</Field>
             <Field label="Created">{formatDateTime(chat.createdAt)}</Field>
             <Field label="Last message">{formatDateTime(chat.lastMessageAt)}</Field>
+            {chat.type === 'channel' ? <Field label="Subscribers">{chat.everyone ? 'Everyone in the academy, new accounts too' : 'People added or who joined'}</Field> : null}
             {chat.type === 'group' ? (
               <>
                 <Field label="Members may">{chat.settings.defaultPermissions.map((permission) => PERMISSION_LABELS[permission as MemberPermission].toLowerCase()).join(', ') || 'only read'}</Field>
@@ -315,7 +338,14 @@ function ChatDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             ) : null}
           </section>
 
-          {isSuperAdmin && !chat.deleted ? <ChatSettings chat={chat} onSaved={(next) => setData(next)} run={run} /> : null}
+          {isSuperAdmin && !chat.deleted ? <ChatSettings
+              chat={chat}
+              onSaved={(next) => {
+                setData(next);
+                refreshMembers();
+              }}
+              run={run}
+            /> : null}
 
           <section className="flex flex-col gap-2">
             <h2 className="font-semibold">{chat.type === 'channel' ? 'Subscribers and admins' : 'Members and admins'}</h2>
@@ -398,6 +428,7 @@ function ChatSettings({ chat, onSaved, run }: { chat: AdminChatDetail; onSaved: 
   const [title, setTitle] = useState(chat.title);
   const [description, setDescription] = useState(chat.description ?? '');
   const [isPublic, setIsPublic] = useState(chat.public);
+  const [everyone, setEveryone] = useState(chat.everyone);
   const [permissions, setPermissions] = useState<MemberPermission[]>(chat.settings.defaultPermissions as MemberPermission[]);
   const [hideList, setHideList] = useState(chat.settings.hideMemberList);
   const [hideCount, setHideCount] = useState(chat.settings.hideMemberCount);
@@ -420,6 +451,7 @@ function ChatSettings({ chat, onSaved, run }: { chat: AdminChatDetail; onSaved: 
         ...(title.trim() !== chat.title ? { title: title.trim() } : {}),
         ...(description.trim() !== (chat.description ?? '') ? { description: description.trim() } : {}),
         ...(chat.type === 'channel' && isPublic !== chat.public ? { isPublic } : {}),
+        ...(chat.type === 'channel' && everyone !== chat.everyone ? { everyone } : {}),
         ...(chat.type === 'group'
           ? {
               ...(permissions.join() !== chat.settings.defaultPermissions.join() ? { defaultPermissions: permissions } : {}),
@@ -448,10 +480,23 @@ function ChatSettings({ chat, onSaved, run }: { chat: AdminChatDetail; onSaved: 
       <TextField id="edit-title" label="Name" maxLength={128} value={title} onChange={(event) => setTitle(event.target.value)} />
       <TextArea id="edit-description" label="Description" maxLength={255} value={description} onChange={(event) => setDescription(event.target.value)} />
       {chat.type === 'channel' ? (
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
-          Public channel
-        </label>
+        <>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-0.5" checked={everyone} onChange={(event) => setEveryone(event.target.checked)} />
+            <span>
+              Everyone in the academy
+              <span className="block text-ink-secondary">
+                {chat.everyone
+                  ? 'Turning it off removes nobody; new accounts just stop joining it.'
+                  : 'Adds every student now, and new accounts join it automatically. People who left or were removed are not added back.'}
+              </span>
+            </span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} />
+            Public channel
+          </label>
+        </>
       ) : (
         <>
           <fieldset className="flex flex-col gap-1 text-sm">

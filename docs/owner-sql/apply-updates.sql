@@ -17,7 +17,8 @@
 --   17  20261017120000_phase13_launch
 --   18  20261018120000_open_signup
 --   19  20261019120000_site_monitoring
--- then sets the two limits on bedo_api, checks everything and records the 13 migrations.
+--   20  20261020120000_everyone_channels
+-- then sets the two limits on bedo_api, checks everything and records the 14 migrations.
 --
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- One request = one transaction: if any check or statement fails, NOTHING is kept and the message says why.
@@ -1029,7 +1030,34 @@ grant select on app.monitoring_settings to bedo_runtime;
 grant update (whatsapp_alerts, updated_by, updated_at) on app.monitoring_settings to bedo_runtime;
 -- End of the delivered migration file 20261019120000 ------------------------------------------------------------
 
--- Part 15: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
+-- Part 15: supabase/migrations/20261020120000_everyone_channels.sql, exactly as delivered -----------------------
+-- Bedo Chat - channels for everyone in the academy (Phase 15.1, D-52).
+--
+-- The owner asked on 2026-10-10 that a channel made from the Admin Dashboard reaches every student, including students
+-- who create their account later, without an admin adding anyone. Groups are not affected. A channel with this switch
+-- on gets every active account as a subscriber; a new account joins it when it is created; and the site's minute call
+-- adds anyone still missing (an account that was suspended and is active again, say). Someone who left the channel
+-- or was removed from it is not added back. The switch is on by default for channels made in the Admin Dashboard and
+-- an admin can turn it off per channel; students' own channels never have it.
+alter table app.group_settings add column academy_wide boolean not null default false;
+comment on column app.group_settings.academy_wide is
+  'Channels only (D-52): every academy account is a subscriber, new accounts join on creation; leavers and removed people stay out.';
+
+-- The channels already made from the Admin Dashboard (recorded as channel.created by an admin) become academy-wide;
+-- the site's minute call then adds the subscribers, with the usual membership history.
+update app.group_settings s
+set academy_wide = true
+from app.conversations c
+where c.id = s.conversation_id
+  and c.type = 'channel'
+  and c.deleted_at is null
+  and exists (
+    select 1 from app.audit_log a
+    where a.actor_type = 'admin' and a.action = 'channel.created' and a.target_type = 'conversation' and a.target_id = c.id::text
+  );
+-- End of the delivered migration file 20261020120000 ------------------------------------------------------------
+
+-- Part 16: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
 -- they are set on the login itself: no statement runs longer than 15 seconds, and no connection stays idle inside
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
@@ -1052,7 +1080,7 @@ begin
 end
 $bedo_rls$;
 
--- Part 16: check the result, then the bookkeeping rows ---------------------------------------------------
+-- Part 17: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$
 begin
   if not exists (select 1 from pg_constraint
@@ -1160,6 +1188,13 @@ begin
      or has_column_privilege('bedo_runtime', 'app.site_incidents', 'kind', 'update') then
     raise exception 'Stopped: bedo_runtime privileges on the monitoring tables are not as expected (nothing was kept)';
   end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'app' and table_name = 'group_settings' and column_name = 'academy_wide')
+     or not has_column_privilege('bedo_runtime', 'app.group_settings', 'academy_wide', 'update') then
+    raise exception 'Stopped: app.group_settings.academy_wide is missing or bedo_runtime cannot set it (nothing was kept)';
+  end if;
+  if exists (select 1 from app.group_settings s join app.conversations c on c.id = s.conversation_id where s.academy_wide and c.type <> 'channel') then
+    raise exception 'Stopped: a group was marked for everyone; only channels can be (nothing was kept)';
+  end if;
   insert into app_meta.schema_migrations (version, name, checksum) values
     ('20261006120000', 'd35_admin_password_owner_sql',
      'ce35f75dc26b4277f010930fb95a29994ff2a5bc2ccaa91970c3e6349bdb7961'),
@@ -1186,13 +1221,15 @@ begin
     ('20261018120000', 'open_signup',
      '9487561cec333a529aa6dbf755b3e498100292ca3f4ac2bd8196fffa77a88426'),
     ('20261019120000', 'site_monitoring',
-     'ba81bb2ab89c52a08b31f3211bea3f98fe42df3616a80464d61dc3bfc5c6dc91');
+     'ba81bb2ab89c52a08b31f3211bea3f98fe42df3616a80464d61dc3bfc5c6dc91'),
+    ('20261020120000', 'everyone_channels',
+     '4070d45138588d0ea841fd1abc60f2a51da125c76064fc6218a4d8335223b9d3');
 end
 $verify$;
 
 -- The result: every line should say "ok".
 select 'migrations recorded' as check_name,
-       case when (select count(*) from app_meta.schema_migrations) = 19 then 'ok' else 'NOT OK' end as result
+       case when (select count(*) from app_meta.schema_migrations) = 20 then 'ok' else 'NOT OK' end as result
 union all
 select 'bedo_api limits',
        case when (select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole

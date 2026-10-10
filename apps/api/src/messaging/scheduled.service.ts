@@ -19,6 +19,7 @@ import { MessagesService } from './messages.service.js';
 import { MessagingLimitsService } from './messaging-limits.service.js';
 import { type ChatAccess, PermissionService, type PostKind } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
+import { joinEveryoneChannels } from '../groups/everyone-channels.js';
 
 /** What a scheduled message sends, stored as JSON (D-40). Files and GIFs are already checked and kept. */
 interface ScheduledPayload {
@@ -48,6 +49,8 @@ export function dispatchToken(accessTokenSecret: string): string {
 
 /** Each server instance asks the database for due messages at most this often (from ordinary requests). */
 const POKE_EVERY_MS = 5_000;
+/** D-52: how often a server instance catches up on channels for everyone while requests come in. */
+const EVERYONE_EVERY_MS = 60_000;
 /** A message claimed for sending but not finished after this long (the instance stopped) is claimed again. */
 const STALE_SENDING_SECONDS = 120;
 const BATCH = 25;
@@ -69,6 +72,7 @@ const invalid = () => new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
 export class ScheduledService {
   private readonly logger = new Logger(ScheduledService.name);
   private nextPokeAt = 0;
+  private nextEveryoneAt = 0;
   private readonly expectedToken: Buffer;
 
   constructor(
@@ -257,9 +261,28 @@ export class ScheduledService {
 
   // ------------------------------------------------------------------------------------------ sending
 
+  /**
+   * D-52: adds whoever is missing from the channels for everyone (all of them, or one account's) in one statement, and
+   * tells their devices. Returns how many joined.
+   */
+  async joinEveryoneChannels(scope: { userId?: string } = {}): Promise<number> {
+    const joins = await joinEveryoneChannels(this.db, scope, { type: 'system', id: null });
+    if (joins.length > 0) {
+      await this.updateLog.run(async (_trx, updates) => {
+        for (const join of joins) updates.add({ userId: join.userId, kind: 'chat.info', chatId: join.conversationId });
+      });
+    }
+    return joins.length;
+  }
+
   /** Called for every API request; cheap unless a check is due (then it runs after the response). */
   poke(): void {
     const now = Date.now();
+    // D-52: channels for everyone do not wait for the scheduled function either.
+    if (now >= this.nextEveryoneAt) {
+      this.nextEveryoneAt = now + EVERYONE_EVERY_MS;
+      this.deferred.defer('channels for everyone', () => this.joinEveryoneChannels());
+    }
     if (now < this.nextPokeAt) return;
     this.nextPokeAt = now + POKE_EVERY_MS;
     this.deferred.defer('scheduled messages', async () => {

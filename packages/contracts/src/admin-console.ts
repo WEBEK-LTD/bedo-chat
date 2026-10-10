@@ -74,6 +74,8 @@ export const adminChatSummarySchema = z.object({
   type: z.enum(ADMIN_CHAT_TYPES),
   title: z.string(),
   public: z.boolean(),
+  /** D-52: a channel every academy account is in, new accounts included (always false for groups). */
+  everyone: z.boolean(),
   memberCount: z.number().int(),
   owner: userRefSchema.nullable(),
   createdAt: timestamp,
@@ -112,6 +114,8 @@ export const adminCreateChatBodySchema = z.object({
   /** A user owns every group and channel (admins are not chat members). */
   ownerUserId: uuid,
   isPublic: z.boolean().default(false),
+  /** D-52, channels only: every academy account becomes a subscriber, and every new account joins it. */
+  everyone: z.boolean().default(false),
   memberIds: z.array(uuid).max(50).refine((ids) => new Set(ids).size === ids.length, 'ids must be unique').default([]),
   reason: reasonSchema,
 });
@@ -120,6 +124,8 @@ export const adminUpdateChatBodySchema = z
     title: groupTitleSchema.optional(),
     description: groupDescriptionSchema.optional(),
     isPublic: z.boolean().optional(),
+    /** D-52, channels only. Turning it on adds every academy account (not people who left or were removed). */
+    everyone: z.boolean().optional(),
     defaultPermissions: z
       .array(z.enum(MEMBER_PERMISSIONS))
       .refine((list) => new Set(list).size === list.length, 'permissions must be unique')

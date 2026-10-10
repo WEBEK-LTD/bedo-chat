@@ -4248,6 +4248,7 @@ export type AdminChatsResponseChatsItem = {
   type: AdminChatsResponseChatsItemType;
   title: string;
   public: boolean;
+  everyone: boolean;
   memberCount: number;
   /** @nullable */
   owner: AdminChatsResponseChatsItemOwner;
@@ -4278,6 +4279,7 @@ export interface AdminCreateChatBody {
   description?: string;
   ownerUserId: string;
   isPublic?: boolean;
+  everyone?: boolean;
   /** @maxItems 50 */
   memberIds?: string[];
   /**
@@ -4414,6 +4416,7 @@ export interface AdminChatDetail {
   type: AdminChatDetailType;
   title: string;
   public: boolean;
+  everyone: boolean;
   memberCount: number;
   /** @nullable */
   owner: AdminChatDetailOwner;
@@ -4445,6 +4448,7 @@ export interface AdminUpdateChatBody {
   title?: string;
   description?: string;
   isPublic?: boolean;
+  everyone?: boolean;
   defaultPermissions?: AdminUpdateChatBodyDefaultPermissionsItem[];
   hideMemberCount?: boolean;
   hideMemberList?: boolean;

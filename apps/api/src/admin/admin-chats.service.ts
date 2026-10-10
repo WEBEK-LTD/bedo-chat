@@ -16,6 +16,7 @@ import { AppError } from '../common/app-error.js';
 import type { RequestInfo } from '../common/request-info.js';
 import { DatabaseService } from '../database/database.service.js';
 import { NotificationsService } from '../messaging/notifications.service.js';
+import { joinEveryoneChannels } from '../groups/everyone-channels.js';
 import { likePattern } from '../messaging/messages.service.js';
 import { type UpdateCollector, UpdateLogService } from '../messaging/update-log.service.js';
 import type { AdminContext } from './admin-auth.service.js';
@@ -60,6 +61,7 @@ export class AdminChatsService {
         'c.last_message_at',
         'c.deleted_at',
         sql<number>`(select count(*)::int from app.conversation_members m where m.conversation_id = c.id)`.as('members'),
+        sql<boolean>`coalesce((select s.academy_wide from app.group_settings s where s.conversation_id = c.id), false)`.as('everyone'),
         sql<string | null>`(select m.user_id::text from app.conversation_members m where m.conversation_id = c.id and m.role = 'owner')`.as('owner_id'),
       ])
       .where('c.type', 'in', query.type ? [query.type] : ['group', 'channel'])
@@ -80,6 +82,7 @@ export class AdminChatsService {
         type: row.type as ChatType,
         title: row.title ?? '',
         public: row.is_public,
+        everyone: row.type === 'channel' && row.everyone,
         memberCount: row.members,
         owner: row.owner_id ? (owners.get(row.owner_id) ?? null) : null,
         createdAt: iso(row.created_at)!,
@@ -187,8 +190,13 @@ export class AdminChatsService {
     await this.audit.admin(trx, { adminId: admin.adminId, action, targetType: 'conversation', targetId: chatId, ip: info.ip, userAgent: info.userAgent, metadata });
   }
 
-  async create(admin: AdminContext, body: { type: ChatType; title: string; description?: string | undefined; ownerUserId: string; isPublic: boolean; memberIds: string[]; reason: string }, info: RequestInfo): Promise<AdminChatDetail> {
-    if (body.type === 'group' && body.isPublic) throw invalid();
+  async create(
+    admin: AdminContext,
+    body: { type: ChatType; title: string; description?: string | undefined; ownerUserId: string; isPublic: boolean; everyone?: boolean | undefined; memberIds: string[]; reason: string },
+    info: RequestInfo,
+  ): Promise<AdminChatDetail> {
+    if (body.type === 'group' && (body.isPublic || body.everyone)) throw invalid();
+    const everyone = body.type === 'channel' && body.everyone === true;
     const limit = body.type === 'channel' ? CHANNEL_RULES.maxSubscribers : GROUP_RULES.maxMembers;
     if (body.memberIds.length + 1 > limit) throw new AppError(HttpStatus.CONFLICT, 'LIMIT_REACHED');
     const actor: Actor = { type: 'admin', id: admin.adminId };
@@ -206,7 +214,10 @@ export class AdminChatsService {
         .values({ type: body.type, title: body.title, description: body.description || null, is_public: body.type === 'channel' && body.isPublic, created_by: body.ownerUserId })
         .returning('id')
         .executeTakeFirstOrThrow();
-      await trx.insertInto('app.group_settings').values({ conversation_id: chat.id, ...(body.type === 'channel' ? { default_permissions: [] } : {}) }).execute();
+      await trx
+        .insertInto('app.group_settings')
+        .values({ conversation_id: chat.id, ...(body.type === 'channel' ? { default_permissions: [], academy_wide: everyone } : {}) })
+        .execute();
       await trx.insertInto('app.conversation_members').values({ conversation_id: chat.id, user_id: body.ownerUserId, role: 'owner' }).execute();
       await this.audit.membership(trx, { conversationId: chat.id, userId: body.ownerUserId, action: 'created', actor, details: { title: body.title, byAdmin: true } });
       const members = body.memberIds.filter((id) => id !== body.ownerUserId && usable.has(id));
@@ -217,8 +228,16 @@ export class AdminChatsService {
           .execute();
         for (const userId of members) await this.audit.membership(trx, { conversationId: chat.id, userId, action: 'added', actor });
       }
-      await this.record(trx, admin, `${body.type}.created`, chat.id, info, { title: body.title, ownerUserId: body.ownerUserId, members: members.length, reason: body.reason });
-      updates.addFor([body.ownerUserId, ...members], { kind: 'chat.info', chatId: chat.id });
+      // D-52: a channel for everyone gets every academy account now (no notification each; it shows in their list).
+      const joined = everyone ? (await joinEveryoneChannels(trx, { chatId: chat.id }, actor)).map((row) => row.userId) : [];
+      await this.record(trx, admin, `${body.type}.created`, chat.id, info, {
+        title: body.title,
+        ownerUserId: body.ownerUserId,
+        members: members.length + joined.length,
+        ...(everyone ? { everyone: true } : {}),
+        reason: body.reason,
+      });
+      updates.addFor([body.ownerUserId, ...members, ...joined], { kind: 'chat.info', chatId: chat.id });
       return { chatId: chat.id, added: members };
     });
     this.notifications.addedToChat(chatId, [body.ownerUserId, ...added], null);
@@ -228,13 +247,22 @@ export class AdminChatsService {
   async update(
     admin: AdminContext,
     chatId: string,
-    body: { title?: string | undefined; description?: string | undefined; isPublic?: boolean | undefined; defaultPermissions?: MemberPermission[] | undefined; hideMemberCount?: boolean | undefined; hideMemberList?: boolean | undefined; reason: string },
+    body: {
+      title?: string | undefined;
+      description?: string | undefined;
+      isPublic?: boolean | undefined;
+      everyone?: boolean | undefined;
+      defaultPermissions?: MemberPermission[] | undefined;
+      hideMemberCount?: boolean | undefined;
+      hideMemberList?: boolean | undefined;
+      reason: string;
+    },
     info: RequestInfo,
   ): Promise<AdminChatDetail> {
     await this.updateLog.run(async (trx, updates) => {
       const chat = await this.lockLive(trx, chatId);
       const groupOnly = body.defaultPermissions !== undefined || body.hideMemberCount !== undefined || body.hideMemberList !== undefined;
-      if ((chat.type === 'channel' && groupOnly) || (chat.type === 'group' && body.isPublic !== undefined)) throw invalid();
+      if ((chat.type === 'channel' && groupOnly) || (chat.type === 'group' && (body.isPublic !== undefined || body.everyone !== undefined))) throw invalid();
       if (body.title !== undefined || body.description !== undefined || body.isPublic !== undefined) {
         await trx
           .updateTable('app.conversations')
@@ -257,9 +285,15 @@ export class AdminChatsService {
           .where('conversation_id', '=', chatId)
           .execute();
       }
+      let joined: string[] = [];
+      if (body.everyone !== undefined) {
+        await trx.updateTable('app.group_settings').set({ academy_wide: body.everyone }).where('conversation_id', '=', chatId).execute();
+        // D-52: turning it on adds every academy account now; turning it off removes nobody.
+        if (body.everyone) joined = (await joinEveryoneChannels(trx, { chatId }, { type: 'admin', id: admin.adminId })).map((row) => row.userId);
+      }
       const { reason, ...change } = body;
-      await this.record(trx, admin, `${chat.type}.updated`, chatId, info, { change, reason });
-      await this.announce(trx, updates, chatId, false);
+      await this.record(trx, admin, `${chat.type}.updated`, chatId, info, { change, ...(joined.length > 0 ? { joined: joined.length } : {}), reason });
+      await this.announce(trx, updates, chatId, joined.length > 0);
     });
     return this.detail(chatId);
   }

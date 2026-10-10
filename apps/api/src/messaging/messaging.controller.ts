@@ -44,6 +44,7 @@ import { RealtimeActivityService } from './realtime-activity.service.js';
 import { SafetyService } from './safety.service.js';
 import { SyncService } from './sync.service.js';
 import { UsersService } from './users.service.js';
+import { ScheduledService } from './scheduled.service.js';
 
 const uuid = z.string().uuid();
 
@@ -104,11 +105,14 @@ export class ChatsController {
   constructor(
     @Inject(ChatsService) private readonly chats: ChatsService,
     @Inject(MessagesService) private readonly messages: MessagesService,
+    @Inject(ScheduledService) private readonly scheduled: ScheduledService,
   ) {}
 
   @Get()
   @ResponseSchema(chatsResponseSchema)
   async list(@CurrentAuth() auth: AuthContext) {
+    // D-52: the whole chat list (first start, or a device far behind) always includes the channels for everyone.
+    await this.scheduled.joinEveryoneChannels({ userId: auth.userId }).catch(() => 0);
     return { chats: await this.chats.list(auth.userId) };
   }
 

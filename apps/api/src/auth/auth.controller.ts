@@ -24,6 +24,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { API_ENV } from '../config/tokens.js';
 import { AuditService } from '../audit/audit.service.js';
 import { DatabaseService } from '../database/database.service.js';
+import { joinEveryoneChannels } from '../groups/everyone-channels.js';
 import { assertCsrf } from '../security/csrf.js';
 import { AccountsService } from './accounts.service.js';
 import { clearRefreshCookie, setRefreshCookie } from './cookies.js';
@@ -240,6 +241,8 @@ export class AuthController {
         newValue: phone,
         actor: { type: 'system', id: null },
       });
+      // D-52: a new account joins the academy's channels for everyone right away (no device to tell yet).
+      await joinEveryoneChannels(trx, { userId: user.id }, { type: 'system', id: null });
       return user;
     });
   }
