@@ -19,3 +19,12 @@ the variable font, from the npm package `@fontsource-variable/figtree` 5.2.10).
 - Licence: SIL Open Font License 1.1 — the full text is in `apps/web/public/fonts/Figtree-OFL.txt`
 
 The font files are used unmodified.
+
+## Fluent Emoji
+
+The starter sticker packs (Phase 14.3), served from `apps/admin/public/starter-stickers` and uploaded through the
+Admin Dashboard: 578 images from the 3D style of Fluent Emoji, converted from PNG to WebP (256 x 256).
+
+- Source: https://github.com/microsoft/fluentui-emoji
+- Licence: MIT License, Copyright (c) Microsoft Corporation — the full text is in
+  `apps/admin/public/starter-stickers/LICENSE-Fluent-Emoji.txt`

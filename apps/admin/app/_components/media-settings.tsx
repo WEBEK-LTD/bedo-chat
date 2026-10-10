@@ -16,9 +16,13 @@ import { MEDIA_RULES } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { errorMessage, formatDateTime } from '../_lib/api';
+import { StarterStickers } from './starter-stickers';
 import { Button, FormError, Notice, TextField } from './ui';
 
 type Pack = AdminStickerPacksResponse['packs'][number];
+
+/** A pack shows this many stickers until it is opened, so a page of big packs loads quickly. */
+const PREVIEW_COUNT = 12;
 
 /** A sticker image as a data URL: the dashboard's security policy shows pictures only from itself or data URLs. */
 function StickerImage({ id, emoji }: { id: string; emoji: string }) {
@@ -58,6 +62,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState<{ packId: string; emoji: string; file: File | null } | null>(null);
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
 
   const fail = useCallback(
     (caught: unknown) => {
@@ -192,6 +197,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
             </Button>
           </form>
         ) : null}
+        {canChange && packs ? <StarterStickers packs={packs} onPacks={setPacks} onError={fail} disabled={busy} /> : null}
         {packs === null ? <p className="text-sm text-ink-secondary">Loading…</p> : null}
         {packs?.length === 0 ? <p className="text-sm text-ink-secondary">No sticker packs yet.</p> : null}
         {packs?.map((pack) => (
@@ -237,6 +243,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
               {pack.stickers.filter((sticker) => !sticker.removed).length === 0 ? <li className="text-sm text-ink-secondary">No stickers in this pack.</li> : null}
               {pack.stickers
                 .filter((sticker) => !sticker.removed)
+                .slice(0, expanded.has(pack.id) ? undefined : PREVIEW_COUNT)
                 .map((sticker) => (
                   <li key={sticker.id} className="relative flex flex-col items-center gap-1 rounded-sm border border-line bg-surface p-2">
                     <StickerImage id={sticker.id} emoji={sticker.emoji} />
@@ -257,6 +264,24 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
                   </li>
                 ))}
             </ul>
+            {pack.stickers.filter((sticker) => !sticker.removed).length > PREVIEW_COUNT ? (
+              <div>
+                <Button
+                  variant="ghost"
+                  className="h-9 px-3"
+                  onClick={() =>
+                    setExpanded((current) => {
+                      const next = new Set(current);
+                      if (next.has(pack.id)) next.delete(pack.id);
+                      else next.add(pack.id);
+                      return next;
+                    })
+                  }
+                >
+                  {expanded.has(pack.id) ? 'Show fewer' : `Show all ${pack.stickers.filter((sticker) => !sticker.removed).length} stickers`}
+                </Button>
+              </div>
+            ) : null}
           </article>
         ))}
       </section>

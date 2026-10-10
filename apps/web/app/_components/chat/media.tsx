@@ -614,18 +614,39 @@ export function ExpressionPicker({
           ) : packs.length === 0 ? (
             <p className="p-2 text-sm text-ink-secondary">No stickers yet.</p>
           ) : (
-            packs.map((pack) => (
-              <section key={pack.id} className="mb-2">
-                <h3 className="px-1 pb-1 text-xs font-medium text-ink-secondary">{pack.name}</h3>
-                <div className="grid grid-cols-4 gap-1">
-                  {pack.stickers.map((sticker) => (
-                    <button key={sticker.id} type="button" aria-label={`Send sticker ${sticker.emoji}`} onClick={() => onSticker(sticker)} className="grid aspect-square place-items-center rounded-sm p-1 hover:bg-surface-hover">
-                      <img src={sticker.url} alt={sticker.emoji} className="max-h-full max-w-full object-contain" loading="lazy" />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ))
+            <>
+              {/* Phase 14.3: one button per pack (its first sticker) jumps to it, like Telegram's pack strip. */}
+              {packs.length > 1 ? (
+                <nav aria-label="Sticker packs" className="sticky -top-2 z-[1] -mx-2 -mt-2 mb-2 flex gap-1 overflow-x-auto border-b border-line bg-surface px-2 py-1.5">
+                  {packs.map((pack) =>
+                    pack.stickers[0] ? (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        title={pack.name}
+                        aria-label={`Go to ${pack.name}`}
+                        onClick={() => document.getElementById(`sticker-pack-${pack.id}`)?.scrollIntoView({ block: 'start' })}
+                        className="grid size-9 shrink-0 place-items-center rounded-sm hover:bg-surface-hover"
+                      >
+                        <img src={pack.stickers[0].url} alt="" className="size-7 object-contain" />
+                      </button>
+                    ) : null,
+                  )}
+                </nav>
+              ) : null}
+              {packs.map((pack) => (
+                <section key={pack.id} id={`sticker-pack-${pack.id}`} className="mb-2 scroll-mt-12">
+                  <h3 className="px-1 pb-1 text-xs font-medium text-ink-secondary">{pack.name}</h3>
+                  <div className="grid grid-cols-4 gap-1">
+                    {pack.stickers.map((sticker) => (
+                      <button key={sticker.id} type="button" aria-label={`Send sticker ${sticker.emoji}`} onClick={() => onSticker(sticker)} className="grid aspect-square place-items-center rounded-sm p-1 hover:bg-surface-hover">
+                        <img src={sticker.url} alt={sticker.emoji} className="max-h-full max-w-full object-contain" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </>
           )
         ) : null}
         {tab === 'gifs' ? (
