@@ -15,7 +15,7 @@ android {
 
     defaultConfig {
         applicationId 'com.bedochat.app'
-        minSdk 23
+        minSdk 24
         targetSdk 36
         versionCode buildNumber
         versionName "1.0 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
