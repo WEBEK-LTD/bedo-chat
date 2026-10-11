@@ -69,7 +69,7 @@ def remove_previous() -> None:
     for profile in profiles:
         if not profile['attributes']['name'].startswith(PREFIX):
             continue
-        certificates = call('GET', f"/profiles/{profile['id']}/certificates?limit=50").get('data', [])
+        certificates = call('GET', f"/profiles/{profile['id']}/certificates").get('data', [])
         call('DELETE', f"/profiles/{profile['id']}")
         for certificate in certificates:
             call('DELETE', f"/certificates/{certificate['id']}")
@@ -87,7 +87,7 @@ def setup(workdir: str) -> None:
         print(f'::error title=Apple signing::the bundle ID {bundle} is not registered (Certificates, Identifiers & Profiles)')
         sys.exit(1)
     bundle_id = bundle_ids[0]['id']
-    capabilities = call('GET', f'/bundleIds/{bundle_id}/bundleIdCapabilities?limit=50').get('data', [])
+    capabilities = call('GET', f'/bundleIds/{bundle_id}/bundleIdCapabilities').get('data', [])
     if not any(item['attributes']['capabilityType'] == 'PUSH_NOTIFICATIONS' for item in capabilities):
         call('POST', '/bundleIdCapabilities', {'data': {
             'type': 'bundleIdCapabilities',
