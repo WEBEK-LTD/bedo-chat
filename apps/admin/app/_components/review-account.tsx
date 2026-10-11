@@ -1,7 +1,7 @@
 'use client';
 
 import { adminReviewAccount, adminSetReviewAccount, type AdminReviewAccount } from '@bedo/api-client';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { errorMessage, formatDateTime } from '../_lib/api';
 import { Button, FormError, Notice, TextField } from './ui';
 
@@ -17,7 +17,8 @@ export function ReviewAccount({ onSessionError }: { onSessionError: (error: unkn
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     adminReviewAccount()
       .then((loaded) => {
         setSettings(loaded);
@@ -26,9 +27,12 @@ export function ReviewAccount({ onSessionError }: { onSessionError: (error: unkn
       })
       .catch((caught: unknown) => {
         onSessionError(caught);
-        setError(errorMessage(caught));
+        const code = (caught as { code?: unknown; status?: unknown }).code ?? (caught as { status?: unknown }).status;
+        setError(`${errorMessage(caught)}${typeof code === 'string' || typeof code === 'number' ? ` (${code})` : ''}`);
       });
   }, [onSessionError]);
+
+  useEffect(load, [load]);
 
   async function save(enabled: boolean, event?: FormEvent) {
     event?.preventDefault();
@@ -64,7 +68,14 @@ export function ReviewAccount({ onSessionError }: { onSessionError: (error: unkn
         on, the number below signs in to the student app with the code below instead. Every other number still gets a WhatsApp code. Turn it off
         when the review is over.
       </p>
-      {!settings ? (
+      {!settings && error ? (
+        <div className="flex flex-col items-start gap-2">
+          <FormError message={`Could not load the review account: ${error}`} />
+          <Button variant="secondary" onClick={load}>
+            Try again
+          </Button>
+        </div>
+      ) : !settings ? (
         <p className="text-sm text-ink-secondary">Loading…</p>
       ) : (
         <>
