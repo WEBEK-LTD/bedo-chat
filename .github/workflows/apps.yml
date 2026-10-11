@@ -110,18 +110,26 @@ jobs:
           printf '%s\n' "$ASC_KEY" > "$KEY"
           AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
           sed "s/TEAM_ID/${APPLE_TEAM_ID}/" ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
-          # The archive is signed locally only (with its entitlements, push included): Apple's automatic signing would
-          # need a development profile, which needs a registered device. The export below signs it for the App Store
-          # with Apple's cloud-managed distribution certificate, using the App Store Connect API key.
+          # The archive is not signed here: Apple's automatic signing would want a development profile, which needs a
+          # registered device. The export signs the app for the App Store with Apple's cloud-managed distribution
+          # certificate (App Store Connect API key) and the entitlements of BedoChat/Release.entitlements (push).
           xcodebuild archive -project BedoChat.xcodeproj -scheme BedoChat -configuration Release \
             -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/BedoChat.xcarchive" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
-            CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO PROVISIONING_PROFILE_SPECIFIER= 2>&1 | tee "$RUNNER_TEMP/xcode.log" || report
-          ENTITLEMENTS=$(codesign -d --entitlements - --xml "$RUNNER_TEMP/BedoChat.xcarchive/Products/Applications/BedoChat.app" 2>/dev/null | tr -d '\n')
-          echo "$ENTITLEMENTS" | grep -q 'aps-environment' || { echo "::error title=iPhone app::the archive has no push entitlement"; exit 1; }
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$RUNNER_TEMP/xcode.log" || report
           xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/BedoChat.xcarchive" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}" 2>&1 | tee "$RUNNER_TEMP/xcode.log" || report
+          IPA=$(ls "$RUNNER_TEMP"/export/*.ipa)
+          # Check the signed app before it goes to Apple: App Store signature, push entitlement (production).
+          mkdir -p "$RUNNER_TEMP/ipa" && unzip -q "$IPA" -d "$RUNNER_TEMP/ipa"
+          APP=$(ls -d "$RUNNER_TEMP"/ipa/Payload/*.app)
+          codesign -d --entitlements - --xml "$APP" 2>/dev/null > "$RUNNER_TEMP/entitlements.xml" || true
+          grep -q 'aps-environment' "$RUNNER_TEMP/entitlements.xml" || { echo "::error title=iPhone app::the signed app has no push entitlement"; exit 1; }
+          echo "::notice title=iPhone app::$(codesign -dvv "$APP" 2>&1 | grep -m1 '^Authority=') · $(plutil -extract aps-environment raw "$RUNNER_TEMP/entitlements.xml" 2>/dev/null || grep -o 'production\|development' "$RUNNER_TEMP/entitlements.xml" | head -1)"
+          mkdir -p ~/.appstoreconnect/private_keys && cp "$KEY" ~/.appstoreconnect/private_keys/
+          xcrun altool --upload-app --type ios -f "$IPA" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/xcode.log" || report
           echo "::notice title=iPhone app::Build $GITHUB_RUN_NUMBER uploaded to App Store Connect (TestFlight shows it after Apple's processing)."
+          rm -rf ~/.appstoreconnect/private_keys
           rm -f "$KEY"
 
       - name: Test build (no App Store Connect key in the repository's secrets)

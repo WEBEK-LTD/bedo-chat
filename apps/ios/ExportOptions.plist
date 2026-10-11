@@ -2,11 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Upload the build to App Store Connect (TestFlight), signed automatically with the App Store Connect API key. -->
+	<!-- An App Store build, signed automatically with the App Store Connect API key; the workflow checks it, then uploads it. -->
 	<key>method</key>
 	<string>app-store-connect</string>
 	<key>destination</key>
-	<string>upload</string>
+	<string>export</string>
 	<key>signingStyle</key>
 	<string>automatic</string>
 	<key>teamID</key>
