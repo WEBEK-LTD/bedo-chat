@@ -54,7 +54,7 @@ No change to the apps? GitHub → **Actions** → **Apps** → **Run workflow** 
 4. Fill in the store listing, content rating, privacy policy and data safety, then promote the release to
    **Production**.
 
-Every new build needs a higher version number: GitHub gives each run the next number automatically.
+Every build gets a higher version number by itself (Google Play refuses a lower one), so any build can be uploaded.
 
 ---
 
@@ -114,7 +114,8 @@ more, Claude will help with the answer.
 
 ## C. Checking notifications
 
-1. Install the app and sign in. The app asks once to allow notifications: **Allow**.
+1. Install the app and sign in. The phone asks once to allow notifications: **Allow** (on older Android phones they are
+   simply on). If it does not ask, the chat list shows **Turn on notifications…**: tap **Turn on**.
 2. From another phone or a computer, send that account a message: the notification arrives with the sender and the
    text, also when the app is closed. Tapping it opens the chat.
 3. Settings → **Notifications** in the app shows "Notifications are on for this device", and turns them off and on

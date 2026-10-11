@@ -7,24 +7,72 @@ import { appEnablePush, appPushStatus, inIphoneApp } from './native-app';
 export type PushState = 'unsupported' | 'unavailable' | 'denied' | 'off' | 'on';
 
 const SW_URL = '/sw.js';
-/** D-53: in the iPhone app, "turned off in Settings → Notifications" is remembered here (iOS permission stays). */
-const APP_OFF_KEY = 'bedo-app-push-off';
+/**
+ * Turned off on this device in Settings → Notifications (D-55): remembered here so a start never turns them back on
+ * by itself. (The phone or browser permission may stay "allowed".) The older iPhone-app key is still read.
+ */
+const OFF_KEY = 'bedo-push-off';
+const OLD_APP_OFF_KEY = 'bedo-app-push-off';
+/** D-55: "Not now" on the banner that offers notifications hides it on this device for a week. */
+const SNOOZE_KEY = 'bedo-push-banner-snoozed-until';
+const SNOOZE_MS = 7 * 24 * 60 * 60 * 1000;
+/** D-55: this tab was opened by the Android app (Trusted Web Activity), remembered for the tab's reloads. */
+const ANDROID_APP_KEY = 'bedo-android-app';
+const ANDROID_APP_REFERRER = 'android-app://com.bedochat.app';
 
-function appTurnedOff(): boolean {
+function storage(kind: 'local' | 'session'): Storage | null {
   try {
-    return localStorage.getItem(APP_OFF_KEY) === '1';
+    return kind === 'local' ? localStorage : sessionStorage;
   } catch {
-    return false;
+    return null;
   }
 }
 
-function setAppTurnedOff(off: boolean): void {
+/** Whether notifications were turned off on this device in Settings. */
+export function pushTurnedOff(): boolean {
+  const local = storage('local');
+  return local?.getItem(OFF_KEY) === '1' || local?.getItem(OLD_APP_OFF_KEY) === '1';
+}
+
+function setTurnedOff(off: boolean): void {
+  const local = storage('local');
   try {
-    if (off) localStorage.setItem(APP_OFF_KEY, '1');
-    else localStorage.removeItem(APP_OFF_KEY);
+    if (off) local?.setItem(OFF_KEY, '1');
+    else {
+      local?.removeItem(OFF_KEY);
+      local?.removeItem(OLD_APP_OFF_KEY);
+    }
   } catch {
-    // Storage unavailable: the choice lasts until the app is closed.
+    // Storage full or blocked: the choice lasts until the page is closed.
   }
+}
+
+/** Whether the banner offering notifications was put off ("Not now") less than a week ago. */
+export function pushBannerSnoozed(): boolean {
+  return Number(storage('local')?.getItem(SNOOZE_KEY) ?? 0) > Date.now();
+}
+
+export function snoozePushBanner(): void {
+  try {
+    storage('local')?.setItem(SNOOZE_KEY, String(Date.now() + SNOOZE_MS));
+  } catch {
+    // Storage blocked: the banner comes back next time.
+  }
+}
+
+/** D-55: whether this page runs in the Bedo Chat Android app (opened by it, in this tab). */
+export function inAndroidApp(): boolean {
+  if (typeof document === 'undefined') return false;
+  const session = storage('session');
+  if (document.referrer.startsWith(ANDROID_APP_REFERRER)) {
+    try {
+      session?.setItem(ANDROID_APP_KEY, '1');
+    } catch {
+      // Storage blocked: only this page load counts.
+    }
+    return true;
+  }
+  return session?.getItem(ANDROID_APP_KEY) === '1';
 }
 
 /** The iPhone app's device address, saved with this session like a browser's (D-53: no table changes). */
@@ -65,7 +113,7 @@ export async function pushState(): Promise<PushState> {
   if (inIphoneApp()) {
     const app = await appPushStatus();
     if (app.permission === 'denied') return 'denied';
-    return app.permission === 'granted' && app.endpoint && !appTurnedOff() ? 'on' : 'off';
+    return app.permission === 'granted' && app.endpoint && !pushTurnedOff() ? 'on' : 'off';
   }
   if (!supported()) return 'unsupported';
   if (!(await vapidKey())) return 'unavailable';
@@ -81,44 +129,66 @@ export async function enablePush(): Promise<PushState> {
     if (app.permission !== 'granted') return app.permission === 'denied' ? 'denied' : 'off';
     if (!app.endpoint) return 'unavailable';
     await saveAppEndpoint(app.endpoint);
-    setAppTurnedOff(false);
+    setTurnedOff(false);
     return 'on';
   }
   if (!supported()) return 'unsupported';
   const key = await vapidKey();
   if (!key) return 'unavailable';
-  const permission = await Notification.requestPermission();
+  const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';
+  await subscribe(key);
+  setTurnedOff(false);
+  return 'on';
+}
+
+/** Registers this browser with the push service (permission already given) and links it to this session. */
+async function subscribe(key: string): Promise<void> {
   const registration = await navigator.serviceWorker.register(SW_URL);
   await navigator.serviceWorker.ready;
   const subscription =
     (await registration.pushManager.getSubscription()) ??
     (await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlToBytes(key) }));
   await save(subscription);
-  return 'on';
 }
 
-/** After sign-in: if this browser already allows notifications, link its subscription to the new session. */
-export async function resumePush(): Promise<void> {
+/**
+ * On every start once signed in (D-55), unless turned off on this device in Settings: where notifications are
+ * allowed, this device is registered and linked to the session at once (no button to press); the apps ask for the
+ * permission themselves the first time (the iPhone app, and the Android app on Android 13 and later). Answers the
+ * resulting state, so the chat screen can offer the button where a browser still has to ask.
+ */
+export async function resumePush(): Promise<PushState> {
   if (inIphoneApp()) {
-    // On every start: Apple may have given the app a new address. The first start asks for permission once.
-    if (appTurnedOff()) return;
+    // Apple may have given the app a new address. The first start asks for permission once.
+    if (pushTurnedOff()) return 'off';
     const app = await appPushStatus();
-    if (app.permission === 'denied') return;
+    if (app.permission === 'denied') return 'denied';
     const ready = app.permission === 'granted' && app.endpoint ? app : await appEnablePush();
-    if (ready.permission === 'granted' && ready.endpoint) await saveAppEndpoint(ready.endpoint);
-    return;
+    if (ready.permission === 'granted' && ready.endpoint) {
+      await saveAppEndpoint(ready.endpoint);
+      return 'on';
+    }
+    return ready.permission === 'denied' ? 'denied' : 'off';
   }
-  if (!supported() || Notification.permission !== 'granted') return;
-  const subscription = await existingSubscription();
-  if (subscription) {
-    await save(subscription);
+  if (!supported()) return 'unsupported';
+  if (Notification.permission === 'denied') return 'denied';
+  if (pushTurnedOff()) return 'off';
+  const key = await vapidKey();
+  if (!key) return 'unavailable';
+  if (Notification.permission === 'granted') {
+    await subscribe(key);
+    return 'on';
   }
+  // The Android app hands the question to Android ("Allow Bedo Chat to send you notifications?"). A browser tab is
+  // never asked without a click: the chat screen shows a button instead.
+  if (inAndroidApp()) return enablePush().catch(() => 'off' as const);
+  return 'off';
 }
 
 export async function disablePush(): Promise<PushState> {
   await removePushSubscription();
-  if (inIphoneApp()) setAppTurnedOff(true);
+  setTurnedOff(true);
   await unsubscribeThisBrowser();
   return 'off';
 }
@@ -128,3 +198,6 @@ export async function unsubscribeThisBrowser(): Promise<void> {
   const subscription = await existingSubscription();
   await subscription?.unsubscribe();
 }
+
+// D-55: remember a start from the Android app before any client-side navigation.
+if (typeof window !== 'undefined') inAndroidApp();

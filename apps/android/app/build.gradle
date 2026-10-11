@@ -4,7 +4,9 @@ plugins {
 
 // The site the app opens, and the version numbers GitHub Actions gives each build.
 def siteUrl = 'https://bedochat.com'
-def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+// Google Play needs a higher version code for every upload, whichever workflow or computer built it: the minutes since
+// 2026-01-01 (UTC) at build time always grow.
+def buildNumber = ((System.currentTimeMillis() - 1767225600000L) / 60000L) as Integer
 def keystorePath = System.getenv('BEDO_ANDROID_KEYSTORE')
 
 android {
@@ -16,7 +18,7 @@ android {
         minSdk 23
         targetSdk 36
         versionCode buildNumber
-        versionName "1.0.${buildNumber}"
+        versionName "1.0 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
         manifestPlaceholders = [
             hostName       : 'bedochat.com',
             launchUrl      : "${siteUrl}/",

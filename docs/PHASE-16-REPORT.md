@@ -53,3 +53,30 @@ and both apps. `scripts/build-app-icons.mjs` makes every file from `apps/web/pub
 Checks: the browser test now loads every brand file from the site as an image and checks that exactly one version
 of the logo shows, loaded, on both sign-in pages in light and dark mode, with no Content-Security-Policy refusal.
 
+## Phase 16.2 — Android version numbers
+
+The Android version code is the number of minutes since 2026-01-01 at build time, so every build, from any workflow
+run or computer, is higher than the one before and Google Play accepts it; the version name shows the build date,
+e.g. "1.0 (2026.10.11)". The first signed builds (`bedo-chat-android.apk`, `bedo-chat-google-play.aab`) were signed
+with the upload key and checked: one signer, certificate SHA-256 `D4:F8:…:31:F2`, the one in
+`/.well-known/assetlinks.json`.
+
+## Phase 16.3 — notifications on from the start (D-55)
+
+Before, notifications started only after Settings → Notifications → Turn on. Now, on every start once signed in
+(`resumePush` in `apps/web/app/_lib/push.ts`):
+
+| Device | What happens |
+| --- | --- |
+| Already allowed (Android app on Android 12 and earlier, where the app's notifications are on; a browser that allowed them) | Registered and linked to the session at once, no button |
+| Android app, Android 13 and later | Android's own question "Allow Bedo Chat to send you notifications?" on the first start; the button below if the phone did not ask |
+| iPhone app | iOS's question on the first start (as in Phase 16) |
+| Browser that has not asked yet | A banner at the top of the chat list: "Turn on notifications…" with **Turn on** (one click asks and registers) and **Not now** (hidden on this device for 7 days) |
+| Turned off in Settings on this device | Stays off: no automatic registration, no banner |
+
+The Android app is recognised from the page's referrer (`android-app://com.bedochat.app`), remembered for the tab.
+Browser test `push-offer.e2e.test.ts` (with a stand-in for the browser's push service, saved through the real API):
+allowed device registered at sign-in without a banner; turned off in Settings stays off after a reload; the banner's
+Turn on registers the device; Not now hides it for a week. Not testable here: the Android permission dialog itself,
+which needs a phone.
+

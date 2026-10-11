@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { MessagingProvider, useMessaging, useMessagingStore } from '../_lib/messaging/context';
 import { appSetBadge } from '../_lib/native-app';
-import { resumePush } from '../_lib/push';
+import { enablePush, pushBannerSnoozed, pushTurnedOff, resumePush, snoozePushBanner } from '../_lib/push';
 import { useSession } from '../_lib/session';
 import { ChatList } from './chat/chat-list';
 import { ChatView } from './chat/chat-view';
@@ -27,6 +27,8 @@ export function ChatShell() {
   const { state } = useSession();
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const [alert, setAlert] = useState<SecurityNotice | null>(null);
+  /** D-55: notifications are not on for this device yet and a click is needed to ask: offer the button. */
+  const [offerPush, setOfferPush] = useState(false);
 
   useEffect(() => {
     if (state.status === 'signedOut' || (state.status === 'signedIn' && !state.me.profileComplete)) {
@@ -51,7 +53,9 @@ export function ChatShell() {
   useEffect(() => {
     if (!signedIn) return;
     void loadAlerts().catch(() => undefined);
-    void resumePush().catch(() => undefined);
+    void resumePush()
+      .then((push) => setOfferPush(push === 'off' && !pushTurnedOff() && !pushBannerSnoozed()))
+      .catch(() => undefined);
     const onFocus = () => void loadAlerts().catch(() => undefined);
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
@@ -61,6 +65,11 @@ export function ChatShell() {
     return <div className="grid h-full place-items-center text-sm text-ink-secondary">Loading…</div>;
   }
   const me = state.me;
+
+  async function turnOnPush() {
+    const push = await enablePush().catch(() => 'off' as const);
+    if (push !== 'off') setOfferPush(false);
+  }
 
   async function dismissAlert() {
     if (!alert) return;
@@ -75,6 +84,12 @@ export function ChatShell() {
         deletionRequested={me.status === 'deletion_requested'}
         alert={alert}
         onDismissAlert={() => void dismissAlert()}
+        offerPush={offerPush}
+        onTurnOnPush={() => void turnOnPush()}
+        onSnoozePush={() => {
+          snoozePushBanner();
+          setOfferPush(false);
+        }}
         onOpenSettings={setSettings}
         settings={
           settings ? (
@@ -99,6 +114,9 @@ function ChatArea({
   deletionRequested,
   alert,
   onDismissAlert,
+  offerPush,
+  onTurnOnPush,
+  onSnoozePush,
   onOpenSettings,
   settings,
 }: {
@@ -106,6 +124,9 @@ function ChatArea({
   deletionRequested: boolean;
   alert: SecurityNotice | null;
   onDismissAlert: () => void;
+  offerPush: boolean;
+  onTurnOnPush: () => void;
+  onSnoozePush: () => void;
   onOpenSettings: (section: SettingsSection) => void;
   settings: ReactNode;
 }) {
@@ -243,6 +264,23 @@ function ChatArea({
                   Review devices
                 </Button>
               ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {offerPush ? (
+          <div role="region" aria-label="Get notifications" className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-line bg-accent-soft/50 p-3 text-sm">
+            <div className="flex items-start gap-2">
+              <Icon name="notifications_active" size={20} className="shrink-0 text-accent" />
+              <span>Turn on notifications to know when new messages arrive, even when Bedo Chat is closed.</span>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" className="h-8 px-2" onClick={onSnoozePush}>
+                Not now
+              </Button>
+              <Button className="h-8 px-3" onClick={onTurnOnPush}>
+                Turn on
+              </Button>
             </div>
           </div>
         ) : null}
