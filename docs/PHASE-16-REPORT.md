@@ -96,3 +96,12 @@ Browser (`admin-bootstrap.e2e.test.ts`): a Super Admin turns it on, a reviewer s
 number and code, then it is turned off. The update script was run on a database in the live state: every line "ok",
 and refused when run twice.
 
+## Phase 16.7 — iPhone builds reach App Store Connect
+
+Apple's automatic signing on the build machine wanted a development profile, which needs a registered device. The
+workflow now signs through the App Store Connect API key instead (`apps/ios/ci/signing.py`: one Apple Distribution
+certificate and one App Store profile per build, the previous build's removed), uses Xcode 26 or later (uploads need
+the iOS 26 SDK), checks the signed app (Apple Distribution signature, push entitlement "production") and uploads it
+with `altool`. Xcode's error lines appear in the run's summary. Verified on the owner's account: build 16 signed by
+"Apple Distribution: ABDELRAHMAN MAHMOUD", push production, uploaded to App Store Connect.
+

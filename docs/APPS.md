@@ -86,7 +86,7 @@ notifications; the website is not affected either way.
 1. **Apps** → **+** → **New App** → iOS, name **Bedo Chat**, language English, Bundle ID `com.bedochat.app`,
    SKU `bedochat` → Create.
 2. **Users and Access** → **Integrations** → **App Store Connect API** → **Team Keys** → **+** → name
-   `GitHub builds`, access **App Manager** → Generate → **Download** the `.p8` (once only). Note the **Key ID** and,
+   `GitHub builds`, access **Admin** (it makes the signing certificate and profile) → Generate → **Download** the `.p8` (once only). Note the **Key ID** and,
    above the list, the **Issuer ID**.
 
 ### B4. GitHub secrets (once)
@@ -141,4 +141,13 @@ Reviewers cannot receive a WhatsApp code, so the stores need sign-in details tha
 3. Apple (App Store Connect → the version → App Review Information → Sign-in required): the same number as user name,
    the code as password, and the same note.
 4. Keep it on while the app is in review (Google reviews every update too). Turn it off any time; its sessions end.
+
+## E. How the iPhone build is signed
+
+Each run of **Apps** with the App Store Connect key makes, through that key, an Apple Distribution certificate (its
+private key is made on the build machine and never stored) and an App Store profile named `Bedo Chat CI <number>`,
+signs the app with them using Xcode 26 or later (Apple's requirement for uploads), checks that the signed app has the
+push entitlement, and uploads it to App Store Connect. The next run removes the previous run's certificate and profile
+(only those named `Bedo Chat CI ...`), so the account never collects them. No device has to be registered and no Mac is
+needed (`apps/ios/ci/signing.py`).
 
