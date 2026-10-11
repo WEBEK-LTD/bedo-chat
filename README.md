@@ -20,6 +20,8 @@ server functions at `/api`. Phase reports: `docs/PHASE-*-REPORT.md`; the latest 
 | `apps/api` | NestJS 12 API on Fastify 5, run inside the website (D-36: `src/serverless.ts`, no port): accounts, admin, messaging, realtime signals, WhatsApp (Waabek) and Web Push delivery, hourly housekeeping, OpenAPI document |
 | `apps/web` | Next.js 16 website: the user app with exactly two pages, `/login` and `/` (chat interface), and the route `/api/[[...path]]` that serves the API |
 | `apps/admin` | Next.js 16 Admin Dashboard, a separate app; its static export is served by the same site under `/admin` |
+| `apps/android` | Android app (D-53): a Trusted Web Activity that opens https://bedochat.com; built by `.github/workflows/apps.yml` |
+| `apps/ios` | iPhone app (D-53): a web view of https://bedochat.com with Apple push notifications; XcodeGen project built by `.github/workflows/apps.yml` |
 | `packages/config` | Zod-validated environment variables; list of server-only variables |
 | `packages/contracts` | Zod schemas shared by the API and the apps; builds the OpenAPI 3.1 document |
 | `packages/db` | Kysely database access and the checksummed SQL migration runner |
@@ -27,7 +29,7 @@ server functions at `/api`. Phase reports: `docs/PHASE-*-REPORT.md`; the latest 
 | `packages/e2e` | Browser tests of the built site (web app, Admin Dashboard and API) against real Postgres (`pnpm e2e`) |
 | `supabase/migrations` | SQL migrations (Supabase file naming), applied by `@bedo/db` |
 | `scripts` | Repository checks: allowed web routes, client-bundle secret guard, one-site and CSP tests |
-| `docs` | Decision log, phase reports and the deployment guide |
+| `docs` | Decision log, phase reports, the deployment guide and the apps guide (`docs/APPS.md`) |
 
 ## Prerequisites
 

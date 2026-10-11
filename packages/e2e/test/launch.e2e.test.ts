@@ -95,11 +95,39 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     expect(manifest.status).toBe(200);
     expect(manifest.body).toMatchObject({ name: 'Bedo Chat', display: 'standalone', start_url: '/' });
     expect(manifest.body.icons.map((icon) => `${icon.sizes} ${icon.purpose}`)).toEqual(['192x192 any', '512x512 any', '512x512 maskable']);
-    for (const path of [...manifest.body.icons.map((icon) => icon.src), '/icons/apple-touch-icon.png', '/favicon.ico']) {
+    // D-54: the brand files too (logo, icon, the notification badge).
+    const brand = ['/icons/bedo-icon.svg', '/icons/bedo-chat-logo.svg', '/icons/bedo-chat-logo-white.svg', '/icons/badge-96.png'];
+    for (const path of [...manifest.body.icons.map((icon) => icon.src), '/icons/apple-touch-icon.png', '/favicon.ico', ...brand]) {
       const response = await fetch(`${SITE_URL}${path}`);
       expect(response.status, path).toBe(200);
       expect(response.headers.get('content-type'), path).toMatch(/^image\//);
     }
+  });
+
+  it('D-54: shows the Bedo Chat logo on both sign-in pages, navy on light screens and white on dark ones', async () => {
+    for (const [url, scheme, file] of [
+      [`${WEB_URL}/login`, 'light', 'bedo-chat-logo.svg'],
+      [`${WEB_URL}/login`, 'dark', 'bedo-chat-logo-white.svg'],
+      [`${ADMIN_URL}/login`, 'light', 'bedo-chat-logo.svg'],
+      [`${ADMIN_URL}/login`, 'dark', 'bedo-chat-logo-white.svg'],
+    ] as const) {
+      const context = await browser.newContext({ ...PHONE, colorScheme: scheme });
+      contexts.push(context);
+      const page = await context.newPage();
+      page.on('console', (message) => {
+        if (/Content.Security.Policy|Refused to/i.test(message.text())) violations.push(`logo ${url}: ${message.text()}`);
+      });
+      await page.goto(url);
+      const logo = page.getByRole('img', { name: 'Bedo Chat, Australian Dental Academy' });
+      await logo.waitFor();
+      // Exactly one of the two versions shows, and it is loaded.
+      const shown = await logo.locator('img').evaluateAll((images) =>
+        (images as HTMLImageElement[]).filter((img) => img.getBoundingClientRect().width > 0).map((img) => ({ src: img.src, loaded: img.complete && img.naturalWidth > 0 })),
+      );
+      expect(shown, `${url} ${scheme}`).toEqual([{ src: expect.stringContaining(`/icons/${file}`), loaded: true }]);
+      await shot(page, `135-logo-${url.includes('/admin') ? 'admin' : 'web'}-${scheme}`);
+    }
+    expect(violations).toEqual([]);
   });
 
   it('fits every main screen of the student app on a phone', async () => {

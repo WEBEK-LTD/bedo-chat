@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The site the app opens, and the version numbers GitHub Actions gives each build.
+def siteUrl = 'https://bedochat.com'
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer
+def keystorePath = System.getenv('BEDO_ANDROID_KEYSTORE')
+
+android {
+    namespace 'com.bedochat.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.bedochat.app'
+        minSdk 23
+        targetSdk 36
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+        manifestPlaceholders = [
+            hostName       : 'bedochat.com',
+            launchUrl      : "${siteUrl}/",
+            assetStatements: '[{"relation": ["delegate_permission/common.handle_all_urls"], "target": {"namespace": "web", "site": "' + siteUrl + '"}}]',
+        ]
+    }
+
+    signingConfigs {
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword System.getenv('BEDO_ANDROID_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('BEDO_ANDROID_KEY_ALIAS') ?: 'upload'
+                keyPassword System.getenv('BEDO_ANDROID_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystorePath) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

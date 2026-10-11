@@ -7,7 +7,14 @@ export const metadata: Metadata = {
   title: 'Bedo Chat Admin',
   robots: { index: false, follow: false },
   // Phase 13: the site's favicon (apps/web/public), served from the same site.
-  icons: { icon: [{ url: '/favicon.ico', sizes: '32x32' }] },
+  // D-54: the Bedo Chat brand icon.
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
+      { url: '/icons/bedo-icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
+  },
 };
 
 export const viewport: Viewport = {

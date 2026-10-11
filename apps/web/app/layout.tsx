@@ -16,7 +16,9 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: '32x32' },
+      // D-54: the Bedo Chat brand icon.
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
+      { url: '/icons/bedo-icon.svg', type: 'image/svg+xml' },
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],

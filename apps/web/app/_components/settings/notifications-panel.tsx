@@ -11,6 +11,7 @@ import type { NotificationSettings } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
 import { useCallback, useEffect, useState } from 'react';
 import { errorMessage } from '../../_lib/api';
+import { appOpenSettings, inIphoneApp } from '../../_lib/native-app';
 import { disablePush, enablePush, type PushState, pushState } from '../../_lib/push';
 import { Button, FormError, formatDateTime, Notice } from '../ui';
 
@@ -39,6 +40,9 @@ const PUSH_TEXT: Record<PushState, string> = {
   off: 'Get notifications on this device for new messages, mentions and replies, and when someone signs in to your account.',
   on: 'Notifications are on for this device.',
 };
+
+/** D-53: in the iPhone app the permission belongs to the app, in the iPhone's Settings. */
+const APP_DENIED_TEXT = 'Notifications are off for Bedo Chat. Turn them on in Settings → Bedo Chat → Notifications, then come back here.';
 
 const SETTING_LABELS: Array<[keyof NotificationSettings, string, string]> = [
   ['privateChats', 'Private chats', 'New messages from one person'],
@@ -108,7 +112,12 @@ export function NotificationsPanel() {
         <h3 className="text-sm font-semibold">Notifications on this device</h3>
         {push ? (
           <>
-            <Notice tone={push === 'denied' ? 'warning' : 'info'}>{PUSH_TEXT[push]}</Notice>
+            <Notice tone={push === 'denied' ? 'warning' : 'info'}>{push === 'denied' && inIphoneApp() ? APP_DENIED_TEXT : PUSH_TEXT[push]}</Notice>
+            {push === 'denied' && inIphoneApp() ? (
+              <Button variant="secondary" onClick={() => appOpenSettings()}>
+                Open Settings
+              </Button>
+            ) : null}
             {push === 'off' || push === 'on' ? (
               <Button variant={push === 'on' ? 'secondary' : 'primary'} busy={busy} onClick={() => void togglePush()}>
                 {push === 'on' ? 'Turn off notifications' : 'Turn on notifications'}

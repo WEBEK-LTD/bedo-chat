@@ -1,11 +1,12 @@
 'use client';
 
 import { listSecurityNotices, markSecurityNoticesRead, type SecurityNoticesResponseNoticesItem as SecurityNotice } from '@bedo/api-client';
-import { Icon } from '@bedo/ui';
+import { BrandIcon, Icon } from '@bedo/ui';
 import { badgeCount } from '@bedo/contracts';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { MessagingProvider, useMessaging, useMessagingStore } from '../_lib/messaging/context';
+import { appSetBadge } from '../_lib/native-app';
 import { resumePush } from '../_lib/push';
 import { useSession } from '../_lib/session';
 import { ChatList } from './chat/chat-list';
@@ -153,8 +154,17 @@ function ChatArea({
       const data = event.data as { type?: string; url?: string } | null;
       if (data?.type === 'bedo-open' && typeof data.url === 'string') open(data.url);
     };
+    // D-53: the iPhone app, when a notification is tapped while the app is open.
+    const onAppOpen = (event: Event) => {
+      const url = (event as CustomEvent<unknown>).detail;
+      if (typeof url === 'string') open(url);
+    };
     navigator.serviceWorker?.addEventListener('message', onMessage);
-    return () => navigator.serviceWorker?.removeEventListener('message', onMessage);
+    window.addEventListener('bedo-app-open', onAppOpen);
+    return () => {
+      navigator.serviceWorker?.removeEventListener('message', onMessage);
+      window.removeEventListener('bedo-app-open', onAppOpen);
+    };
   }, []);
   // Phase 7: the badge (tab title and app icon) from the server's unread counts, the same on every device (D-41).
   const badge = badgeCount(Object.values(messaging.chats));
@@ -162,6 +172,7 @@ function ChatArea({
     document.title = badge > 0 ? `(${badge}) Bedo Chat` : 'Bedo Chat';
     const nav = navigator as Navigator & { setAppBadge?: (count: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     void (badge > 0 ? nav.setAppBadge?.(badge) : nav.clearAppBadge?.())?.catch(() => undefined);
+    appSetBadge(badge);
   }, [badge]);
   // A chat that disappears (left, removed, group deleted) closes.
   useEffect(() => {
@@ -265,7 +276,10 @@ function ChatArea({
             onNotice={showNotice}
           />
         ) : (
-          <p className="rounded-full bg-scrim/30 px-4 py-1.5 text-sm font-medium text-white">Select a chat to start messaging.</p>
+          <div className="flex flex-col items-center gap-4">
+            <BrandIcon size={88} className="opacity-90 drop-shadow-md" />
+            <p className="rounded-full bg-scrim/30 px-4 py-1.5 text-sm font-medium text-white">Select a chat to start messaging.</p>
+          </div>
         )}
       </main>
 

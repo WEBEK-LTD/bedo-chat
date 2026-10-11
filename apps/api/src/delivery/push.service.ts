@@ -5,6 +5,7 @@ import { decryptAtRest, encryptAtRest, parseAes256Key } from '@bedo/server-crypt
 import { sql } from 'kysely';
 import webpush from 'web-push';
 import { API_ENV } from '../config/tokens.js';
+import { ApnsClient, isApnsDeviceUrl } from './apns.js';
 import { DatabaseService } from '../database/database.service.js';
 import { DeferredTasks } from '../runtime/deferred-tasks.service.js';
 
@@ -44,6 +45,8 @@ export class WebPushSender extends PushSender {
   private readonly subject: string;
   private readonly settingsKey: Buffer;
   private stored: Promise<Vapid> | null = null;
+  /** D-53: the iPhone app's devices, reached through Apple rather than a browser push service. */
+  private readonly apns: ApnsClient;
 
   constructor(
     @Inject(API_ENV) env: ApiEnv,
@@ -56,6 +59,7 @@ export class WebPushSender extends PushSender {
         : null;
     this.subject = env.VAPID_SUBJECT ?? DEFAULT_VAPID_SUBJECT;
     this.settingsKey = parseAes256Key(env.SETTINGS_ENCRYPTION_KEY);
+    this.apns = new ApnsClient({ key: env.APNS_KEY, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, bundleId: env.APNS_BUNDLE_ID });
   }
 
   async publicKey(): Promise<string> {
@@ -63,6 +67,10 @@ export class WebPushSender extends PushSender {
   }
 
   async send(target: PushTarget, payload: string): Promise<void> {
+    if (isApnsDeviceUrl(target.endpoint)) {
+      await this.apns.send(target.endpoint, payload);
+      return;
+    }
     const vapid = await this.vapid();
     await webpush.sendNotification(target, payload, { TTL: 60 * 60, urgency: 'high', timeout: 5_000, vapidDetails: vapid });
   }

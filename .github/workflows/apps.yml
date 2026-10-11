@@ -1,0 +1,122 @@
+name: Apps
+
+# D-53: builds the Android and iPhone apps, which open https://bedochat.com. Runs when the apps change, or by hand:
+# GitHub -> Actions -> Apps -> Run workflow. The signing keys come from the repository's secrets
+# (Settings -> Secrets and variables -> Actions); without them the jobs still build, unsigned, to check the apps.
+
+on:
+  push:
+    branches: [main, app-build-check]
+    paths:
+      - 'apps/android/**'
+      - 'apps/ios/**'
+      - '.github/workflows/apps.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apps-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android app
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      BEDO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Signed build for Google Play (.aab) and phones (.apk)
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          export BEDO_ANDROID_KEYSTORE="$RUNNER_TEMP/upload.jks"
+          gradle --no-daemon -p apps/android bundleRelease assembleRelease
+          mkdir -p out
+          cp apps/android/app/build/outputs/bundle/release/app-release.aab "out/bedo-chat-${GITHUB_RUN_NUMBER}.aab"
+          cp apps/android/app/build/outputs/apk/release/app-release.apk "out/bedo-chat-${GITHUB_RUN_NUMBER}.apk"
+          rm -f "$RUNNER_TEMP/upload.jks"
+
+      - name: Test build (no signing key in the repository's secrets)
+        if: env.ANDROID_KEYSTORE_BASE64 == ''
+        run: |
+          gradle --no-daemon -p apps/android assembleDebug
+          mkdir -p out
+          cp apps/android/app/build/outputs/apk/debug/app-debug.apk "out/bedo-chat-test-${GITHUB_RUN_NUMBER}.apk"
+
+      - name: Check the app
+        run: |
+          APK=$(ls out/*.apk | head -1)
+          ANALYZER="$ANDROID_HOME/cmdline-tools/latest/bin/apkanalyzer"
+          SIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
+          "$ANALYZER" manifest print "$APK" > manifest.xml
+          "$ANALYZER" dex packages --defined-only "$APK" > classes.txt
+          # Every Android Browser Helper class the manifest names must be in the app.
+          for class in $(grep -o 'com\.google\.androidbrowserhelper\.trusted\.[A-Za-z]*' manifest.xml | sort -u); do
+            grep -qF "$class" classes.txt || { echo "::error title=Android app::$class is named in the manifest but missing from the app"; exit 1; }
+          done
+          grep -q 'android.permission.POST_NOTIFICATIONS' manifest.xml || { echo "::error title=Android app::notification permission missing"; exit 1; }
+          attr() { grep -o "android:$1=\"[^\"]*\"" manifest.xml | head -1 | sed 's/.*="//; s/"$//'; }
+          echo "::notice title=Android app::$(basename "$APK"): version $(attr versionName) ($(attr versionCode)), target SDK $(attr targetSdkVersion), min SDK $(attr minSdkVersion)"
+          # The signing certificate's SHA-256 (for the website's /.well-known/assetlinks.json).
+          echo "::notice title=Android signing certificate::$("$SIGNER" verify --print-certs "$APK" | grep -m1 'SHA-256 digest' | sed 's/.*: //')"
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android-app
+          path: out/
+          retention-days: 30
+
+  ios:
+    name: iPhone app
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+      ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Make the Xcode project
+        working-directory: apps/ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build and upload to TestFlight
+        if: env.ASC_KEY != '' && env.ASC_KEY_ID != '' && env.ASC_ISSUER_ID != '' && env.APPLE_TEAM_ID != ''
+        working-directory: apps/ios
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_KEY" > "$KEY"
+          AUTH=(-allowProvisioningUpdates -authenticationKeyPath "$KEY" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+          sed "s/TEAM_ID/${APPLE_TEAM_ID}/" ExportOptions.plist > "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild archive -project BedoChat.xcodeproj -scheme BedoChat -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/BedoChat.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" "${AUTH[@]}"
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/BedoChat.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" "${AUTH[@]}"
+          rm -f "$KEY"
+
+      - name: Test build (no App Store Connect key in the repository's secrets)
+        if: env.ASC_KEY == '' || env.ASC_KEY_ID == '' || env.ASC_ISSUER_ID == '' || env.APPLE_TEAM_ID == ''
+        working-directory: apps/ios
+        run: |
+          xcodebuild build -project BedoChat.xcodeproj -scheme BedoChat -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO

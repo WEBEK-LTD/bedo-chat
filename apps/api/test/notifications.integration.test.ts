@@ -157,4 +157,22 @@ describe.runIf(enabled)('Phase 7 notifications (real Postgres, runtime role)', (
     await api(ana).post('/v1/messages/forward', { fromChatId: dm.id, messageIds: [one.body.id, two.body.id], targets: [{ chatId: target.id, clientId: randomUUID() }] });
     expect((await pushesFor(cleo)).map((push) => push.body)).toEqual(['2 forwarded messages']);
   });
+
+  it('D-53: sends to the iPhone app’s Apple address saved like a browser’s, with the same notification', async () => {
+    const token = randomUUID().replace(/-/g, '').repeat(2);
+    const iphone = `https://api.push.apple.com/3/device/${token}`;
+    expect((await api(cleo).put('/v1/me/push-subscription', { endpoint: iphone, keys: { p256dh: 'apns', auth: 'apns' } })).status).toBe(200);
+    const chat = await api(ana).openChat(cleo);
+    await api(ana).send(chat.id, 'Hello from the website');
+    const sent = ((await ctx.push.all()) as Pushed[]).filter((push) => push.endpoint === iphone);
+    expect(sent.map((push) => push.payload)).toEqual([expect.objectContaining({ title: 'Ana Lopez', body: 'Hello from the website', tag: `chat-${chat.id}`, url: `/?chat=${chat.id}` })]);
+    // Apple reporting the device as gone removes the address, as for a browser.
+    ctx.push.statusFor.set(iphone, 410);
+    await api(ana).send(chat.id, 'Still there?');
+    await ctx.push.all();
+    const left = await query<{ n: number }>(ctx.ownerUrl, 'select count(*)::int as n from app.push_subscriptions where endpoint = $1', [iphone]);
+    expect(left.rows[0]!.n).toBe(0);
+    // Back to the browser address for any test after this one.
+    await api(cleo).put('/v1/me/push-subscription', { endpoint: endpointOf(cleo), keys: { p256dh: 'p', auth: 'a' } });
+  });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { adminLogout, adminSession, type AdminSessionResponseAdmin as AdminInfo } from '@bedo/api-client';
-import { Icon, type IconName } from '@bedo/ui';
+import { BrandIcon, Icon, type IconName } from '@bedo/ui';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '../_lib/api';
@@ -94,9 +94,7 @@ export function Dashboard() {
           >
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
-          <span className="hidden size-8 shrink-0 place-items-center rounded-[9px] bg-accent text-on-accent md:grid">
-            <Icon name="admin_panel_settings" size={20} />
-          </span>
+          <BrandIcon size={32} className="hidden shrink-0 md:block" />
           <span className="truncate">Bedo Chat Admin</span>
         </span>
         <div className="flex shrink-0 items-center gap-1 text-sm md:gap-2">

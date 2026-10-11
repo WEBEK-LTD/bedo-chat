@@ -29,7 +29,8 @@
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
-        "VAPID_PRIVATE_KEY"
+        "VAPID_PRIVATE_KEY",
+        "APNS_KEY"
       ]
     },
     "@bedo/admin#build": {
@@ -48,7 +49,8 @@
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
-        "VAPID_PRIVATE_KEY"
+        "VAPID_PRIVATE_KEY",
+        "APNS_KEY"
       ],
       "cache": false
     },
@@ -69,7 +71,8 @@
         "SETTINGS_ENCRYPTION_KEY",
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
-        "VAPID_PRIVATE_KEY"
+        "VAPID_PRIVATE_KEY",
+        "APNS_KEY"
       ],
       "cache": false
     },

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bedochat.app",
+      "sha256_cert_fingerprints": [
+        "D4:F8:B6:7E:F8:D2:49:DE:DF:0F:9B:91:F0:3F:36:89:F5:13:C6:E1:AF:79:67:05:9E:0C:FB:6B:46:6E:31:F2"
+      ]
+    }
+  }
+]

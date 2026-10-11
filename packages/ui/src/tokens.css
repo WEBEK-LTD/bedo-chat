@@ -197,3 +197,22 @@
     animation: none;
   }
 }
+
+/* D-54: the brand logo in its light-screen (navy) or dark-screen (white) version, following the theme like the colours. */
+.bedo-brand-dark {
+  display: none;
+}
+:root[data-theme='dark'] .bedo-brand-light {
+  display: none;
+}
+:root[data-theme='dark'] .bedo-brand-dark {
+  display: block;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .bedo-brand-light {
+    display: none;
+  }
+  :root:not([data-theme='light']) .bedo-brand-dark {
+    display: block;
+  }
+}

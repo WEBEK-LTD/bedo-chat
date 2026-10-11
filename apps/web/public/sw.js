@@ -27,6 +27,9 @@ self.addEventListener('push', (event) => {
   const work = [
     self.registration.showNotification(title, {
       body: typeof data.body === 'string' ? data.body : '',
+      // D-54: the Bedo Chat icon beside the notification, and its one-colour shape in Android's status bar.
+      icon: '/icons/icon-192.png',
+      badge: '/icons/badge-96.png',
       tag,
       // A new message in the same chat replaces the previous notification and still plays the sound.
       renotify: Boolean(tag),

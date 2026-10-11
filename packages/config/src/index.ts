@@ -16,6 +16,8 @@ export const SERVER_ONLY_ENV_NAMES = [
   'SUPABASE_SERVICE_ROLE_KEY',
   'SUPABASE_JWT_SECRET',
   'VAPID_PRIVATE_KEY',
+  // D-53: signs the iPhone app's notifications with Apple.
+  'APNS_KEY',
 ] as const;
 
 /**
@@ -36,6 +38,10 @@ export const NON_SECRET_SERVER_ENV_NAMES = [
   'VAPID_SUBJECT',
   'WAABEK_API_URL',
   'GIPHY_API_URL',
+  // D-53: Apple's IDs for the key, the team and the app (shown in the Apple Developer account, not secret).
+  'APNS_KEY_ID',
+  'APNS_TEAM_ID',
+  'APNS_BUNDLE_ID',
 ] as const;
 
 const nodeEnv = z.enum(['development', 'test', 'production']).default('development');
@@ -168,6 +174,16 @@ export const apiEnvSchema = z
     VAPID_PUBLIC_KEY: optionalString,
     VAPID_PRIVATE_KEY: optionalString,
     VAPID_SUBJECT: optionalString,
+    /**
+     * iPhone app notifications (D-53): an Apple Push Notifications key (Apple Developer -> Keys, the .p8 file's
+     * text), its Key ID and the Team ID. All three or none: without them the iPhone app gets no notifications and
+     * nothing else changes. A key that cannot be read is reported in the function logs; the site keeps working.
+     */
+    APNS_KEY: optionalString,
+    APNS_KEY_ID: optionalString,
+    APNS_TEAM_ID: optionalString,
+    /** The iPhone app's bundle ID (the APNs topic). */
+    APNS_BUNDLE_ID: optionalString.transform((value) => value ?? 'com.bedochat.app'),
   })
   .superRefine((env, ctx) => {
     // Compared as key bytes, so the same key written another way (padding, base64url) is caught too.

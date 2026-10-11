@@ -166,6 +166,9 @@ start, naming the variable, while any value is missing, malformed or still a `PA
 | `SUPABASE_JWT_SECRET` | The legacy JWT secret (section 1.5). Secret: signs each device's realtime token. It can sign any Supabase token, so keep it only here. Rotating or revoking the legacy JWT secret in Supabase also changes the legacy anon and service_role keys: update all three here together, or devices fall back to checking every 20 seconds |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | **Leave unset.** Since Phase 13 (D-46) the API makes the Web Push keys itself and keeps them in the database. Setting all three replaces them, and every browser must then turn notifications on again |
 
+iPhone app notifications (D-53): `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, set as in [`docs/APPS.md`](APPS.md)
+section B2. All three or none; without them the iPhone app gets no notifications and nothing else changes.
+
 Optional tuning: `LOG_LEVEL` (default `info`), `DATABASE_POOL_MAX` (default `3` per function instance),
 `DATABASE_STATEMENT_TIMEOUT_MS` (default `15000`), `WAABEK_API_URL` (default `https://waabek.com/api/v1/send`).
 `WAABEK_API_KEY` must not be set: the API refuses to start with it (D-32); the key is set from the Admin Dashboard
