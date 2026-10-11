@@ -5059,6 +5059,29 @@ export interface AdminAccessSettings {
   updatedAt: string | null;
 }
 
+export interface AdminReviewAccount {
+  enabled: boolean;
+  /** @nullable */
+  phone: string | null;
+  /** @nullable */
+  code: string | null;
+  /** @nullable */
+  updatedBy: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export interface AdminReviewAccountBody {
+  enabled: boolean;
+  /**
+     * @minLength 5
+     * @maxLength 32
+     */
+  phone: string;
+  /** @pattern ^\d{6}$ */
+  code: string;
+}
+
 export type AdminAccessSettingsBodySignupMode = typeof AdminAccessSettingsBodySignupMode[keyof typeof AdminAccessSettingsBodySignupMode];
 
 
@@ -10490,6 +10513,68 @@ return apiFetch<AdminAccessSettings>(getAdminSetAccessSettingsUrl(),
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(adminAccessSettingsBody)
+  }
+);}
+
+
+
+export const getAdminReviewAccountUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/review-account`
+}
+
+/**
+ * @summary The store review account: number, fixed code, on or off (D-56, Super Admin)
+ */
+export const adminReviewAccount = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminReviewAccount> => {
+
+  return apiFetch<AdminReviewAccount>(getAdminReviewAccountUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminSetReviewAccountUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/review-account`
+}
+
+/**
+ * @summary Set the store review account and turn it on or off (D-56, Super Admin)
+ */
+export const adminSetReviewAccount = async (adminReviewAccountBody: AdminReviewAccountBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminReviewAccount> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminReviewAccount>(getAdminSetReviewAccountUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminReviewAccountBody)
   }
 );}
 

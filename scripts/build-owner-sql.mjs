@@ -161,6 +161,14 @@ const RESULT_CHECKS = {
   if exists (select 1 from app.group_settings s join app.conversations c on c.id = s.conversation_id where s.academy_wide and c.type <> 'channel') then
     raise exception 'Stopped: a group was marked for everyone; only channels can be (nothing was kept)';
   end if;`,
+  '20261021120000': `
+  if (select count(*) from app.review_account_settings) <> 1 or exists (select 1 from app.review_account_settings where enabled) then
+    raise exception 'Stopped: app.review_account_settings must hold its one row, turned off (nothing was kept)';
+  end if;
+  if has_table_privilege('bedo_runtime', 'app.review_account_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.review_account_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.review_account_settings', 'code_enc', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on app.review_account_settings are not as expected (nothing was kept)';
+  end if;`,
 };
 
 /**

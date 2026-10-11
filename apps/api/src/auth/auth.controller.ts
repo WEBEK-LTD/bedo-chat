@@ -30,6 +30,7 @@ import { AccountsService } from './accounts.service.js';
 import { clearRefreshCookie, setRefreshCookie } from './cookies.js';
 import { LoginService } from './login.service.js';
 import { OtpService } from './otp.service.js';
+import { ReviewAccountService } from './review-account.service.js';
 import { SessionsService } from './sessions.service.js';
 import { TokenService } from './token.service.js';
 import { TwoStepService } from './two-step.service.js';
@@ -54,7 +55,14 @@ export class AuthController {
     @Inject(SessionsService) private readonly sessions: SessionsService,
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ReviewAccountService) private readonly review: ReviewAccountService,
   ) {}
+
+  /** D-56: whether this number may have an account: the usual rules, or the store review account's number. */
+  private async mayUseNumber(phone: string): Promise<boolean> {
+    const db = this.database.db;
+    return (await this.accounts.mayUseNumber(db, phone)) || (await this.review.codeFor(db, phone)) !== null;
+  }
 
   /** Step 1: request a code. The same answer for every valid number (D-06). */
   @Post('otp/request')
@@ -63,7 +71,7 @@ export class AuthController {
   async requestCode(@Body(new ZodValidationPipe(otpRequestBodySchema)) body: OtpRequestBody, @Req() request: FastifyRequest) {
     const phone = requirePhone(body.phone);
     const db = this.database.db;
-    const [listed, user] = await Promise.all([this.accounts.mayUseNumber(db, phone), this.accounts.findByPhone(db, phone)]);
+    const [listed, user] = await Promise.all([this.mayUseNumber(phone), this.accounts.findByPhone(db, phone)]);
     return this.otp.issue({
       purpose: 'sign_in',
       phone,
@@ -94,7 +102,7 @@ export class AuthController {
     });
 
     // Second check: an account is only ever created for a number that may have one (D-06, D-47).
-    if (!existing && !(await this.accounts.mayUseNumber(this.database.db, phone))) {
+    if (!existing && !(await this.mayUseNumber(phone))) {
       throw new AppError(HttpStatus.BAD_REQUEST, 'OTP_INVALID');
     }
     const user = existing ?? (await this.createAccount(phone));

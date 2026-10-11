@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, type
 import {
   adminAccessSettingsBodySchema,
   adminAccessSettingsSchema,
+  adminReviewAccountBodySchema,
+  adminReviewAccountSchema,
   adminAddChatMembersBodySchema,
   adminAuditQuerySchema,
   adminAuditResponseSchema,
@@ -42,6 +44,8 @@ import { ResponseSchema } from '../common/response-schema.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js';
 import type { AdminContext } from './admin-auth.service.js';
+import { requirePhone } from '../auth/auth.controller.js';
+import { ReviewAccountService } from '../auth/review-account.service.js';
 import { AdminChatsService } from './admin-chats.service.js';
 import { AdminConsoleService } from './admin-console.service.js';
 import { MonitoringService } from '../runtime/monitoring.service.js';
@@ -61,6 +65,7 @@ export class AdminConsoleController {
   constructor(
     @Inject(AdminConsoleService) private readonly console: AdminConsoleService,
     @Inject(MonitoringService) private readonly monitoring: MonitoringService,
+    @Inject(ReviewAccountService) private readonly reviewAccounts: ReviewAccountService,
   ) {}
 
   @Get('stats')
@@ -114,6 +119,26 @@ export class AdminConsoleController {
     @Req() request: FastifyRequest,
   ) {
     return this.console.setSignupMode(admin, body.signupMode, requestInfo(request));
+  }
+
+  /** D-56: the store review account. Super Admins only (the answer holds the fixed code). */
+  @Get('settings/review-account')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminReviewAccountSchema)
+  reviewAccount() {
+    return this.reviewAccounts.settings();
+  }
+
+  @Put('settings/review-account')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminReviewAccountSchema)
+  setReviewAccount(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(adminReviewAccountBodySchema)) body: z.infer<typeof adminReviewAccountBodySchema>,
+    @Req() request: FastifyRequest,
+  ) {
+    const phone = requirePhone(body.phone);
+    return this.reviewAccounts.update(admin, { ...body, phone }, requestInfo(request));
   }
 
   @Get('users')

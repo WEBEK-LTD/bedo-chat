@@ -334,3 +334,18 @@ export const adminAccessSettingsSchema = z.object({
 });
 export type AdminAccessSettings = z.infer<typeof adminAccessSettingsSchema>;
 export const adminAccessSettingsBodySchema = z.object({ signupMode: z.enum(SIGNUP_MODES) });
+
+/** D-56: the store review account (Super Admins only: the answer holds the code). */
+export const adminReviewAccountSchema = z.object({
+  enabled: z.boolean(),
+  phone: z.string().nullable(),
+  code: z.string().nullable(),
+  updatedBy: z.string().nullable(),
+  updatedAt: timestamp.nullable(),
+});
+export type AdminReviewAccount = z.infer<typeof adminReviewAccountSchema>;
+export const adminReviewAccountBodySchema = z.object({
+  enabled: z.boolean(),
+  phone: z.string().trim().min(5).max(32),
+  code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+});

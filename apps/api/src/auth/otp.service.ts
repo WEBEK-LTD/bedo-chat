@@ -12,6 +12,7 @@ import { AuditService, type SecurityEventInput } from '../audit/audit.service.js
 import { DatabaseService } from '../database/database.service.js';
 import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
 import { RateLimitService } from '../state/rate-limit.service.js';
+import { ReviewAccountService } from './review-account.service.js';
 
 export interface OtpIssueInput {
   purpose: OtpPurpose;
@@ -50,6 +51,7 @@ export class OtpService {
     @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
     @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ReviewAccountService) private readonly review: ReviewAccountService,
   ) {}
 
   private scope(purpose: OtpPurpose): string {
@@ -80,7 +82,9 @@ export class OtpService {
     }
 
     const challengeId = randomUUID();
-    const code = randomOtpCode();
+    // D-56: the store review account's number gets its fixed code instead of a WhatsApp message (student sign-in only).
+    const reviewCode = input.purpose === 'sign_in' ? await this.review.codeFor(db, input.phone) : null;
+    const code = reviewCode ?? randomOtpCode();
     await db.transaction().execute(async (trx) => {
       await trx
         .insertInto('app.otp_challenges')
@@ -98,10 +102,10 @@ export class OtpService {
       await this.audit.security(trx, {
         ...auditBase,
         event: input.eligible ? 'otp_requested' : 'otp_requested_not_eligible',
-        details: { purpose: input.purpose },
+        details: { purpose: input.purpose, ...(reviewCode ? { reviewAccount: true } : {}) },
       });
     });
-    if (input.eligible) {
+    if (input.eligible && !reviewCode) {
       this.delivery.sendCode(input.phone, code, input.purpose);
     }
 

@@ -18,7 +18,8 @@
 --   18  20261018120000_open_signup
 --   19  20261019120000_site_monitoring
 --   20  20261020120000_everyone_channels
--- then sets the two limits on bedo_api, checks everything and records the 14 migrations.
+--   21  20261021120000_store_review_account
+-- then sets the two limits on bedo_api, checks everything and records the 15 migrations.
 --
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- One request = one transaction: if any check or statement fails, NOTHING is kept and the message says why.
@@ -1057,7 +1058,36 @@ where c.id = s.conversation_id
   );
 -- End of the delivered migration file 20261020120000 ------------------------------------------------------------
 
--- Part 16: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
+-- Part 16: supabase/migrations/20261021120000_store_review_account.sql, exactly as delivered --------------------
+-- Bedo Chat - the store review account (D-56).
+--
+-- Google Play (and Apple) review the apps with sign-in details that must keep working and never expire; their reviewers
+-- cannot receive a WhatsApp code. The owner decided on 2026-10-11 to allow ONE review account: one phone number whose
+-- sign-in code is a fixed 6-digit code set by a Super Admin in the Admin Dashboard, instead of a code sent by WhatsApp.
+-- It is off until a Super Admin turns it on, works only for that number and only for student sign-in (never for admin
+-- accounts or phone changes), keeps every limit and lock of ordinary codes, and turning it off ends the account's
+-- sessions. The code is stored encrypted with SETTINGS_ENCRYPTION_KEY so the Super Admin can read it again.
+create table app.review_account_settings (
+  id          boolean primary key default true check (id),
+  enabled     boolean not null default false,
+  phone       text check (phone is null or phone ~ '^\+[1-9][0-9]{6,14}$'),
+  code_enc    text check (code_enc is null or length(code_enc) <= 500),
+  updated_by  uuid references app.admin_accounts (id),
+  updated_at  timestamptz,
+  constraint review_account_complete check (not enabled or (phone is not null and code_enc is not null))
+);
+comment on table app.review_account_settings is
+  'The store review account (D-56): one number signing in with a fixed code set by a Super Admin. Off by default. One row.';
+insert into app.review_account_settings (id) values (true);
+create trigger review_account_settings_no_delete before delete on app.review_account_settings
+  for each row execute function app.forbid_mutation();
+create trigger review_account_settings_no_truncate before truncate on app.review_account_settings
+  for each statement execute function app.forbid_mutation();
+grant select on app.review_account_settings to bedo_runtime;
+grant update (enabled, phone, code_enc, updated_by, updated_at) on app.review_account_settings to bedo_runtime;
+-- End of the delivered migration file 20261021120000 ------------------------------------------------------------
+
+-- Part 17: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
 -- they are set on the login itself: no statement runs longer than 15 seconds, and no connection stays idle inside
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
@@ -1080,7 +1110,7 @@ begin
 end
 $bedo_rls$;
 
--- Part 17: check the result, then the bookkeeping rows ---------------------------------------------------
+-- Part 18: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$
 begin
   if not exists (select 1 from pg_constraint
@@ -1195,6 +1225,13 @@ begin
   if exists (select 1 from app.group_settings s join app.conversations c on c.id = s.conversation_id where s.academy_wide and c.type <> 'channel') then
     raise exception 'Stopped: a group was marked for everyone; only channels can be (nothing was kept)';
   end if;
+  if (select count(*) from app.review_account_settings) <> 1 or exists (select 1 from app.review_account_settings where enabled) then
+    raise exception 'Stopped: app.review_account_settings must hold its one row, turned off (nothing was kept)';
+  end if;
+  if has_table_privilege('bedo_runtime', 'app.review_account_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.review_account_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.review_account_settings', 'code_enc', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on app.review_account_settings are not as expected (nothing was kept)';
+  end if;
   insert into app_meta.schema_migrations (version, name, checksum) values
     ('20261006120000', 'd35_admin_password_owner_sql',
      'ce35f75dc26b4277f010930fb95a29994ff2a5bc2ccaa91970c3e6349bdb7961'),
@@ -1223,13 +1260,15 @@ begin
     ('20261019120000', 'site_monitoring',
      'ba81bb2ab89c52a08b31f3211bea3f98fe42df3616a80464d61dc3bfc5c6dc91'),
     ('20261020120000', 'everyone_channels',
-     '4070d45138588d0ea841fd1abc60f2a51da125c76064fc6218a4d8335223b9d3');
+     '4070d45138588d0ea841fd1abc60f2a51da125c76064fc6218a4d8335223b9d3'),
+    ('20261021120000', 'store_review_account',
+     '9f7c9cdf1c46aa6477b9932709c8c47127e6cba3d0d662b855cb9633ccb09ba4');
 end
 $verify$;
 
 -- The result: every line should say "ok".
 select 'migrations recorded' as check_name,
-       case when (select count(*) from app_meta.schema_migrations) = 20 then 'ok' else 'NOT OK' end as result
+       case when (select count(*) from app_meta.schema_migrations) = 21 then 'ok' else 'NOT OK' end as result
 union all
 select 'bedo_api limits',
        case when (select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole

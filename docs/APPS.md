@@ -122,3 +122,23 @@ more, Claude will help with the answer.
    like on the website.
 4. iPhone, "Don't Allow" pressed by mistake: Settings in the app shows **Open Settings**, which goes to the
    iPhone's Settings → Bedo Chat → Notifications.
+
+---
+
+## D. Store review account (Google Play and Apple sign-in details)
+
+Reviewers cannot receive a WhatsApp code, so the stores need sign-in details that keep working.
+
+1. Admin Dashboard → **OTP / WhatsApp** → **Store review account**: a phone number nobody else uses (it gets no
+   WhatsApp code while this is on), a 6-digit code → **Save and turn on**.
+2. Google Play Console → App content → App access → **All or some functionality is restricted** → Add instructions:
+   * Name: `Store review account`
+   * Username / phone: the number, with `+` and the country code
+   * Password: leave empty
+   * Any other information: `Bedo Chat signs in with a phone number and a 6-digit verification code. Enter the phone
+     number above, tap Continue, then enter the code <your code>. The code does not expire and works every time for
+     this review account. If asked for a name, enter any name.`
+3. Apple (App Store Connect → the version → App Review Information → Sign-in required): the same number as user name,
+   the code as password, and the same note.
+4. Keep it on while the app is in review (Google reviews every update too). Turn it off any time; its sessions end.
+

@@ -73,6 +73,16 @@ export interface AccessSettingsTable {
   updated_at: Date | null;
 }
 
+/** The store review account (D-56): one number signing in with a fixed code. One row. */
+export interface ReviewAccountSettingsTable {
+  id: Generated<boolean>;
+  enabled: Generated<boolean>;
+  phone: string | null;
+  code_enc: string | null;
+  updated_by: string | null;
+  updated_at: Date | null;
+}
+
 /** Site monitoring (Phase 14.5). */
 export type SiteCheckKind = 'heartbeat' | 'manual';
 export type SiteIncidentKind = 'outage' | 'storage' | 'whatsapp' | 'database_slow';
@@ -728,6 +738,7 @@ export interface Database {
   'app.admin_sessions': AdminSessionsTable;
   'app.otp_settings': OtpSettingsTable;
   'app.access_settings': AccessSettingsTable;
+  'app.review_account_settings': ReviewAccountSettingsTable;
   'app.site_checks': SiteChecksTable;
   'app.site_incidents': SiteIncidentsTable;
   'app.monitoring_settings': MonitoringSettingsTable;

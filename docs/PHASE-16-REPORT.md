@@ -80,3 +80,19 @@ allowed device registered at sign-in without a banner; turned off in Settings st
 Turn on registers the device; Not now hides it for a week. Not testable here: the Android permission dialog itself,
 which needs a phone.
 
+## Phase 16.5 — store review account (D-56)
+
+Admin Dashboard → OTP / WhatsApp → **Store review account** (Super Admins only): phone number, fixed 6-digit code,
+Save and turn on / Turn off. `ReviewAccountService` (`apps/api/src/auth/review-account.service.ts`) gives the code for
+that number while it is on; `OtpService.issue` uses it instead of a random code and sends no WhatsApp message; the
+challenge, its 5-minute life, attempts, lock and hourly limits are the ordinary ones. The number may create an account
+in either sign-up mode. Database update `docs/owner-sql/update-20261021120000.sql` (one table, one row, off); the API
+treats a missing table as "off", so the site keeps working if the ZIP is deployed first.
+
+Tests: integration (`review-account.integration.test.ts`): off by default; Super Admin only (moderator 403), the code
+stored encrypted and never in the history; sign-in with the fixed code and no WhatsApp message, repeatedly, in
+academy-list mode; five wrong codes lock it; other numbers unchanged; turned off: code refused and sessions ended.
+Browser (`admin-bootstrap.e2e.test.ts`): a Super Admin turns it on, a reviewer signs in to the student app with the
+number and code, then it is turned off. The update script was run on a database in the live state: every line "ok",
+and refused when run twice.
+

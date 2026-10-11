@@ -1,7 +1,7 @@
 import { decryptWaabekApiKey } from '@bedo/server-crypto';
 import { type Browser, type BrowserContext, type Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_PASSWORD, ADMIN_URL, hotp, launchBrowser, query, type Stack, startStack } from './stack.js';
+import { ADMIN_PASSWORD, ADMIN_URL, hotp, launchBrowser, query, type Stack, startStack, WEB_URL } from './stack.js';
 
 /** Set E2E_SCREENSHOTS=<folder> to save screenshots of the main screens for review. */
 async function shot(page: Page, name: string) {
@@ -223,6 +223,32 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
       { action: 'otp_settings.waabek_key_replaced', metadata: { source: 'initial_setup', version: 1 } },
       { action: 'otp_settings.waabek_key_replaced', metadata: { source: 'admin_dashboard', version: 2 } },
     ]);
+  });
+
+  it('D-56: a Super Admin turns on the store review account, which signs in with its fixed code and no WhatsApp', async () => {
+    await page.getByRole('button', { name: 'OTP / WhatsApp' }).click();
+    const section = page.getByRole('region', { name: 'Store review account' });
+    await section.getByTestId('review-account-status').getByText('Off.').waitFor();
+    await section.getByLabel('Phone number').fill('+61 400 000 999');
+    await section.getByLabel('Fixed sign-in code').fill('135790');
+    await section.getByRole('button', { name: 'Save and turn on' }).click();
+    await section.getByTestId('review-account-status').getByText(/On for \+61400000999/).waitFor();
+    await shot(page, '35-store-review-account');
+
+    // The reviewer signs in to the student app with the number and the fixed code (not on the academy list).
+    const reviewer = await newPage();
+    await reviewer.goto(`${WEB_URL}/login`);
+    await reviewer.getByLabel('Phone number').fill('+61400000999');
+    await reviewer.getByRole('button', { name: 'Continue' }).click();
+    await reviewer.getByLabel('Verification code').fill('135790');
+    await reviewer.getByRole('button', { name: 'Sign in' }).click();
+    await reviewer.getByLabel('Name').fill('Store Reviewer');
+    await reviewer.getByRole('button', { name: 'Continue' }).click();
+    await reviewer.waitForURL(`${WEB_URL}/`);
+
+    // Turned off: back to WhatsApp codes only.
+    await section.getByRole('button', { name: 'Turn off' }).click();
+    await section.getByTestId('review-account-status').getByText('Off.', { exact: false }).waitFor();
   });
 
   it('owner recovery (D-33): the recovery token saves a new key from the sign-in page and signs nobody in', async () => {
