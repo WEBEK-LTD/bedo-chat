@@ -118,7 +118,7 @@ jobs:
             sleep 60
             adb exec-out screencap -p > shots/android-3-open-light.png
             adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" > shots/android-activity.txt || true
-            adb logcat -d > shots/android-logcat-release.txt || true
+            adb logcat -d | grep -iE "TrustedWeb|TwaLauncher|LauncherActivity|androidbrowserhelper|bedochat|DigitalAsset|OriginVerifier|cr_TWA|cr_Verif|AndroidRuntime|ActivityTaskManager" | tail -300 > shots/android-logcat-release.txt || true
             adb shell cmd uimode night yes
             adb shell am force-stop com.bedochat.app
             adb shell am start -n com.bedochat.app/com.google.androidbrowserhelper.trusted.LauncherActivity
@@ -132,7 +132,7 @@ jobs:
             sleep 60
             adb exec-out screencap -p > shots/android-5-debug.png
             adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" >> shots/android-activity.txt || true
-            adb logcat -d > shots/android-logcat-debug.txt || true
+            adb logcat -d | grep -iE "TrustedWeb|TwaLauncher|LauncherActivity|androidbrowserhelper|bedochat|DigitalAsset|OriginVerifier|cr_TWA|cr_Verif|AndroidRuntime|ActivityTaskManager" | tail -300 > shots/android-logcat-debug.txt || true
       - name: Save screenshots to the app-build-shots branch
         if: always()
         run: |
