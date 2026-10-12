@@ -1,0 +1,135 @@
+name: App screens (build check only)
+
+# Only on the app-build-check branch: installs each app (Android: the signed release, as from Google Play; iPhone: the
+# Release build on a simulator), shows it on the home screen, opens it against the live https://bedochat.com and saves
+# screenshots to the app-build-shots branch. Not part of the delivered project.
+
+on:
+  push:
+    branches: [app-build-check]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build (Release) for the simulator
+        working-directory: apps/ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild build -project BedoChat.xcodeproj -scheme BedoChat -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO -quiet
+      - name: Install, home screen, open, screenshots
+        run: |
+          set -x
+          APP="$RUNNER_TEMP/dd/Build/Products/Release-iphonesimulator/BedoChat.app"
+          DEVICE=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'] in ('iPhone 16 Pro','iPhone 16')))")
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          xcrun simctl status_bar "$DEVICE" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100 || true
+          mkdir -p shots
+          sleep 10
+          xcrun simctl install "$DEVICE" "$APP"
+          sleep 8
+          xcrun simctl io "$DEVICE" screenshot shots/ios-1-home.png
+          xcrun simctl launch "$DEVICE" com.bedochat.app
+          sleep 1
+          xcrun simctl io "$DEVICE" screenshot shots/ios-2-launch.png
+          sleep 25
+          xcrun simctl io "$DEVICE" screenshot shots/ios-3-open-light.png
+          xcrun simctl ui "$DEVICE" appearance dark
+          xcrun simctl terminate "$DEVICE" com.bedochat.app
+          xcrun simctl launch "$DEVICE" com.bedochat.app
+          sleep 20
+          xcrun simctl io "$DEVICE" screenshot shots/ios-4-open-dark.png
+          xcrun simctl terminate "$DEVICE" com.bedochat.app
+          sleep 3
+          xcrun simctl io "$DEVICE" screenshot shots/ios-5-home-dark.png
+      - name: Save screenshots to the app-build-shots branch
+        run: |
+          git config user.name "build-check"; git config user.email "noreply@github.com"
+          mkdir -p "$RUNNER_TEMP/s" && cp shots/* "$RUNNER_TEMP/s/"
+          git checkout --orphan app-build-shots
+          git rm -rqf . && git clean -fdxq
+          cp "$RUNNER_TEMP"/s/* .
+          git add -A && git commit -qm "iOS screenshots ${GITHUB_SHA}" && git push -f origin app-build-shots
+
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs: ios
+    if: always()
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      BEDO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v5
+        with:
+          gradle-version: '8.11.1'
+      - name: Signed release build (upload key)
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.jks"
+          export BEDO_ANDROID_KEYSTORE="$RUNNER_TEMP/upload.jks"
+          gradle --no-daemon -p apps/android assembleRelease
+          rm -f "$RUNNER_TEMP/upload.jks"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          cores: 4
+          target: google_apis_playstore
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 6144M
+          disable-animations: true
+          script: |
+            mkdir -p shots
+            adb shell 'echo "_ --disable-fre --no-default-browser-check --no-first-run" > /data/local/tmp/chrome-command-line'
+            adb shell am set-debug-app --persistent com.android.chrome || true
+            adb shell settings put global sysui_demo_allowed 1 || true
+            adb shell am broadcast -a com.android.systemui.demo -e command enter || true
+            adb shell am broadcast -a com.android.systemui.demo -e command clock -e hhmm 0941 || true
+            adb shell am broadcast -a com.android.systemui.demo -e command battery -e level 100 -e plugged false || true
+            adb shell am broadcast -a com.android.systemui.demo -e command notifications -e visible false || true
+            adb install -r apps/android/app/build/outputs/apk/release/app-release.apk
+            adb shell input keyevent KEYCODE_HOME
+            sleep 5
+            adb shell input swipe 540 2100 540 500 400
+            sleep 4
+            adb exec-out screencap -p > shots/android-1-apps.png
+            adb shell input keyevent KEYCODE_HOME
+            sleep 2
+            adb shell am start -n com.bedochat.app/com.google.androidbrowserhelper.trusted.LauncherActivity
+            sleep 2
+            adb exec-out screencap -p > shots/android-2-launch.png
+            sleep 70
+            adb exec-out screencap -p > shots/android-3-open-light.png
+            adb shell cmd uimode night yes
+            adb shell am force-stop com.android.chrome
+            adb shell am start -n com.bedochat.app/com.google.androidbrowserhelper.trusted.LauncherActivity
+            sleep 40
+            adb exec-out screencap -p > shots/android-4-open-dark.png
+            adb shell dumpsys activity activities | grep -E "mResumedActivity|topResumedActivity" > shots/android-activity.txt || true
+      - name: Save screenshots to the app-build-shots branch
+        if: always()
+        run: |
+          git config user.name "build-check"; git config user.email "noreply@github.com"
+          mkdir -p "$RUNNER_TEMP/s" && cp shots/* "$RUNNER_TEMP/s/" || true
+          git fetch origin app-build-shots || true
+          git checkout -B app-build-shots origin/app-build-shots 2>/dev/null || { git checkout --orphan app-build-shots && git rm -rqf . && git clean -fdxq; }
+          cp "$RUNNER_TEMP"/s/* . || true
+          git add -A && git commit -qm "Android screenshots ${GITHUB_SHA}" && git push origin app-build-shots

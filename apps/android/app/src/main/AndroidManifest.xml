@@ -9,6 +9,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Chromebooks (ChromeOS) without a touch screen can install it from Google Play too: keyboard and mouse work. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+
     <queries>
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />

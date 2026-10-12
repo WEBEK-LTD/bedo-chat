@@ -130,6 +130,50 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     expect(violations).toEqual([]);
   });
 
+  it('D-57: the privacy policy and support pages open from the sign-in page, styled, with no policy refusal', async () => {
+    for (const scheme of ['light', 'dark'] as const) {
+      const context = await browser.newContext({ ...PHONE, colorScheme: scheme });
+      contexts.push(context);
+      const page = await context.newPage();
+      page.on('console', (message) => {
+        if (/Content.Security.Policy|Refused to/i.test(message.text())) violations.push(`info ${scheme}: ${message.text()}`);
+      });
+      page.on('pageerror', (error) => violations.push(`info ${scheme} page error: ${error.message}`));
+      for (const [link, heading, file] of [
+        ['Privacy policy', 'Privacy policy', 'privacy'],
+        ['Help and support', 'Help and support', 'support'],
+      ] as const) {
+        await page.goto(`${WEB_URL}/login`);
+        await page.getByRole('navigation', { name: 'About Bedo Chat' }).getByRole('link', { name: link }).click();
+        await page.getByRole('heading', { level: 1, name: heading }).waitFor();
+        expect(new URL(page.url()).pathname).toBe(`/${file}`);
+        // Its own stylesheet applies (card on the wallpaper), the right logo is loaded, and it fits a phone.
+        const look = await page.evaluate(() => {
+          const card = document.querySelector('.card');
+          const img = document.querySelector('.brand img') as HTMLImageElement;
+          return {
+            radius: card ? getComputedStyle(card).borderTopLeftRadius : '',
+            logo: img.currentSrc,
+            loaded: img.complete && img.naturalWidth > 0,
+          };
+        });
+        expect(look.radius, `${file} ${scheme}`).toBe('16px');
+        expect(look.logo).toContain(scheme === 'dark' ? '/icons/bedo-chat-logo-white.svg' : '/icons/bedo-chat-logo.svg');
+        expect(look.loaded).toBe(true);
+        await fits(page, `${file} ${scheme}`);
+        const response = await fetch(`${SITE_URL}/${file}`);
+        expect(response.status).toBe(200);
+        expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+        expect(response.headers.get('content-security-policy')).not.toContain('script-src');
+        await shot(page, `136-${file}-${scheme}`);
+        // Back to the app from the page.
+        await page.getByRole('link', { name: 'Open Bedo Chat' }).click();
+        await page.waitForURL(/\/login/);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
   it('fits every main screen of the student app on a phone', async () => {
     await fits(ana, 'chat list');
     await shot(ana, '131-phone-chats');

@@ -51,8 +51,8 @@ No change to the apps? GitHub → **Actions** → **Apps** → **Run workflow** 
    fingerprint** of the *App signing key certificate* and send it to Claude. It is added to the website's
    `/.well-known/assetlinks.json`; until then the app shows a small address bar at the top when installed from Google
    Play (the `.apk` from A2 already matches).
-4. Fill in the store listing, content rating, privacy policy and data safety, then promote the release to
-   **Production**.
+4. Fill in the store listing, content rating, privacy policy (**https://bedochat.com/privacy**) and data safety, then
+   promote the release to **Production**.
 
 Every build gets a higher version number by itself (Google Play refuses a lower one), so any build can be uploaded.
 
@@ -86,7 +86,7 @@ notifications; the website is not affected either way.
 1. **Apps** → **+** → **New App** → iOS, name **Bedo Chat**, language English, Bundle ID `com.bedochat.app`,
    SKU `bedochat` → Create.
 2. **Users and Access** → **Integrations** → **App Store Connect API** → **Team Keys** → **+** → name
-   `GitHub builds`, access **App Manager** → Generate → **Download** the `.p8` (once only). Note the **Key ID** and,
+   `GitHub builds`, access **Admin** (it makes the signing certificate and profile) → Generate → **Download** the `.p8` (once only). Note the **Key ID** and,
    above the list, the **Issuer ID**.
 
 ### B4. GitHub secrets (once)
@@ -105,6 +105,9 @@ GitHub → **Settings** → **Secrets and variables** → **Actions** → **New 
 GitHub → **Actions** → **Apps** → **Run workflow**. The iPhone job builds the app and uploads it to App Store Connect.
 About 15 minutes later it appears under **TestFlight**: add yourself as a tester and install it with the TestFlight
 app. When it works, **App Store** tab → add the build, screenshots and description → **Submit for Review**.
+
+Addresses the stores ask for (D-57): Privacy Policy URL **https://bedochat.com/privacy**, Support URL
+**https://bedochat.com/support**, Marketing URL (optional) **https://bedochat.com**.
 
 Apple's review sometimes refuses apps that only show a website (guideline 4.2). Bedo Chat's iPhone app has its own
 notifications, sign-in that stays, and app icon badge, which is what reviewers look for; if they still ask for
@@ -141,4 +144,13 @@ Reviewers cannot receive a WhatsApp code, so the stores need sign-in details tha
 3. Apple (App Store Connect → the version → App Review Information → Sign-in required): the same number as user name,
    the code as password, and the same note.
 4. Keep it on while the app is in review (Google reviews every update too). Turn it off any time; its sessions end.
+
+## E. How the iPhone build is signed
+
+Each run of **Apps** with the App Store Connect key makes, through that key, an Apple Distribution certificate (its
+private key is made on the build machine and never stored) and an App Store profile named `Bedo Chat CI <number>`,
+signs the app with them using Xcode 26 or later (Apple's requirement for uploads), checks that the signed app has the
+push entitlement, and uploads it to App Store Connect. The next run removes the previous run's certificate and profile
+(only those named `Bedo Chat CI ...`), so the account never collects them. No device has to be registered and no Mac is
+needed (`apps/ios/ci/signing.py`).
 

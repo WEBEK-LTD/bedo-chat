@@ -96,3 +96,38 @@ Browser (`admin-bootstrap.e2e.test.ts`): a Super Admin turns it on, a reviewer s
 number and code, then it is turned off. The update script was run on a database in the live state: every line "ok",
 and refused when run twice.
 
+## Phase 16.7 — iPhone builds reach App Store Connect
+
+Apple's automatic signing on the build machine wanted a development profile, which needs a registered device. The
+workflow now signs through the App Store Connect API key instead (`apps/ios/ci/signing.py`: one Apple Distribution
+certificate and one App Store profile per build, the previous build's removed), uses Xcode 26 or later (uploads need
+the iOS 26 SDK), checks the signed app (Apple Distribution signature, push entitlement "production") and uploads it
+with `altool`. Xcode's error lines appear in the run's summary. Verified on the owner's account: build 16 signed by
+"Apple Distribution: ABDELRAHMAN MAHMOUD", push production, uploaded to App Store Connect.
+
+## Phase 16.8 — privacy policy, support page and store screenshots (D-57)
+
+Two static pages for the store listings, linked under the sign-in card of the student app:
+
+| Page | Address | Content |
+| --- | --- | --- |
+| Privacy policy | https://bedochat.com/privacy | The Australian Dental Academy as responsible; what is collected (phone number, profile, what is sent, settings, devices and their IP addresses, notification addresses, reports); how it is used; who sees it (other users per privacy settings, administrators with the limits of D-44, service providers by name); history kept (D-14, D-17); account deletion through Settings → Delete account; rights and the OAIC; security; contact email |
+| Help and support | https://bedochat.com/support | Contact email; signing in, notifications (iPhone, Android, in the app), account settings, reporting and blocking, supported devices |
+
+They are plain files (`apps/web/public/privacy.html`, `support.html`, `/info/info.css`) with the logo in light and dark
+mode, no scripts, and their own Content-Security-Policy (`INFO_CSP`) from both netlify.toml files; proxy.ts leaves
+them alone. Netlify serves `/privacy` from `privacy.html` (as for the admin pages).
+
+Checks: unit (`scripts/csp.test.mjs`): the files are served for `/privacy`, `/privacy.html`, `/support`, `/support/`;
+both netlify.toml files give `INFO_CSP` and the security headers; no script, inline style or placeholder; a valid
+contact address; every link on the pages exists. Browser (`launch.e2e.test.ts`): from the sign-in page both links
+open the pages in light and dark mode on a phone, styled, logo loaded, no sideways scrolling, no policy refusal,
+and "Open Bedo Chat" goes back.
+
+Store screenshots were taken from the real app (the same build, sample academy conversations made through the API) at
+the stores' sizes: iPhone 6.9" 1290 × 2796, iPad 13" 2048 × 2732, Android phone 1080 × 2160, and a Google Play
+feature graphic 1024 × 500. They are delivered with this phase, not kept in the project.
+
+Chromebooks: the Android app declares the touch screen optional (`android.hardware.touchscreen`, not required), so
+Google Play also offers it on Chromebooks without one; the workflow's app check fails if that is lost. On any
+Chromebook the website also installs from Chrome as an app, with notifications.

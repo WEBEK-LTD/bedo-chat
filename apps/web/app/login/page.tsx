@@ -16,6 +16,15 @@ export default function LoginPage() {
         <div className="bedo-pop-in rounded-md border border-line bg-surface p-6 shadow-raised sm:p-8">
           <LoginFlow />
         </div>
+        {/* D-57: the static information pages (plain links: they are files, not app routes). */}
+        <nav aria-label="About Bedo Chat" className="mt-5 flex justify-center gap-6 text-sm text-ink-secondary">
+          <a className="hover:underline" href="/privacy">
+            Privacy policy
+          </a>
+          <a className="hover:underline" href="/support">
+            Help and support
+          </a>
+        </nav>
       </div>
     </main>
   );

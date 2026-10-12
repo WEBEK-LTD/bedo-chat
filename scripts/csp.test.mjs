@@ -4,9 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { ADMIN_CSP, storageOrigin, webCsp } from '../apps/web/csp.mjs';
+import { ADMIN_CSP, INFO_CSP, storageOrigin, webCsp } from '../apps/web/csp.mjs';
 import { externalizeInlineScripts, INLINE_SCRIPT_DIR } from './bundle-admin-into-web.mjs';
-import { headersFor, readSiteRules } from './netlify-site-rules.mjs';
+import { headersFor, readSiteRules, resolveStatic } from './netlify-site-rules.mjs';
 
 const directives = (policy) =>
   Object.fromEntries(
@@ -37,6 +37,50 @@ test('the admin pages get a strict policy from both netlify.toml files, equal to
   assert.deepEqual(policy['object-src'], ["'none'"]);
   assert.deepEqual(policy['base-uri'], ["'none'"]);
   assert.doesNotMatch(ADMIN_CSP, /unsafe-|\*|https?:|wss?:/);
+});
+
+test('D-57: the information pages are static files with a no-script policy from both netlify.toml files', () => {
+  const publicDir = new URL('../apps/web/public', import.meta.url).pathname;
+  for (const [request, file] of [['/privacy', 'privacy.html'], ['/privacy.html', 'privacy.html'], ['/support', 'support.html'], ['/support/', 'support.html'], ['/info/info.css', 'info/info.css']]) {
+    assert.equal(path.relative(publicDir, resolveStatic(publicDir, request) ?? ''), file, request);
+  }
+  for (const file of ['apps/web/netlify.toml', 'apps/admin/netlify.toml']) {
+    const rules = readSiteRules(new URL(`../${file}`, import.meta.url));
+    for (const pathname of ['/privacy', '/privacy.html', '/support', '/support.html', '/info/info.css']) {
+      const headers = headersFor(rules, pathname);
+      assert.equal(headers['Content-Security-Policy'], INFO_CSP, `${file} ${pathname}`);
+      assert.equal(headers['X-Frame-Options'], 'DENY', `${file} ${pathname}`);
+      assert.equal(headers['X-Content-Type-Options'], 'nosniff', `${file} ${pathname}`);
+    }
+  }
+  const policy = directives(INFO_CSP);
+  assert.deepEqual(policy['default-src'], ["'none'"]);
+  assert.equal(policy['script-src'], undefined);
+  for (const name of ['style-src', 'img-src', 'font-src']) assert.deepEqual(policy[name], ["'self'"], name);
+  assert.deepEqual(policy['frame-ancestors'], ["'none'"]);
+  assert.deepEqual(policy['form-action'], ["'none'"]);
+  assert.doesNotMatch(INFO_CSP, /unsafe-|\*|https?:|wss?:/);
+  // The proxy (per-request web app policy) leaves these paths alone, so the two policies never both apply.
+  const proxy = readFileSync(new URL('../apps/web/proxy.ts', import.meta.url), 'utf8');
+  for (const part of ['info/', 'privacy$', 'privacy\\\\.html$', 'support$', 'support\\\\.html$']) assert.ok(proxy.includes(part), part);
+});
+
+test('D-57: the information pages hold no script, inline style or placeholder, and name the Academy and a contact address', () => {
+  for (const name of ['privacy.html', 'support.html']) {
+    const html = readFileSync(new URL(`../apps/web/public/${name}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(html, /<script|\son[a-z]+=|style=|<style/i, name);
+    assert.doesNotMatch(html, /\{\{|\}\}/, `${name} still has a placeholder`);
+    assert.match(html, /Australian Dental Academy/, name);
+    const emails = [...html.matchAll(/mailto:([^"]+)"/g)].map((match) => match[1]);
+    assert.ok(emails.length > 0, `${name} has no contact address`);
+    for (const email of emails) assert.match(email, /^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i, name);
+    assert.match(html, /href="\/info\/info\.css"/, name);
+    // Every page and file it links to on this site exists.
+    for (const [, href] of html.matchAll(/(?:href|src|srcset)="(\/[^"]*)"/g)) {
+      const target = href === '/' ? null : href;
+      if (target) assert.ok(resolveStatic(new URL('../apps/web/public', import.meta.url).pathname, target), `${name} links to ${href}`);
+    }
+  }
 });
 
 test('the web app policy allows only the site (with its API, D-36) and the one Supabase project (Storage and Realtime)', () => {

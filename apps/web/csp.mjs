@@ -40,6 +40,13 @@ export const ADMIN_CSP =
   "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'";
 
 /**
+ * The static information pages (D-57: /privacy, /support and their stylesheet under /info): no scripts at all, styles,
+ * pictures and fonts from the site only, no forms, cannot be framed. Set in both netlify.toml files; must be equal.
+ */
+export const INFO_CSP =
+  "default-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
+
+/**
  * The student web app's policy for one response.
  * @param {{ nonce: string, storage?: string, dev?: boolean, https?: boolean }} options
  * @returns {string}

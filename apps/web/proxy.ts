@@ -5,7 +5,8 @@ import { webCsp } from './csp.mjs';
  * D-31: a strict Content-Security-Policy on every page of the student web app, with a fresh nonce per
  * response. Next.js reads the nonce from the policy on the request and puts it on its own scripts, so the
  * pages render per request (app/layout.tsx). The Admin Dashboard (/admin, static files), the API (/api, its own
- * route, D-36) and static assets are not handled here.
+ * route, D-36), static assets and the static information pages (/privacy, /support, D-57: their headers are in
+ * netlify.toml) are not handled here.
  */
 export function proxy(request: NextRequest) {
   const bytes = new Uint8Array(18);
@@ -27,7 +28,7 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     {
-      source: '/((?!api/|api$|admin/|admin$|_next/static/|_next/image/|icons/|fonts/|flags/|favicon\\.ico$|sw\\.js$|manifest\\.webmanifest$).*)',
+      source: '/((?!api/|api$|admin/|admin$|_next/static/|_next/image/|icons/|fonts/|flags/|favicon\\.ico$|sw\\.js$|manifest\\.webmanifest$|info/|privacy$|privacy\\.html$|support$|support\\.html$).*)',
       missing: [
         { type: 'header', key: 'next-router-prefetch' },
         { type: 'header', key: 'purpose', value: 'prefetch' },
