@@ -6,6 +6,9 @@ import WebKit
 final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply {
     private var webView: WKWebView!
     private let offline = OfflineView()
+    /// The launch screen (icon on its background) stays until the first page has loaded, so the app goes from the
+    /// launch screen straight to the website instead of showing an empty white screen while it loads.
+    private let splash = UIImageView(image: UIImage(named: "LaunchIcon"))
     private var loaded = false
     private var pendingPath: String?
 
@@ -40,6 +43,11 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         offline.onRetry = { [weak self] in self?.reload() }
         view.addSubview(offline)
 
+        splash.contentMode = .center
+        splash.backgroundColor = UIColor(named: "LaunchBackground") ?? Self.background
+        splash.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(splash)
+
         // Edge to edge: the website keeps its content inside the safe area and WebKit fills the status bar and home
         // indicator areas with the page's own background colour (sign-in page, chats, light or dark).
         NSLayoutConstraint.activate([
@@ -51,6 +59,10 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
             offline.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             offline.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             offline.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            splash.topAnchor.constraint(equalTo: view.topAnchor),
+            splash.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            splash.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            splash.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
         webView.load(URLRequest(url: Site.url(path: pendingPath ?? "/")))
@@ -138,6 +150,12 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         loaded = true
         offline.isHidden = true
+        hideSplash()
+    }
+
+    private func hideSplash() {
+        guard splash.superview != nil else { return }
+        UIView.animate(withDuration: 0.25, animations: { self.splash.alpha = 0 }, completion: { _ in self.splash.removeFromSuperview() })
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -157,6 +175,7 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         if (error as NSError).code == NSURLErrorCancelled { return }
         loaded = false
         offline.isHidden = false
+        hideSplash()
     }
 
     // MARK: - JavaScript dialogs (confirm before deleting, etc.)
