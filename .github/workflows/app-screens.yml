@@ -138,7 +138,7 @@ jobs:
         run: |
           git config user.name "build-check"; git config user.email "noreply@github.com"
           mkdir -p "$RUNNER_TEMP/s" && cp shots/* "$RUNNER_TEMP/s/" || true
-          git fetch origin app-build-shots || true
-          git checkout -B app-build-shots origin/app-build-shots 2>/dev/null || { git checkout --orphan app-build-shots && git rm -rqf . && git clean -fdxq; }
-          cp "$RUNNER_TEMP"/s/* . || true
-          git add -A && git commit -qm "Android screenshots ${GITHUB_SHA}" && git push origin app-build-shots
+          git checkout -q --orphan app-build-shots-android
+          git rm -rqf . && git clean -fdxq
+          cp "$RUNNER_TEMP"/s/* .
+          git add -A && git commit -qm "Android screenshots ${GITHUB_SHA}" && git push -f origin HEAD:app-build-shots
