@@ -89,7 +89,7 @@ jobs:
           $E "new Promise((resolve) => { const b = window.bedoAndroid; b.addEventListener('message', (e) => resolve(String(e.data))); b.postMessage(JSON.stringify({ id: 10, type: 'nonsense' })); setTimeout(() => resolve('timeout'), 10000); })" > shots/bridge-unknown.txt 2>&1 || true
           # Links: privacy page stays in the app.
           calm
-          $E "document.querySelector('a[href=\"/privacy\"]').click(); 'ok'" > shots/click.txt 2>&1 || true
+          tap_text "Privacy policy" > shots/click.txt 2>&1 && echo tapped >> shots/click.txt || echo "no link found" >> shots/click.txt
           sleep 8
           adb exec-out screencap -p > shots/4-privacy.png
           adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" > shots/focus.txt || true
