@@ -1,0 +1,18 @@
+// Bedo Chat Android app (D-53, D-58): shows https://bedochat.com in the app's own web view, with notifications through
+// Firebase. Built by GitHub Actions (.github/workflows/apps.yml); nothing here is needed to run the website.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'BedoChat'
+include ':app'

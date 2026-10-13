@@ -1,0 +1,33 @@
+{
+  "name": "@bedo/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bedo Chat website: the student web app (Login, Chat Interface; spec \u00a723), the Admin Dashboard under /admin and the API under /api (D-26, D-36)",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "node ../../scripts/bundle-admin-into-web.mjs && next build",
+    "start": "next start --port 3000",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@bedo/api": "workspace:*",
+    "@bedo/api-client": "workspace:*",
+    "@bedo/contracts": "workspace:*",
+    "@bedo/ui": "workspace:*",
+    "@node-rs/argon2": "^2.2.1",
+    "@node-rs/bcrypt": "^1.10.9",
+    "@supabase/realtime-js": "^2.116.0",
+    "next": "16.3.8",
+    "pg": "^8.23.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.1.0"
+  }
+}

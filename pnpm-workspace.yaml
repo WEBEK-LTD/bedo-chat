@@ -1,0 +1,47 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Supply-chain policy (carried from the approved baseline):
+# - packages must have been published for at least 14 days before they can be installed
+# - dependency install scripts are blocked; any package that wants to run one fails the
+#   install until it is explicitly reviewed and listed below
+minimumReleaseAge: 20160
+# Security exceptions to the 14-day rule. Each entry needs a reason and is removed once the
+# patched version is older than 14 days (recorded in docs/DECISIONS.md).
+# - next: 16.3.8 fixes GHSA-cjq9-62q9-8jv4 (high, server-side request forgery in Image Optimization) and a moderate
+#   Draft Mode cache leak in 16.0.0-16.3.7 (16.3.6 was itself an exception for a critical advisory).
+#   Published 2026-09-30; pinned exactly in apps/web and apps/admin (with its own @next/* packages). Remove after 2026-10-14.
+# - sharp (and its @img/* platform packages): 0.35.5 fixes GHSA-wq5f-xc86-pv6w (high, librsvg in the bundled
+#   libvips) in < 0.35.5. Reached only through next's optional image optimisation. Published 2026-09-27; forced by
+#   the override below. Remove after 2026-10-11.
+# - source-map-js: 1.2.2 fixes GHSA-68fv-2mgg-jv7q (high, event-loop denial of service) in 1.0.0-1.2.1.
+#   Published 2026-09-30; forced by the override below; reached only through development tools (vite > postcss).
+#   Remove after 2026-10-14.
+minimumReleaseAgeExclude:
+  - next
+  - '@next/*'
+  - source-map-js
+  - sharp
+  - '@img/*'
+strictDepBuilds: true
+# Every package with an install script must be listed in allowBuilds after review:
+# true = allowed to run, false = reviewed and deliberately NOT run.
+#
+# - esbuild (via orval > @orval/core, Phase 2 API-client generator, development only): its install step only
+#   replaces the JavaScript launcher with the platform binary for speed; the binary itself ships as an
+#   optional @esbuild/<platform> package, so esbuild works without the script.
+allowBuilds:
+  esbuild: false
+
+# Force patched transitive versions (security advisories found by `pnpm audit`).
+# - fastify >=5.12.5: DoS via unhandled exception on HTTP/2 trailer responses (@nestjs/platform-fastify pins 5.12.4).
+# - undici >=7.29.1: several advisories in 7.x before 7.29.1 (reached only through the development-time
+#   API-client generator: orval > @scalar/json-magic).
+# - source-map-js >=1.2.2: GHSA-68fv-2mgg-jv7q (high) in 1.0.0-1.2.1 (development only: vite > postcss).
+# - sharp >=0.35.5: GHSA-wq5f-xc86-pv6w (high) in < 0.35.5 (next's optional image optimisation).
+overrides:
+  fastify: ^5.12.5
+  undici: ^7.29.1
+  source-map-js: ^1.2.2
+  sharp: ^0.35.5

@@ -1,0 +1,39 @@
+# Third-party notices
+
+## Material Symbols
+
+Icon path data in `src/icons.generated.ts` comes from Google's Material Symbols
+(Outlined style, weight 400), distributed in the npm package `@material-symbols/svg-400`.
+
+- Source: https://github.com/google/material-design-icons
+- Licence: Apache License, Version 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+
+The icons are used unmodified.
+
+## Figtree
+
+The interface typeface (Phase 14, D-48), served from `apps/web/public/fonts` (Latin and Latin Extended subsets of
+the variable font, from the npm package `@fontsource-variable/figtree` 5.2.10).
+
+- Source: https://github.com/erikdkennedy/figtree
+- Licence: SIL Open Font License 1.1 — the full text is in `apps/web/public/fonts/Figtree-OFL.txt`
+
+The font files are used unmodified.
+
+## Fluent Emoji
+
+The starter sticker packs (Phase 14.3), served from `apps/admin/public/starter-stickers` and uploaded through the
+Admin Dashboard: 578 images from the 3D style of Fluent Emoji, converted from PNG to WebP (256 x 256).
+
+- Source: https://github.com/microsoft/fluentui-emoji
+- Licence: MIT License, Copyright (c) Microsoft Corporation — the full text is in
+  `apps/admin/public/starter-stickers/LICENSE-Fluent-Emoji.txt`
+
+## flag-icons
+
+Country flags on the phone fields (Phase 15), served from `apps/web/public/flags`: the 4x3 SVG flags of flag-icons
+7.5.0, converted to 64 x 48 WebP pictures (Ascension and Tristan da Cunha use the flag of Saint Helena).
+
+- Source: https://github.com/lipis/flag-icons
+- Licence: MIT License, Copyright (c) 2013 Panayiotis Lipiridis — the full text is in
+  `apps/web/public/flags/LICENSE-flag-icons.txt`

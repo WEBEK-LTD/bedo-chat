@@ -1,0 +1,69 @@
+@import 'tailwindcss';
+@import '@bedo/ui/tokens.css';
+/* The shared components in @bedo/ui (phone field) use these utilities too. */
+@source '../../../packages/ui/src';
+
+/* Expose the design tokens to Tailwind utilities (bg-surface, text-secondary, border-line, ...). */
+@theme inline {
+  --color-surface: var(--bedo-color-bg);
+  --color-surface-subtle: var(--bedo-color-bg-subtle);
+  --color-surface-hover: var(--bedo-color-bg-hover);
+  --color-surface-selected: var(--bedo-color-bg-selected);
+  --color-line: var(--bedo-color-border);
+  --color-ink: var(--bedo-color-text);
+  --color-ink-secondary: var(--bedo-color-text-secondary);
+  --color-ink-disabled: var(--bedo-color-text-disabled);
+  --color-accent: var(--bedo-color-accent);
+  --color-accent-hover: var(--bedo-color-accent-hover);
+  --color-on-accent: var(--bedo-color-text-on-accent);
+  --color-danger: var(--bedo-color-danger);
+  --color-success: var(--bedo-color-success);
+  --color-accent-soft: var(--bedo-color-accent-soft);
+  --color-scrim: var(--bedo-color-scrim);
+  --color-bubble-in: var(--bedo-color-bubble-in);
+  --color-bubble-out: var(--bedo-color-bubble-out);
+  --color-on-bubble-out: var(--bedo-color-bubble-out-text);
+  --shadow-raised: var(--bedo-shadow-raised);
+  --shadow-bubble: var(--bedo-shadow-bubble);
+  --font-sans: var(--bedo-font-sans);
+  --radius-sm: var(--bedo-radius-sm);
+  --radius-md: var(--bedo-radius-md);
+  --radius-bubble: var(--bedo-radius-bubble);
+}
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bedo-color-bg);
+    color: var(--bedo-color-text);
+    font-family: var(--bedo-font-sans);
+    font-size: var(--bedo-font-size-md);
+    line-height: var(--bedo-line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--bedo-color-focus-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--bedo-color-accent-soft);
+  }
+
+  /* Thin, quiet scrollbars that follow the theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--bedo-color-border) transparent;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--bedo-color-accent);
+  }
+}

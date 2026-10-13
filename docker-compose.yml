@@ -1,0 +1,24 @@
+# Local development stack for Bedo Chat: Postgres only (D-36: the API keeps its short-lived state in Postgres;
+# there is no Redis or worker). Production uses Supabase Postgres, Storage and Realtime; nothing here is used
+# in production.
+name: bedo-chat
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: bedo
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d bedo']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  postgres-data:

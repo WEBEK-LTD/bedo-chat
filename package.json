@@ -1,0 +1,36 @@
+{
+  "name": "bedo-chat",
+  "private": true,
+  "description": "Bedo Chat - private messaging platform for the academy",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=24.0.0 <25",
+    "pnpm": ">=10.28.0 <11"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint && eslint scripts eslint.config.mjs",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test && node --test \"scripts/*.test.mjs\"",
+    "test:integration": "turbo run test:integration --concurrency=1",
+    "db:migrate": "pnpm --filter @bedo/db run migrate",
+    "db:status": "pnpm --filter @bedo/db run status",
+    "openapi": "pnpm --filter @bedo/api run openapi",
+    "check:bundles": "node scripts/check-client-bundles.mjs",
+    "check:routes": "node scripts/check-web-routes.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:routes && pnpm check:bundles",
+    "stack:up": "docker compose up -d --wait",
+    "stack:down": "docker compose down",
+    "e2e": "NEXT_PUBLIC_STORAGE_ORIGIN=https://localhost:3400 turbo run build --filter=@bedo/web && pnpm --filter @bedo/e2e e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^24.0.0",
+    "eslint": "^10.0.0",
+    "turbo": "^2.6.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.50.0",
+    "vite": "^8.3.0",
+    "vitest": "^4.0.0 || ^5.0.0"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "@bedo/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Postgres access (Kysely) and the checksummed SQL migration runner for Bedo Chat",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/database.d.ts",
+      "default": "./dist/database.js"
+    }
+  },
+  "bin": {
+    "bedo-db": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "migrate": "node --env-file-if-exists=.env dist/cli.js migrate",
+    "status": "node --env-file-if-exists=.env dist/cli.js status"
+  },
+  "dependencies": {
+    "@bedo/config": "workspace:*",
+    "kysely": "^0.28.0 || ^0.29.0",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.0"
+  }
+}

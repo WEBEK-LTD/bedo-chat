@@ -1,0 +1,86 @@
+/* The Bedo Chat information pages (/privacy, /support; D-57). Static files: no scripts, no inline styles. */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 300 900;
+  src: url('/fonts/figtree-latin-wght-normal.woff2') format('woff2');
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #e3ebf6;
+  --card: #ffffff;
+  --text: #142030;
+  --muted: #5d6c80;
+  --line: #e0e6ee;
+  --accent: #2f5bd3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --card: #142030;
+    --text: #eef2f8;
+    --muted: #a2aebd;
+    --line: #26364d;
+    --accent: #8fb0ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  padding: 32px 16px 48px;
+}
+
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.brand img { height: 72px; width: auto; }
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 12px 32px rgba(20, 32, 48, 0.12);
+}
+
+@media (min-width: 640px) { .card { padding: 40px 44px; } }
+
+h1 { font-size: 1.75rem; line-height: 1.25; margin: 0 0 4px; }
+h2 { font-size: 1.15rem; margin: 32px 0 8px; }
+p, ul { margin: 0 0 12px; }
+ul { padding-left: 22px; }
+li { margin-bottom: 6px; }
+.updated { color: var(--muted); margin-bottom: 24px; }
+a { color: var(--accent); }
+.contact {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+.contact strong { display: block; }
+
+footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 24px;
+}
+footer a { margin: 0 8px; }
