@@ -89,12 +89,15 @@ jobs:
           $E "new Promise((resolve) => { const b = window.bedoAndroid; b.addEventListener('message', (e) => resolve(String(e.data))); b.postMessage(JSON.stringify({ id: 10, type: 'nonsense' })); setTimeout(() => resolve('timeout'), 10000); })" > shots/bridge-unknown.txt 2>&1 || true
           # Links: privacy page stays in the app.
           calm
-          $E "location.href = '/privacy'; 'ok'" > /dev/null 2>&1 || true
+          $E "document.querySelector('a[href=\"/privacy\"]').click(); 'ok'" > shots/click.txt 2>&1 || true
           sleep 8
           adb exec-out screencap -p > shots/4-privacy.png
+          adb shell dumpsys window | grep -E "mCurrentFocus|mFocusedApp" > shots/focus.txt || true
           adb shell input keyevent KEYCODE_BACK
           sleep 6
           adb exec-out screencap -p > shots/5-back.png
+          adb shell dumpsys activity activities | grep -E "topResumedActivity" > shots/activity-after-back.txt || true
+          adb logcat -d -s BedoChat > shots/back-log.txt || true
           adb logcat -d | grep -iE "bedochat|chromium|AndroidRuntime|FATAL" | tail -150 > shots/log-debug.txt || true
           adb uninstall com.bedochat.app || true
           adb install -r shots/bedo-chat-release.apk

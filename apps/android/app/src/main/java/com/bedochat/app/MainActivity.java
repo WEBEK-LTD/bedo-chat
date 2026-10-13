@@ -123,6 +123,7 @@ public final class MainActivity extends ComponentActivity {
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
+                android.util.Log.d("BedoChat", "back: canGoBack=" + webView.canGoBack());
                 if (webView.canGoBack()) {
                     webView.goBack();
                 } else {
