@@ -5,13 +5,13 @@ website is in the apps at once. There is no second copy of the student app, no d
 
 | | Android (`apps/android`) | iPhone (`apps/ios`) |
 | --- | --- | --- |
-| How it shows the site | Trusted Web Activity: the site full screen in the phone's Chrome engine | A web view inside the app |
-| Notifications | The website's own notifications (Web Push), shown as the app's | Through Apple (APNs): the app gives the site its Apple address, saved like a browser's |
-| What it needs | Google Play developer account | Apple Developer Program (paid yearly) |
+| How it shows the site | A web view inside the app (D-58; no browser, so never an address bar) | A web view inside the app |
+| Notifications | Through Firebase (FCM): the app gives the site its Firebase address, saved like a browser's | Through Apple (APNs): the app gives the site its Apple address, saved like a browser's |
+| What it needs | Google Play developer account, a free Firebase project | Apple Developer Program (paid yearly) |
 | Built by | GitHub Actions, workflow **Apps** | GitHub Actions, workflow **Apps** (no Mac needed) |
 
-Signing keys and Apple keys are never in the project: they live in the repository's **GitHub secrets** (for the
-builds) and in **Netlify's environment variables** (the iPhone notification key). Without them the workflow still
+Signing keys, Apple keys and Firebase keys are never in the project: they live in the repository's **GitHub secrets**
+(for the builds) and in **Netlify's environment variables** (the notification keys). Without them the workflow still
 builds both apps as a check, unsigned.
 
 The app ID is **`com.bedochat.app`** on both stores. It can never change after the first upload.
@@ -49,12 +49,30 @@ No change to the apps? GitHub → **Actions** → **Apps** → **Run workflow** 
    Google keeps the app signing key ("Play App Signing"): accept it.
 3. Done (Phase 16.9): the website's `/.well-known/assetlinks.json` lists Google Play's app signing key
    (`AE:24:…:45:67`, Play Console → Test and release → Setup → App integrity → App signing) and the upload key
-   (`D4:F8:…:31:F2`), so the app opens full screen with no address bar whether it comes from Google Play or is the
-   `.apk` from A2. A new Google Play app signing key (a key upgrade) must be added there too.
+   (`D4:F8:…:31:F2`), so links to bedochat.com open in the app. (Since D-58 the app no longer needs it to hide an
+   address bar: it has none.) A new Google Play app signing key (a key upgrade) must be added there too.
 4. Fill in the store listing, content rating, privacy policy (**https://bedochat.com/privacy**) and data safety, then
    promote the release to **Production**.
 
 Every build gets a higher version number by itself (Google Play refuses a lower one), so any build can be uploaded.
+
+### A4. Android notifications: Firebase (once, free)
+
+The Android app shows the website in its own web view (D-58), which cannot receive the website's notifications, so it
+receives them through Firebase Cloud Messaging, like the iPhone app through Apple.
+
+1. **console.firebase.google.com** → **Create a project** → name `Bedo Chat` → Google Analytics **off** → Create.
+2. In the project: **Add app** → the Android icon → package name **`com.bedochat.app`**, nickname `Bedo Chat` →
+   **Register app** → **Download google-services.json** → Next / Continue to the console (skip the other steps).
+3. GitHub → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**: name
+   `GOOGLE_SERVICES_JSON`, value: open `google-services.json` in Notepad or TextEdit and paste all of it.
+4. Firebase → ⚙ **Project settings** → **Service accounts** → **Generate new private key** → **Generate key** (a
+   `.json` file downloads; keep it safe, it is a secret).
+5. Netlify → the **bedochat** site → **Site configuration** → **Environment variables** → **Add a variable**: key
+   `FCM_SERVICE_ACCOUNT`, value: all of that `.json` file → then **Deploys** → **Trigger deploy** → **Deploy site**.
+6. GitHub → **Actions** → **Apps** → **Run workflow**: the new `.aab` (A2) has notifications; upload it to Google Play.
+
+Without steps 3 to 5 the Android app works the same, without notifications; the website is not affected either way.
 
 ---
 
@@ -118,13 +136,13 @@ more, Claude will help with the answer.
 ## C. Checking notifications
 
 1. Install the app and sign in. The phone asks once to allow notifications: **Allow** (on older Android phones they are
-   simply on). If it does not ask, the chat list shows **Turn on notifications…**: tap **Turn on**.
+   simply on).
 2. From another phone or a computer, send that account a message: the notification arrives with the sender and the
    text, also when the app is closed. Tapping it opens the chat.
 3. Settings → **Notifications** in the app shows "Notifications are on for this device", and turns them off and on
    like on the website.
-4. iPhone, "Don't Allow" pressed by mistake: Settings in the app shows **Open Settings**, which goes to the
-   iPhone's Settings → Bedo Chat → Notifications.
+4. "Don't Allow" pressed by mistake: Settings → Notifications in the app shows **Open Settings**, which goes to the
+   phone's notification settings for Bedo Chat.
 
 ---
 

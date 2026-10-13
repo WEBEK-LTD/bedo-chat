@@ -30,7 +30,8 @@
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
         "VAPID_PRIVATE_KEY",
-        "APNS_KEY"
+        "APNS_KEY",
+        "FCM_SERVICE_ACCOUNT"
       ]
     },
     "@bedo/admin#build": {
@@ -50,7 +51,8 @@
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
         "VAPID_PRIVATE_KEY",
-        "APNS_KEY"
+        "APNS_KEY",
+        "FCM_SERVICE_ACCOUNT"
       ],
       "cache": false
     },
@@ -72,7 +74,8 @@
         "SUPABASE_SERVICE_ROLE_KEY",
         "SUPABASE_JWT_SECRET",
         "VAPID_PRIVATE_KEY",
-        "APNS_KEY"
+        "APNS_KEY",
+        "FCM_SERVICE_ACCOUNT"
       ],
       "cache": false
     },

@@ -25,5 +25,5 @@ test('assetlinks.json links com.bedochat.app with both the Google Play signing k
 test('the Android app is built for the same package name the site links', () => {
   const gradle = readFileSync(new URL('../apps/android/app/build.gradle', import.meta.url), 'utf8');
   assert.match(gradle, /applicationId 'com\.bedochat\.app'/);
-  assert.match(gradle, /hostName\s*: 'bedochat\.com'/);
+  assert.match(gradle, /def siteHost = 'bedochat\.com'/);
 });

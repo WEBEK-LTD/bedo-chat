@@ -33,3 +33,4 @@ apps/android/local.properties
 *.mobileprovision
 apps/ios/build/
 apps/ios/BedoChat.xcodeproj/
+apps/android/app/google-services.json

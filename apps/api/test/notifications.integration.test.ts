@@ -175,4 +175,21 @@ describe.runIf(enabled)('Phase 7 notifications (real Postgres, runtime role)', (
     // Back to the browser address for any test after this one.
     await api(cleo).put('/v1/me/push-subscription', { endpoint: endpointOf(cleo), keys: { p256dh: 'p', auth: 'a' } });
   });
+
+  it('D-58: sends to the Android app’s Firebase address saved like a browser’s, with the same notification', async () => {
+    const token = `${randomUUID().replace(/-/g, '')}:APA91b${'x'.repeat(120)}`;
+    const android = `https://fcm.googleapis.com/v1/bedochat-android/${token}`;
+    expect((await api(cleo).put('/v1/me/push-subscription', { endpoint: android, keys: { p256dh: 'fcm', auth: 'fcm' } })).status).toBe(200);
+    const chat = await api(ana).openChat(cleo);
+    await api(ana).send(chat.id, 'Hello Android');
+    const sent = ((await ctx.push.all()) as Pushed[]).filter((push) => push.endpoint === android);
+    expect(sent.map((push) => push.payload)).toEqual([expect.objectContaining({ title: 'Ana Lopez', body: 'Hello Android', tag: `chat-${chat.id}`, url: `/?chat=${chat.id}` })]);
+    // Firebase reporting the token as gone removes the address, as for a browser.
+    ctx.push.statusFor.set(android, 410);
+    await api(ana).send(chat.id, 'Still there?');
+    await ctx.push.all();
+    const left = await query<{ n: number }>(ctx.ownerUrl, 'select count(*)::int as n from app.push_subscriptions where endpoint = $1', [android]);
+    expect(left.rows[0]!.n).toBe(0);
+    await api(cleo).put('/v1/me/push-subscription', { endpoint: endpointOf(cleo), keys: { p256dh: 'p', auth: 'a' } });
+  });
 });

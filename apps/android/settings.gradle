@@ -1,5 +1,5 @@
-// Bedo Chat Android app (D-53): a Trusted Web Activity that opens https://bedochat.com. Built by GitHub Actions
-// (.github/workflows/apps.yml); nothing here is needed to run the website.
+// Bedo Chat Android app (D-53, D-58): shows https://bedochat.com in the app's own web view, with notifications through
+// Firebase. Built by GitHub Actions (.github/workflows/apps.yml); nothing here is needed to run the website.
 pluginManagement {
     repositories {
         google()

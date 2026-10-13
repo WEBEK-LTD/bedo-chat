@@ -18,6 +18,8 @@ export const SERVER_ONLY_ENV_NAMES = [
   'VAPID_PRIVATE_KEY',
   // D-53: signs the iPhone app's notifications with Apple.
   'APNS_KEY',
+  // D-58: the Firebase service account key that sends the Android app's notifications.
+  'FCM_SERVICE_ACCOUNT',
 ] as const;
 
 /**
@@ -184,6 +186,12 @@ export const apiEnvSchema = z
     APNS_TEAM_ID: optionalString,
     /** The iPhone app's bundle ID (the APNs topic). */
     APNS_BUNDLE_ID: optionalString.transform((value) => value ?? 'com.bedochat.app'),
+    /**
+     * Android app notifications (D-58): the Firebase service account key (Firebase → Project settings → Service
+     * accounts → Generate new private key, the whole JSON file). Without it the Android app gets no notifications and
+     * nothing else changes; a key that cannot be read is reported in the function logs.
+     */
+    FCM_SERVICE_ACCOUNT: optionalString,
   })
   .superRefine((env, ctx) => {
     // Compared as key bytes, so the same key written another way (padding, base64url) is caught too.

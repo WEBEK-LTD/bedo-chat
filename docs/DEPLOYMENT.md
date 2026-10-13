@@ -169,6 +169,10 @@ start, naming the variable, while any value is missing, malformed or still a `PA
 iPhone app notifications (D-53): `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, set as in [`docs/APPS.md`](APPS.md)
 section B2. All three or none; without them the iPhone app gets no notifications and nothing else changes.
 
+Android app notifications (D-58): `FCM_SERVICE_ACCOUNT`, the Firebase service account key (the whole JSON file), set as
+in [`docs/APPS.md`](APPS.md) section A4. Secret. Without it the Android app gets no notifications and nothing else
+changes.
+
 Optional tuning: `LOG_LEVEL` (default `info`), `DATABASE_POOL_MAX` (default `3` per function instance),
 `DATABASE_STATEMENT_TIMEOUT_MS` (default `15000`), `WAABEK_API_URL` (default `https://waabek.com/api/v1/send`).
 `WAABEK_API_KEY` must not be set: the API refuses to start with it (D-32); the key is set from the Admin Dashboard

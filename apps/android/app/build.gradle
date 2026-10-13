@@ -2,8 +2,16 @@ plugins {
     id 'com.android.application'
 }
 
+// D-58: notifications come through Firebase. The workflow writes app/google-services.json from the repository secret
+// GOOGLE_SERVICES_JSON (Firebase → Project settings → Your apps → google-services.json); without it the app builds and
+// works, without notifications.
+def firebaseConfigured = file('google-services.json').exists()
+if (firebaseConfigured) {
+    apply plugin: 'com.google.gms.google-services'
+}
+
 // The site the app opens, and the version numbers GitHub Actions gives each build.
-def siteUrl = 'https://bedochat.com'
+def siteHost = 'bedochat.com'
 // Google Play needs a higher version code for every upload, whichever workflow or computer built it: the minutes since
 // 2026-01-01 (UTC) at build time always grow.
 def buildNumber = ((System.currentTimeMillis() - 1767225600000L) / 60000L) as Integer
@@ -18,12 +26,14 @@ android {
         minSdk 24
         targetSdk 36
         versionCode buildNumber
-        versionName "1.0 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
-        manifestPlaceholders = [
-            hostName       : 'bedochat.com',
-            launchUrl      : "${siteUrl}/",
-            assetStatements: '[{"relation": ["delegate_permission/common.handle_all_urls"], "target": {"namespace": "web", "site": "' + siteUrl + '"}}]',
-        ]
+        versionName "1.1 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
+        buildConfigField 'String', 'SITE_HOST', "\"${siteHost}\""
+        buildConfigField 'boolean', 'FIREBASE', "${firebaseConfigured}"
+        manifestPlaceholders = [hostName: siteHost]
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {
@@ -53,5 +63,11 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+    implementation 'androidx.core:core:1.16.0'
+    implementation 'androidx.activity:activity:1.10.1'
+    // Firebase brings an old Fragment library; the permission and file results need 1.3 or later.
+    implementation 'androidx.fragment:fragment:1.8.6'
+    implementation 'androidx.webkit:webkit:1.13.0'
+    implementation platform('com.google.firebase:firebase-bom:33.15.0')
+    implementation 'com.google.firebase:firebase-messaging'
 }

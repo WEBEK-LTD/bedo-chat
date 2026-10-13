@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shown while the app starts (before Android 12, which shows the app icon itself): the icon on the page colour. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/background" />
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash" />
+    </item>
+</layer-list>

@@ -150,3 +150,37 @@ both keys (Play Console → App integrity → App signing: `AE:24:C2:…:45:67`;
 `scripts/assetlinks.test.mjs` (both fingerprints present and well formed, package `com.bedochat.app`, the same package
 and host as the Android build). No app update is needed: phones check the site when the app opens.
 
+
+## Phase 16.10 — the Android app in its own web view (D-58)
+
+On the owner's phones (Xiaomi and another) the Trusted Web Activity app kept showing Chrome's address bar although the
+site's `assetlinks.json` held both signing keys and Google's link check answered "linked" for both. The Android app now
+shows the site in its **own web view**, like the iPhone app: no browser is involved, so there is no address bar on any
+phone, and it no longer depends on which browser a phone has.
+
+| Part | Where | What |
+| --- | --- | --- |
+| App | `apps/android/app/src/main/java/com/bedochat/app/MainActivity.java` | Web view of https://bedochat.com, edge to edge with the bars in the page colour (light and dark, the pages follow the phone's theme); sign-in kept (cookies saved when the app goes to the background); launch icon until the first page has loaded; "Can't reach Bedo Chat" page with Try again; back button goes back in the site, then leaves the app; files chosen from the phone or a photo taken with the camera; microphone and camera for voice and video messages (Android's own question, only for bedochat.com); downloads saved to the phone's Downloads; links to other sites and apps open outside; bedochat.com links open in the app; notification tap opens the chat (in the open app without a reload) |
+| Bridge | same file, `apps/web/app/_lib/native-app.ts` | A web message listener `bedoAndroid`, offered to https://bedochat.com only (main frame): `push-status`, `push-enable` (Android 13+: "Allow Bedo Chat to send you notifications?"), `badge`, `open-settings`; each answer carries the message's id. The page's code is shared with the iPhone app's (same answers) |
+| Notifications | `Push.java`, `PushService.java`, `apps/api/src/delivery/fcm.ts` | Firebase Cloud Messaging: the app's token is saved as `https://fcm.googleapis.com/v1/bedochat-android/<token>` (keys `fcm`) through the existing `PUT /v1/me/push-subscription`; the API sends a data message (title, text, chat, link, badge) with the FCM HTTP v1 API, signed with the service account key (`FCM_SERVICE_ACCOUNT`, an OAuth token kept until 5 minutes before it expires); tokens Firebase reports as gone are removed. The app shows the notification itself, one per chat, replaced by the next |
+| Builds | `.github/workflows/apps.yml` | The Firebase settings come from the secret `GOOGLE_SERVICES_JSON` (checked to be for `com.bedochat.app`); without it the build has no notifications and says so. The app check now looks for the app's own classes and refuses the old browser helper |
+
+No table, column or SQL: the database is untouched. Setup for the owner: [`docs/APPS.md`](APPS.md) section A4.
+
+Verification:
+
+* API unit tests (`apps/api/test/fcm.test.ts`, against a local stand-in for Google's token and FCM endpoints): which
+  addresses are the app's (never Chrome's `/fcm/send/` or `/wp/` Web Push addresses on the same host); the key file read
+  however it is pasted; the token request signed with the key (verified with its public half) and reused; the message
+  sent; "unregistered" and "not a valid registration token" reported as gone, other errors kept; nothing sent without a
+  key. Integration (`notifications.integration.test.ts`): an Android address saved through the API receives the same
+  notification as a browser and is removed when reported gone.
+* Browser end to end (`push-offer.e2e.test.ts`, with a stand-in for the app's channel): at sign-in in the Android app
+  the page asks the app, saves its Firebase address with keys `fcm`, shows no browser banner and gives the badge;
+  Settings → Notifications turns it off; with notifications blocked, Settings shows **Open Settings**, which asks the app.
+* On an Android 14 emulator (GitHub Actions) against the live site: the release app signed with the upload key opens
+  the sign-in page with no address bar, in light and dark mode; the page sees the bridge (`bedoAndroid`), `push-status`
+  answers `default`, `push-enable` shows Android's question and, after **Allow**, answers `granted`; an unknown message
+  gets an error; the privacy policy opens inside the app and the back button returns to the sign-in page; with the
+  network off the app shows "Can't reach Bedo Chat". Not verifiable here: a real notification, which needs the owner's
+  Firebase project (A4).

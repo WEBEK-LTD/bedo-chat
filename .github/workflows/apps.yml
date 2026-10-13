@@ -28,8 +28,22 @@ jobs:
     env:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       BEDO_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
     steps:
       - uses: actions/checkout@v5
+
+      # D-58: the app's Firebase settings (notifications), from the repository secret; without it the app builds and
+      # works without notifications.
+      - name: Firebase settings
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > apps/android/app/google-services.json
+            python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert any(c['client_info']['android_client_info']['package_name']=='com.bedochat.app' for c in d['client']), 'google-services.json is not for com.bedochat.app'" apps/android/app/google-services.json \
+              || { echo "::error title=Android app::GOOGLE_SERVICES_JSON is not the google-services.json of the Android app com.bedochat.app"; exit 1; }
+            echo "::notice title=Android app::Firebase settings found: notifications on"
+          else
+            echo "::warning title=Android app::No GOOGLE_SERVICES_JSON secret: this build has no notifications (docs/APPS.md, A4)"
+          fi
 
       - uses: actions/setup-java@v5
         with:
@@ -65,10 +79,11 @@ jobs:
           SIGNER="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner"
           "$ANALYZER" manifest print "$APK" > manifest.xml
           "$ANALYZER" dex packages --defined-only "$APK" > classes.txt
-          # Every Android Browser Helper class the manifest names must be in the app.
-          for class in $(grep -o 'com\.google\.androidbrowserhelper\.trusted\.[A-Za-z]*' manifest.xml | sort -u); do
-            grep -qF "$class" classes.txt || { echo "::error title=Android app::$class is named in the manifest but missing from the app"; exit 1; }
+          # D-58: the app's own web view activity and its notification service are in the app; no browser helper.
+          for class in com.bedochat.app.MainActivity com.bedochat.app.PushService com.bedochat.app.Push; do
+            grep -qF "$class" classes.txt || { echo "::error title=Android app::$class is missing from the app"; exit 1; }
           done
+          ! grep -q 'androidbrowserhelper' manifest.xml || { echo "::error title=Android app::the manifest still names the Trusted Web Activity helper"; exit 1; }
           grep -q 'android.permission.POST_NOTIFICATIONS' manifest.xml || { echo "::error title=Android app::notification permission missing"; exit 1; }
           # Chromebooks without a touch screen must not be filtered out on Google Play.
           tr '\n' ' ' < manifest.xml | grep -qE '<uses-feature[^>]*android.hardware.touchscreen[^>]*required="false"|<uses-feature[^>]*required="false"[^>]*android.hardware.touchscreen' || { echo "::error title=Android app::touch screen must be optional (Chromebooks)"; exit 1; }

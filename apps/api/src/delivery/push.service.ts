@@ -6,6 +6,7 @@ import { sql } from 'kysely';
 import webpush from 'web-push';
 import { API_ENV } from '../config/tokens.js';
 import { ApnsClient, isApnsDeviceUrl } from './apns.js';
+import { FcmClient, isFcmDeviceUrl } from './fcm.js';
 import { DatabaseService } from '../database/database.service.js';
 import { DeferredTasks } from '../runtime/deferred-tasks.service.js';
 
@@ -47,6 +48,8 @@ export class WebPushSender extends PushSender {
   private stored: Promise<Vapid> | null = null;
   /** D-53: the iPhone app's devices, reached through Apple rather than a browser push service. */
   private readonly apns: ApnsClient;
+  /** D-58: the Android app's devices, reached through Firebase Cloud Messaging. */
+  private readonly fcm: FcmClient;
 
   constructor(
     @Inject(API_ENV) env: ApiEnv,
@@ -60,6 +63,7 @@ export class WebPushSender extends PushSender {
     this.subject = env.VAPID_SUBJECT ?? DEFAULT_VAPID_SUBJECT;
     this.settingsKey = parseAes256Key(env.SETTINGS_ENCRYPTION_KEY);
     this.apns = new ApnsClient({ key: env.APNS_KEY, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID, bundleId: env.APNS_BUNDLE_ID });
+    this.fcm = new FcmClient({ serviceAccount: env.FCM_SERVICE_ACCOUNT });
   }
 
   async publicKey(): Promise<string> {
@@ -69,6 +73,10 @@ export class WebPushSender extends PushSender {
   async send(target: PushTarget, payload: string): Promise<void> {
     if (isApnsDeviceUrl(target.endpoint)) {
       await this.apns.send(target.endpoint, payload);
+      return;
+    }
+    if (isFcmDeviceUrl(target.endpoint)) {
+      await this.fcm.send(target.endpoint, payload);
       return;
     }
     const vapid = await this.vapid();
