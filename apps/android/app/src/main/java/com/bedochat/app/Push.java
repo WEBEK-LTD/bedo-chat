@@ -28,7 +28,7 @@ final class Push {
     static final String CHANNEL = "messages";
     private static final String ENDPOINT_PREFIX = "https://fcm.googleapis.com/v1/bedochat-android/";
     private static final String PREFS = "bedo";
-    private static final String ASKED = "notifications-asked";
+    private static final String ASKED = "notifications-asked-count";
 
     interface Answer {
         void done(JSONObject status);
@@ -46,20 +46,22 @@ final class Push {
     }
 
     static void markAsked(Context context) {
-        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ASKED, true).apply();
+        android.content.SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        prefs.edit().putInt(ASKED, prefs.getInt(ASKED, 0) + 1).apply();
     }
 
     /**
      * The phone's answer for Bedo Chat's notifications: "granted"; "default" while the app may still ask (Android 13
-     * and later, never asked or asked once); "denied" when only the phone's Settings can turn them on.
+     * and later: Android shows its question at most twice, and again after "Don't allow" once or the question closed
+     * without an answer); "denied" when only the phone's Settings can turn them on.
      */
     static String permission(Activity activity) {
         boolean enabled = NotificationManagerCompat.from(activity).areNotificationsEnabled();
         if (Build.VERSION.SDK_INT < 33) return enabled ? "granted" : "denied";
         boolean allowed = ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
         if (allowed) return enabled ? "granted" : "denied";
-        boolean asked = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ASKED, false);
-        if (!asked || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) return "default";
+        int asked = activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getInt(ASKED, 0);
+        if (asked < 2 || activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) return "default";
         return "denied";
     }
 
