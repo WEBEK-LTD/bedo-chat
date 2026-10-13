@@ -1,0 +1,2 @@
+  mCurrentFocus=Window{53e687c u0 com.bedochat.app/com.bedochat.app.MainActivity}
+  mFocusedApp=ActivityRecord{a917658 u0 com.bedochat.app/.MainActivity t8}

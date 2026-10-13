@@ -1,0 +1,1 @@
+    topResumedActivity=ActivityRecord{a917658 u0 com.bedochat.app/.MainActivity t8}

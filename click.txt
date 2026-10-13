@@ -1,0 +1,12 @@
++ adb shell uiautomator dump /sdcard/ui.xml
++ adb shell cat /sdcard/ui.xml
+++ grep -o 'text="Privacy policy"[^>]*bounds="\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]"' /tmp/ui.xml
+++ grep -o '\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]'
+++ head -1
++ B='[252,1437][480,1485]'
++ '[' -n '[252,1437][480,1485]' ']'
+++ echo '[252,1437][480,1485]'
+++ sed -E 's/\[([0-9]+),([0-9]+)\]\[([0-9]+),([0-9]+)\]/\1 \2 \3 \4/'
++ set -- 252 1437 480 1485
++ adb shell input tap 366 1461
+tapped

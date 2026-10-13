@@ -1,0 +1,2 @@
+--------- beginning of main
+10-13 15:04:32.189  6072  6072 D BedoChat: back: canGoBack=true
