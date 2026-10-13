@@ -70,6 +70,8 @@ jobs:
             grep -qF "$class" classes.txt || { echo "::error title=Android app::$class is named in the manifest but missing from the app"; exit 1; }
           done
           grep -q 'android.permission.POST_NOTIFICATIONS' manifest.xml || { echo "::error title=Android app::notification permission missing"; exit 1; }
+          # Chromebooks without a touch screen must not be filtered out on Google Play.
+          tr '\n' ' ' < manifest.xml | grep -qE '<uses-feature[^>]*android.hardware.touchscreen[^>]*required="false"|<uses-feature[^>]*required="false"[^>]*android.hardware.touchscreen' || { echo "::error title=Android app::touch screen must be optional (Chromebooks)"; exit 1; }
           attr() { grep -o "android:$1=\"[^\"]*\"" manifest.xml | head -1 | sed 's/.*="//; s/"$//'; }
           echo "::notice title=Android app::$(basename "$APK"): version $(attr versionName) ($(attr versionCode)), target SDK $(attr targetSdkVersion), min SDK $(attr minSdkVersion)"
           # The signing certificate's SHA-256 (for the website's /.well-known/assetlinks.json).

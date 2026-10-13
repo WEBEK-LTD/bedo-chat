@@ -108,7 +108,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     write(`${res}/mipmap-${name}/ic_launcher_monochrome.png`, await png(monochrome, Math.round(108 * factor)));
     write(`${res}/drawable-${name}/ic_notification.png`, await png(iconSvg({ mono: true, art: 0.9 }), Math.round(24 * factor)));
   }
-  write(`${res}/drawable/splash.png`, await png(brand, 512));
+  // The splash image is shown at its own size: 512 px in the xxxhdpi folder is 128 dp on every phone (a 512 px
+  // image in drawable/ counts as mdpi and was blown up past the screen's edges).
+  write(`${res}/drawable-xxxhdpi/splash.png`, await png(brand, 512));
 
   // iPhone (apps/ios/BedoChat/Assets.xcassets): the App Store icon has no transparency; iOS rounds it.
   const assets = 'apps/ios/BedoChat/Assets.xcassets';

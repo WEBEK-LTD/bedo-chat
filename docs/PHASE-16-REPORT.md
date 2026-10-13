@@ -105,3 +105,48 @@ the iOS 26 SDK), checks the signed app (Apple Distribution signature, push entit
 with `altool`. Xcode's error lines appear in the run's summary. Verified on the owner's account: build 16 signed by
 "Apple Distribution: ABDELRAHMAN MAHMOUD", push production, uploaded to App Store Connect.
 
+## Phase 16.8 — privacy policy, support page and store screenshots (D-57)
+
+Two static pages for the store listings, linked under the sign-in card of the student app:
+
+| Page | Address | Content |
+| --- | --- | --- |
+| Privacy policy | https://bedochat.com/privacy | The Australian Dental Academy as responsible; what is collected (phone number, profile, what is sent, settings, devices and their IP addresses, notification addresses, reports); how it is used; who sees it (other users per privacy settings, administrators with the limits of D-44, service providers by name); history kept (D-14, D-17); account deletion through Settings → Delete account; rights and the OAIC; security; contact email |
+| Help and support | https://bedochat.com/support | Contact email; signing in, notifications (iPhone, Android, in the app), account settings, reporting and blocking, supported devices |
+
+They are plain files (`apps/web/public/privacy.html`, `support.html`, `/info/info.css`) with the logo in light and dark
+mode, no scripts, and their own Content-Security-Policy (`INFO_CSP`) from both netlify.toml files; proxy.ts leaves
+them alone. Netlify serves `/privacy` from `privacy.html` (as for the admin pages).
+
+Checks: unit (`scripts/csp.test.mjs`): the files are served for `/privacy`, `/privacy.html`, `/support`, `/support/`;
+both netlify.toml files give `INFO_CSP` and the security headers; no script, inline style or placeholder; a valid
+contact address; every link on the pages exists. Browser (`launch.e2e.test.ts`): from the sign-in page both links
+open the pages in light and dark mode on a phone, styled, logo loaded, no sideways scrolling, no policy refusal,
+and "Open Bedo Chat" goes back.
+
+Store screenshots were taken from the real app (the same build, sample academy conversations made through the API) at
+the stores' sizes: iPhone 6.9" 1290 × 2796, iPad 13" 2048 × 2732, Android phone 1080 × 2160, and a Google Play
+feature graphic 1024 × 500. They are delivered with this phase, not kept in the project.
+
+Chromebooks: the Android app declares the touch screen optional (`android.hardware.touchscreen`, not required), so
+Google Play also offers it on Chromebooks without one; the workflow's app check fails if that is lost. On any
+Chromebook the website also installs from Chrome as an app, with notifications.
+
+Opening the apps (checked on GitHub Actions against the live https://bedochat.com: the Android release signed with the
+upload key on an Android 15 emulator, the iPhone Release build on an iPhone 16 simulator):
+
+* Android: the splash image was in `drawable/`, where Android treats 512 px as 512 dp and blew it up past the screen;
+  it is now in `drawable-xxxhdpi/` (128 dp, centred). The signed app then opens the site full screen with no address
+  bar (the site's `assetlinks.json` matches the upload key).
+* iPhone: between the launch screen and the first page there was an empty screen while the page loaded; the launch
+  icon now stays until the first page has loaded (or the "Can't reach Bedo Chat" page shows), then fades out.
+
+## Phase 16.9 — no address bar in the app from Google Play
+
+The owner's Xiaomi phone showed the Android app from Google Play with Chrome's address bar ("bedochat.com" and a
+close button): Google Play signs the app with its own app signing key, and the site's `assetlinks.json` listed only
+the upload key, so Chrome could not confirm that the app and the site belong together. `assetlinks.json` now lists
+both keys (Play Console → App integrity → App signing: `AE:24:C2:…:45:67`; upload key `D4:F8:…:31:F2`). Test:
+`scripts/assetlinks.test.mjs` (both fingerprints present and well formed, package `com.bedochat.app`, the same package
+and host as the Android build). No app update is needed: phones check the site when the app opens.
+

@@ -47,12 +47,12 @@ No change to the apps? GitHub → **Actions** → **Apps** → **Run workflow** 
 1. Play Console → **Create app** → name **Bedo Chat**, App, Free → Create.
 2. **Testing** → **Internal testing** → **Create new release** → upload the `.aab` → Save → Review → Roll out.
    Google keeps the app signing key ("Play App Signing"): accept it.
-3. **Test and release** → **Setup** → **App integrity** → **App signing** → copy the **SHA-256 certificate
-   fingerprint** of the *App signing key certificate* and send it to Claude. It is added to the website's
-   `/.well-known/assetlinks.json`; until then the app shows a small address bar at the top when installed from Google
-   Play (the `.apk` from A2 already matches).
-4. Fill in the store listing, content rating, privacy policy and data safety, then promote the release to
-   **Production**.
+3. Done (Phase 16.9): the website's `/.well-known/assetlinks.json` lists Google Play's app signing key
+   (`AE:24:…:45:67`, Play Console → Test and release → Setup → App integrity → App signing) and the upload key
+   (`D4:F8:…:31:F2`), so the app opens full screen with no address bar whether it comes from Google Play or is the
+   `.apk` from A2. A new Google Play app signing key (a key upgrade) must be added there too.
+4. Fill in the store listing, content rating, privacy policy (**https://bedochat.com/privacy**) and data safety, then
+   promote the release to **Production**.
 
 Every build gets a higher version number by itself (Google Play refuses a lower one), so any build can be uploaded.
 
@@ -105,6 +105,9 @@ GitHub → **Settings** → **Secrets and variables** → **Actions** → **New 
 GitHub → **Actions** → **Apps** → **Run workflow**. The iPhone job builds the app and uploads it to App Store Connect.
 About 15 minutes later it appears under **TestFlight**: add yourself as a tester and install it with the TestFlight
 app. When it works, **App Store** tab → add the build, screenshots and description → **Submit for Review**.
+
+Addresses the stores ask for (D-57): Privacy Policy URL **https://bedochat.com/privacy**, Support URL
+**https://bedochat.com/support**, Marketing URL (optional) **https://bedochat.com**.
 
 Apple's review sometimes refuses apps that only show a website (guideline 4.2). Bedo Chat's iPhone app has its own
 notifications, sign-in that stays, and app icon badge, which is what reviewers look for; if they still ask for
