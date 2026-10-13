@@ -56,12 +56,13 @@ jobs:
           cat > "$RUNNER_TEMP/run.sh" <<'SH'
           set -x
           E="node $RUNNER_TEMP/eval.mjs 9222"
-          sleep 30
+          sleep 120
           adb install -r apps/android/app/build/outputs/apk/debug/app-debug.apk
           adb shell am start -n com.bedochat.app/.MainActivity
           sleep 2
           adb exec-out screencap -p > shots/1-start.png
-          sleep 40
+          sleep 30
+          adb shell pidof com.bedochat.app || { echo "restarted" > shots/restarted.txt; adb shell am start -n com.bedochat.app/.MainActivity; sleep 30; }
           adb exec-out screencap -p > shots/2-open-light.png
           adb shell dumpsys activity activities | grep -E "topResumedActivity" > shots/activity.txt || true
           PID=$(adb shell pidof com.bedochat.app | tr -d '\r')
