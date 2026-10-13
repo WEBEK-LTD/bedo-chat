@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The website's own colours (light and dark themes, D-48). -->
-    <color name="statusBar">#FFFFFF</color>
-    <color name="statusBarDark">#131C27</color>
-    <color name="splashBackground">#FFFFFF</color>
-</resources>
