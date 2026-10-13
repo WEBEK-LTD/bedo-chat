@@ -1,0 +1,1 @@
+    topResumedActivity=ActivityRecord{107658766 u0 com.bedochat.app/com.google.androidbrowserhelper.trusted.LauncherActivity t8}
