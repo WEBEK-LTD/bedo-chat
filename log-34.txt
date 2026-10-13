@@ -1,0 +1,58 @@
+10-13 13:41:13.345  5838  5838 I IntentFilterVerRcvr: S+ domain verification enabled [CONTEXT service_id=244 ]
+10-13 13:41:13.582  5838  5941 I AppLinksAsyncVerifierV2: (REDACTED) Verification result: checking for a statement with source %s, relation delegate_permission/common.handle_all_urls, and target %s --> %b.
+10-13 13:41:13.583  5838  5930 I AppLinksHostsVerifierV2: (REDACTED) Verification %s complete. Successful hosts: %s. Failed hosts: %s. Error hosts: %s.
+10-13 13:41:13.608  5838  5930 I WebApkHostsVerifierV2: (REDACTED) Processing %d input requests
+10-13 13:41:13.608  5838  5930 I AppLinksUtilsV1: Legacy cross-profile verification enabled [CONTEXT service_id=244 ]
+10-13 13:41:13.624  5838  5930 I WebApkHostsVerifierV2: (REDACTED) Returning %d non-WebAPK requests
+10-13 13:41:13.771  6237  6237 D TWALauncherActivity: Using URL from Manifest (https://bedochat.com/).
+10-13 13:41:14.260  6237  6237 D TwaLauncher: Launching Trusted Web Activity.
+10-13 13:41:17.691  2663  3986 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.android.vending
+10-13 13:41:19.933  4764  4870 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.apps.messaging
+10-13 13:41:20.045  5168  5521 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.googlequicksearchbox
+10-13 13:41:20.286  1556  2220 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.inputmethod.latin
+10-13 13:41:20.350  4391  5409 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.projection.gearhead
+10-13 13:41:20.352  2774  3434 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.dialer
+10-13 13:41:22.055  2748  3442 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.tts
+10-13 13:41:22.136  2663  3986 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.android.vending
+10-13 13:41:22.183  1580  6200 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.apps.wellbeing
+10-13 13:41:22.295  5168  5520 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.googlequicksearchbox
+10-13 13:41:22.662  4764  5402 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.apps.messaging
+10-13 13:41:22.747  1556  2220 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.inputmethod.latin
+10-13 13:41:22.932  4391  5409 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.projection.gearhead
+10-13 13:41:23.100  2774  3434 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.dialer
+10-13 13:41:23.816  5736  5761 E bwfc    : bwdx: 29501: Stale snapshot for com.google.android.libraries.consentverifier#com.google.android.gms(change count changed - expected 3  but was 2)
+10-13 13:41:23.818  5736  5761 W AsyncOperation: OperationException[Status{statusCode=Stale snapshot for com.google.android.libraries.consentverifier#com.google.android.gms(change count changed - expected 3  but was 2), resolution=null}]
+10-13 13:41:23.818  5736  5760 W MobStoreFlagStore: Failed to commit due to stale snapshot for com.google.android.libraries.consentverifier#com.google.android.gms, triggering flag update. Experiments may be delayed til next app start.
+10-13 13:41:24.445  2748  3474 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.tts
+10-13 13:41:24.493  1580  6200 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.apps.wellbeing
+10-13 13:41:24.522  2663  3986 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.android.vending
+10-13 13:41:24.603  4764  4869 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.apps.messaging
+10-13 13:41:24.649  5168  5521 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.googlequicksearchbox
+10-13 13:41:24.844  4391  5409 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.projection.gearhead
+10-13 13:41:24.847  1556  2220 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.inputmethod.latin
+10-13 13:41:25.130  2774  3434 I PhenotypeBackgroundRecv: Successfully updated snapshot for com.google.android.libraries.consentverifier#com.google.android.dialer
+10-13 13:41:26.387  5736  6469 W PhenotypeConfigurationU: Update for unknown DeviceConfig package com.google.android.libraries.consentverifier#com.google.android.gms [CONTEXT service_id=204 ]
+10-13 13:41:26.387  5736  6469 W PhenotypeConfigurationU: bwix: No package exists for config package: com.google.android.libraries.consentverifier#com.google.android.gms
+10-13 13:41:26.791  5736  6476 W PhenotypeConfigurationU: Update for unknown DeviceConfig package com.google.android.libraries.consentverifier#com.google.android.gms [CONTEXT service_id=204 ]
+10-13 13:41:26.791  5736  6476 W PhenotypeConfigurationU: bwix: No package exists for config package: com.google.android.libraries.consentverifier#com.google.android.gms
+10-13 13:41:27.103  5736  6403 W PhenotypeConfigurationU: Update for unknown DeviceConfig package com.google.android.libraries.consentverifier#com.google.android.gms [CONTEXT service_id=204 ]
+10-13 13:41:27.103  5736  6403 W PhenotypeConfigurationU: bwix: No package exists for config package: com.google.android.libraries.consentverifier#com.google.android.gms
+10-13 13:41:50.332  2774  2980 I DialerCountryCodeProvider: com.android.dialer.businessvoice.verifiedcall.impl.i18n.CountryCodeProvider.getSimCountryCodeInternal:85 returning Redacted-2-chars
+10-13 13:41:50.332  2774  2980 I DialerCachedVerifiedNumberProvider: com.android.dialer.businessvoice.verifiedcall.impl.constellation.CachedVerifiedNumberProvider.refreshConstellationInfo:190 Retrieving constellation info and refreshing the cache.
+10-13 13:41:50.350  5838  5950 E constellation: [api_verify_phone_operation] Failed to generate Client Signature
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: com.android.dialer.businessvoice.verifiedcall.impl.constellation.VerifiedNumberProvider.lambda$getConstellationResponse$1:155 Failed to get constellation token.
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: nkq: 5004: 
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at nov.au(PG:1)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at nnf.g(PG:2)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at npo.a(Unknown Source:2)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at npy.dm(PG:9)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at ncz.onTransact(PG:4)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at android.os.Binder.execTransactInternal(Binder.java:1344)
+10-13 13:41:50.350  2774  2927 W DialerVerifiedNumberProvider: 	at android.os.Binder.execTransact(Binder.java:1275)
+10-13 13:41:56.928  5838  5922 I AppLinksModuleInit: verifying requested domain links post-boot [CONTEXT service_id=244 ]
+10-13 13:41:56.932  5838  5922 I AppLinksModuleInit: Rerunning all WIP verifications [CONTEXT service_id=244 ]
+10-13 13:41:56.932  5838  5922 I AppLinksModuleInit: Scheduling regular retry verifications. [CONTEXT service_id=244 ]
+10-13 13:42:15.716  6870  6870 W ThreadPoolForeg: type=1400 audit(0.0:78): avc:  denied  { setattr } for  name="verified_contents.json" dev="dm-40" ino=320653 scontext=u:r:isolated_app:s0:c512,c768 tcontext=u:object_r:app_data_file:s0:c142,c256,c512,c768 tclass=file permissive=0
+10-13 13:42:17.128  6935  6935 W ThreadPoolForeg: type=1400 audit(0.0:88): avc:  denied  { setattr } for  name="verified_contents.json" dev="dm-40" ino=321001 scontext=u:r:isolated_app:s0:c512,c768 tcontext=u:object_r:app_data_file:s0:c142,c256,c512,c768 tclass=file permissive=0
+10-13 13:42:18.196  6998  6998 W ThreadPoolForeg: type=1400 audit(0.0:102): avc:  denied  { setattr } for  name="verified_contents.json" dev="dm-40" ino=321262 scontext=u:r:isolated_app:s0:c512,c768 tcontext=u:object_r:app_data_file:s0:c142,c256,c512,c768 tclass=file permissive=0
+10-13 13:42:21.248  7103  7103 W ThreadPoolForeg: type=1400 audit(0.0:344): avc:  denied  { setattr } for  name="verified_contents.json" dev="dm-40" ino=328958 scontext=u:r:isolated_app:s0:c512,c768 tcontext=u:object_r:app_data_file:s0:c142,c256,c512,c768 tclass=file permissive=0
