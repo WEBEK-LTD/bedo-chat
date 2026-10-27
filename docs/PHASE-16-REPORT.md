@@ -184,3 +184,14 @@ Verification:
   gets an error; the privacy policy opens inside the app and the back button returns to the sign-in page; with the
   network off the app shows "Can't reach Bedo Chat". Not verifiable here: a real notification, which needs the owner's
   Firebase project (A4).
+
+## Phase 16.11 — no zoom when typing on iPhone
+
+On iPhone (in the app and in Safari) tapping a text field zoomed the page in and left it zoomed: iOS does this for any
+field whose text is smaller than 16px, and the site's fields used 14–15px. On touch screens every text field (inputs,
+the message box, menus) is now at least 16px (`packages/ui/tokens.css`, both apps); computers keep the design's sizes.
+Pinch zoom is not turned off. It is a website change only: the iPhone and Android apps show the site, so they get it
+with the next deploy, with no app update.
+
+Test (`launch.e2e.test.ts`): on a phone, every field of both sign-in pages and the message box are at least 16px; on a
+computer the sign-in field keeps its smaller size.

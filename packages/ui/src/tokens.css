@@ -24,6 +24,19 @@
     U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
+/*
+ * iPhone and iPad zoom the page in when a text field whose text is smaller than 16px is tapped, in Safari and in the
+ * iPhone app's web view, and the page stays zoomed. On touch screens every text field is at least 16px, so typing
+ * never zooms. (Not in a layer, so it wins over the size utilities of each field.)
+ */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
+  }
+}
+
 :root {
   color-scheme: light;
 

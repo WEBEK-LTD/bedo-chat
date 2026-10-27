@@ -226,6 +226,33 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     }
   });
 
+  it('text fields are at least 16px on touch screens, so iPhone does not zoom in when typing', async () => {
+    const fontSize = (page: Page, selector: string) =>
+      page.locator(selector).first().evaluate((element) => parseFloat(getComputedStyle(element).fontSize));
+    // Phone (touch): the sign-in fields of both apps and the message box.
+    const context = await browser.newContext(PHONE);
+    contexts.push(context);
+    const phone = await context.newPage();
+    for (const url of [`${WEB_URL}/login`, `${ADMIN_URL}/login`]) {
+      await phone.goto(url);
+      await phone.locator('input:not([type="checkbox"])').first().waitFor();
+      for (const field of await phone.locator('input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), textarea, select').all()) {
+        expect(await field.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)), url).toBeGreaterThanOrEqual(16);
+      }
+    }
+    await ana.goto(`${WEB_URL}/`);
+    await ana.getByRole('button', { name: /^Ben Brown/ }).first().click();
+    await composer(ana).waitFor();
+    expect(await composer(ana).evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(16);
+    // Computer (mouse): the design's own sizes stay.
+    const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    contexts.push(desktop);
+    const computer = await desktop.newPage();
+    await computer.goto(`${WEB_URL}/login`);
+    await computer.getByLabel('Phone number').waitFor();
+    expect(await fontSize(computer, 'input[type="tel"], input[inputmode="tel"], input')).toBeLessThan(16);
+  });
+
   it('fits the Admin Dashboard on a phone', async () => {
     const secret = await createAdmin(stack, ADMIN, 'Phone Admin', 'super_admin');
     const page = await phonePage('admin');
