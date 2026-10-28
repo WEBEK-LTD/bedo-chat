@@ -10,7 +10,7 @@ import { Avatar } from '../ui';
 import { FoldersDialog } from './dialogs';
 import { GlobalMessageSearch } from './global-search';
 import { chatPhoto, chatTitle, displayName, isMuted, listTime, preview } from './format';
-import { ActionMenu, type MenuItem } from './menu';
+import { ActionMenu, type MenuItem, useContextMenu } from './menu';
 
 type Tab = { kind: 'all' } | { kind: 'folder'; id: string } | { kind: 'archived' };
 
@@ -290,8 +290,11 @@ function ChatRow({ chat, myId, selected, onSelect, onNotice }: { chat: Chat; myI
       };
     }),
   ];
+  // Telegram-like: hold a chat (or right-click it) for the same menu.
+  const press = useContextMenu(`Actions for ${chatTitle(chat)}`, items);
   return (
-    <li className={`group mx-2 flex items-center rounded-md transition-colors ${selected ? 'bg-accent-soft' : 'hover:bg-surface-hover'}`}>
+    <li {...press.bind} className={`bedo-press group mx-2 flex items-center rounded-md transition-colors ${selected ? 'bg-accent-soft' : 'hover:bg-surface-hover'}`}>
+      {press.menu}
       <button type="button" onClick={() => onSelect(chat.id)} className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-2 pl-2.5 text-left" aria-current={selected || undefined}>
         <Avatar name={chatTitle(chat)} photoUrl={chatPhoto(chat)} size={48} />
         <span className="min-w-0 flex-1">

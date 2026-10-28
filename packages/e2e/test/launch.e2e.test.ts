@@ -253,6 +253,66 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     expect(await fontSize(computer, 'input[type="tel"], input[inputmode="tel"], input')).toBeLessThan(16);
   });
 
+  it('holding a message or a chat opens its menu (Telegram-like), and the chat header stays on screen with the keyboard', async () => {
+    const cdp = await ana.context().newCDPSession(ana);
+    /** A finger held on the middle of an element for 700 ms (a long press), then lifted. */
+    const hold = async (selector: ReturnType<Page['locator']>) => {
+      const box = (await selector.boundingBox())!;
+      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+      await ana.waitForTimeout(700);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    await ana.goto(`${WEB_URL}/`);
+    await ana.getByRole('button', { name: /^Ben Brown/ }).first().click();
+    await composer(ana).waitFor();
+    // A message: its menu opens where it is held; Reply works from it.
+    const bubble = ana.getByTestId('message-bubble').filter({ hasText: 'Hello Ben, see you in class' }).first();
+    await hold(bubble);
+    const messageMenu = ana.getByRole('menu', { name: 'Message actions' });
+    await messageMenu.waitFor();
+    await shot(ana, '140-phone-hold-message');
+    await messageMenu.getByRole('menuitem', { name: 'Reply' }).click();
+    await messageMenu.waitFor({ state: 'detached' });
+    await ana.getByRole('button', { name: 'Cancel reply' }).waitFor();
+    await ana.getByRole('button', { name: 'Cancel reply' }).click();
+    // A tap (not a hold) does not open the menu.
+    await bubble.tap();
+    await ana.waitForTimeout(800);
+    expect(await ana.getByRole('menu', { name: 'Message actions' }).count()).toBe(0);
+    // The keyboard: on iPhone it covers the bottom of the page. The chat screen follows the visible area, so the
+    // header with the chat's name stays at the top and the message box above the keyboard.
+    await ana.setViewportSize({ width: 390, height: 480 });
+    await ana.waitForTimeout(500);
+    const header = await ana.getByRole('region', { name: 'Chat with Ben Brown' }).getByText('Ben Brown', { exact: true }).first().boundingBox();
+    const box = await composer(ana).boundingBox();
+    expect(header!.y).toBeGreaterThanOrEqual(0);
+    expect(header!.y).toBeLessThan(80);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(480);
+    await shot(ana, '141-phone-keyboard-space');
+    await ana.setViewportSize(PHONE.viewport);
+    // A chat in the list: hold it for its menu (Pin, Archive, …); the hold does not open the chat.
+    await ana.goto(`${WEB_URL}/`);
+    const row = ana.getByRole('button', { name: /^Ben Brown/ }).first();
+    await row.waitFor();
+    await hold(row);
+    const chatMenu = ana.getByRole('menu', { name: 'Actions for Ben Brown' });
+    await chatMenu.waitFor();
+    expect(await composer(ana).count()).toBe(0);
+    await shot(ana, '142-phone-hold-chat');
+    await ana.keyboard.press('Escape');
+    await chatMenu.waitFor({ state: 'detached' });
+    // With a mouse, a right click opens the same menu.
+    await row.click({ button: 'right' });
+    await chatMenu.waitFor();
+    await chatMenu.getByRole('menuitem', { name: 'Pin' }).click();
+    await chatMenu.waitFor({ state: 'detached' });
+    // Pinned: the menu now offers Unpin.
+    await row.click({ button: 'right' });
+    await chatMenu.getByRole('menuitem', { name: 'Unpin' }).click();
+    expect(violations).toEqual([]);
+  });
+
   it('fits the Admin Dashboard on a phone', async () => {
     const secret = await createAdmin(stack, ADMIN, 'Phone Admin', 'super_admin');
     const page = await phonePage('admin');

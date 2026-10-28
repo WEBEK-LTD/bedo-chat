@@ -69,6 +69,31 @@
 }
 
 @layer components {
+  /*
+   * The chat screen fills the visible part of the page (apps/web/app/_lib/visual-viewport.ts): on iPhone the keyboard
+   * covers the bottom of the page instead of shrinking it, so the screen follows the visible area and its header
+   * stays at the top. Elsewhere this is the whole window, as before.
+   */
+  .bedo-app-viewport {
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--bedo-vv-top, 0px);
+    height: var(--bedo-vv-height, 100%);
+  }
+
+  /*
+   * Long-pressing a message or a chat opens its menu (Telegram-like): on touch screens the phone's own text
+   * selection and picture menu are not shown there (the menu has Copy text and Save file).
+   */
+  @media (pointer: coarse) {
+    .bedo-press {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+  }
+
   /* The chat background (D-48): a faint dot grid, like the squared paper of a notebook, on a cool tint. */
   .bedo-wallpaper {
     background-color: var(--bedo-color-wallpaper);

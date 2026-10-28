@@ -8,7 +8,7 @@ import type { PendingMessage } from '../../_lib/messaging/store';
 import { canPost, type DeliveryStatus, deliveryStatus, STATUS_LABEL, timeOf } from './format';
 import { PollView } from './groups';
 import { AttachmentView, ReactionChips, ReactionPicker, StickerView } from './media';
-import { ActionMenu, type MenuItem } from './menu';
+import { ActionMenu, type MenuItem, useContextMenu } from './menu';
 import { Avatar } from '../ui';
 
 const STATUS_ICON: Record<DeliveryStatus, IconName> = {
@@ -122,6 +122,8 @@ export function MessageItem({
     // A channel's posts are reported through its admins, not by sender (subscribers do not see who posted).
     ...(!mine && canAct && message.senderId !== chat.id && !(chat.peer?.deleted ?? message.sender?.deleted ?? false) ? [{ label: 'Report', icon: 'flag' as const, danger: true, onSelect: actions.onReport }] : []),
   ];
+  // Telegram-like: hold a message (or right-click it) for the same menu.
+  const press = useContextMenu('Message actions', items, !selecting);
   const status = mine ? deliveryStatus(message, chat) : null;
   // Phase 15: who sent it, with their picture: the other person in a private chat, the sender in a group. Not for
   // one's own messages, nor channel posts (they come from the channel).
@@ -158,8 +160,11 @@ export function MessageItem({
           <Icon name={selected ? 'check_circle' : 'radio_button_unchecked'} size={22} />
         </button>
       ) : null}
+      {press.menu}
       <div
-        className={`relative max-w-[min(78%,560px)] ${message.mentionsMe && !message.deleted ? 'ring-2 ring-accent/60 ' : ''}${message.sticker && !message.deleted ? 'bg-transparent px-0' : `bedo-bubble ${mine ? 'bedo-bubble-out' : 'bedo-bubble-in'} px-3`} py-1.5 ${message.deleted ? 'italic opacity-75' : ''}`}
+        {...press.bind}
+        data-testid="message-bubble"
+        className={`bedo-press relative max-w-[min(78%,560px)] ${message.mentionsMe && !message.deleted ? 'ring-2 ring-accent/60 ' : ''}${message.sticker && !message.deleted ? 'bg-transparent px-0' : `bedo-bubble ${mine ? 'bedo-bubble-out' : 'bedo-bubble-in'} px-3`} py-1.5 ${message.deleted ? 'italic opacity-75' : ''}`}
         onClick={selecting ? actions.onToggleSelect : undefined}
       >
         {picking ? (

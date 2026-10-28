@@ -9,6 +9,7 @@ import { MessagingProvider, useMessaging, useMessagingStore } from '../_lib/mess
 import { appSetBadge } from '../_lib/native-app';
 import { enablePush, pushBannerSnoozed, pushTurnedOff, resumePush, snoozePushBanner } from '../_lib/push';
 import { useSession } from '../_lib/session';
+import { useVisualViewportFit } from '../_lib/visual-viewport';
 import { ChatList } from './chat/chat-list';
 import { ChatView } from './chat/chat-view';
 import { JoinDialog, NewChannelDialog, NewGroupDialog } from './chat/groups';
@@ -132,6 +133,8 @@ function ChatArea({
 }) {
   const messaging = useMessaging();
   const store = useMessagingStore();
+  // iPhone: the chat screen stays within the visible part of the page when the keyboard opens.
+  useVisualViewportFit();
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** Phase 8: a search result to show once its chat is open. */
@@ -207,7 +210,7 @@ function ChatArea({
   }, []);
 
   return (
-    <div className="grid h-full grid-cols-1 md:grid-cols-[var(--bedo-chat-list-width)_1fr]">
+    <div className="bedo-app-viewport grid grid-cols-1 md:grid-cols-[var(--bedo-chat-list-width)_1fr]">
       <aside className={`relative min-h-0 flex-col border-line md:flex md:border-r ${chat ? 'hidden' : 'flex'}`} aria-label="Chats">
         <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 px-2">
           <button

@@ -195,3 +195,24 @@ with the next deploy, with no app update.
 
 Test (`launch.e2e.test.ts`): on a phone, every field of both sign-in pages and the message box are at least 16px; on a
 computer the sign-in field keeps its smaller size.
+
+## Phase 16.12 — chat header stays with the keyboard; hold for a menu
+
+* On iPhone the keyboard does not make the page smaller; iOS slides the page up, so the chat or group name went off
+  the top of the screen. The chat screen now follows the visible part of the page (`window.visualViewport`, in
+  `apps/web/app/_lib/visual-viewport.ts`, used by `.bedo-app-viewport` in `globals.css`): the header stays at the top and
+  the message box sits right above the keyboard. Android and computers are unchanged (there the values are the full
+  window).
+* Like Telegram, holding a message or a chat in the list (about half a second) opens its menu where the finger is:
+  for a message Reply, React, Edit, Copy text, Share, Forward, Pin, Select, Delete (as allowed); for a chat Pin,
+  Archive, Mute, Mark as unread, and so on. The phone gives a short vibration (Android). A normal tap still opens the
+  chat; moving the finger cancels the hold, so scrolling is unaffected. On a computer, right-click opens the same menu.
+  While holding, the phone's own text-selection and link pop-ups are suppressed on those items (`.bedo-press`).
+  The "⋮" buttons still work.
+
+Website change only: the apps show the site, so no App Store or Google Play update is needed.
+
+Test (`launch.e2e.test.ts`, real touch events on a phone-sized screen): holding a message opens its menu and Reply
+works; a tap does not open it; with the screen shortened as by a keyboard the chat header is still at the top and the
+message box fully visible; holding a chat opens its menu without opening the chat; right-click pins and unpins a chat.
+Not verifiable here: a real iPhone keyboard (Chromium only approximates it).
