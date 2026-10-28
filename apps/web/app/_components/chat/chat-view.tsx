@@ -7,6 +7,7 @@ import { errorMessage } from '../../_lib/api';
 import { useMessaging, useMessagingStore } from '../../_lib/messaging/context';
 import { formatBytes, formatDuration, MEDIA_LABEL, prepareFile, type PreparedFile, prepareRecording, Recorder } from '../../_lib/messaging/media';
 import { presenceOf } from '../../_lib/messaging/store';
+import { useSwipeBack } from '../../_lib/swipe-back';
 import { Avatar, Button } from '../ui';
 import { DeleteDialog, ForwardDialog, ReportDialog } from './dialogs';
 import { canPost, chatPhoto, chatTitle, dayLabel, displayName, groupSubtitle, isMuted, presenceText } from './format';
@@ -1054,9 +1055,11 @@ function PeerPanel({ chat, onClose, onReport, onNotice }: { chat: Chat; onClose:
   const store = useMessagingStore();
   const state = useMessaging();
   const peer = chat.peer!;
+  const panel = useRef<HTMLElement>(null);
+  useSwipeBack(panel, onClose);
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-scrim/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside role="dialog" aria-modal="true" aria-label="Profile" className="flex h-full w-full max-w-[360px] flex-col bg-surface">
+      <aside ref={panel} role="dialog" aria-modal="true" aria-label="Profile" className="flex h-full w-full max-w-[360px] flex-col bg-surface">
         <header className="flex h-[var(--bedo-header-height)] items-center gap-2 border-b border-line px-2">
           <button type="button" aria-label="Close profile" onClick={onClose} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />

@@ -475,21 +475,71 @@ export class MessagingStore {
     this.upsertChat(cast<Chat>(await getChat(chatId)));
   }
 
-  /** Loads the newest page of a chat and its pins, when opened. */
+  /**
+   * Loads the newest page of a chat and its pins, when opened. Messages already kept on this device are shown at once
+   * and the newest page is loaded again behind them (Phase 16.13): photo previews are signed links that expire after
+   * an hour, so a chat kept from an earlier visit would otherwise show pictures that no longer load.
+   */
   async openChat(chatId: string): Promise<void> {
     const tasks: Array<Promise<unknown>> = [listPinnedMessages(chatId).then((result) => this.set({ pins: { ...this.snapshot.pins, [chatId]: cast<Message[]>(result.messages) } }, false))];
-    if (!this.snapshot.messages[chatId]) {
-      tasks.push(
-        listMessages(chatId, { limit: PAGE }).then((result) => {
-          const page = cast<Message[]>(result.messages);
-          this.set({
-            messages: { ...this.snapshot.messages, [chatId]: mergeMessages(this.snapshot.messages[chatId] ?? [], page) },
-            hasOlder: { ...this.snapshot.hasOlder, [chatId]: page.length === PAGE },
-          });
-        }),
-      );
-    }
+    const kept = this.snapshot.messages[chatId];
+    tasks.push(
+      listMessages(chatId, { limit: PAGE }).then((result) => {
+        const page = cast<Message[]>(result.messages);
+        const current = this.snapshot.messages[chatId] ?? [];
+        const newestKept = current.length > 0 ? current[current.length - 1]!.seq : null;
+        const oldestNew = page.length > 0 ? Math.min(...page.map((message) => message.seq)) : null;
+        // More new messages than one page since the kept ones: start again from the newest page, so no gap is left.
+        const gap = newestKept !== null && oldestNew !== null && oldestNew > newestKept + 1 && page.length === PAGE;
+        this.set({
+          messages: { ...this.snapshot.messages, [chatId]: gap ? mergeMessages([], page) : mergeMessages(current, page) },
+          hasOlder: { ...this.snapshot.hasOlder, [chatId]: kept && !gap ? (this.snapshot.hasOlder[chatId] ?? page.length === PAGE) : page.length === PAGE },
+        });
+      }),
+    );
     await Promise.all(tasks);
+  }
+
+  /** Messages whose photo preview failed to load, by chat, waiting to be loaded again with fresh links. */
+  private renewing = new Map<string, { seqs: Set<number>; done: Promise<void> }>();
+  /** Each message gets one fresh link per page visit, so a preview that is really missing is not asked for forever. */
+  private renewed = new Set<string>();
+
+  /**
+   * A photo preview did not load (its signed link expired while the page stayed open, or it was kept from an earlier
+   * visit): its message is loaded again, with a fresh link. Requests from one chat are gathered into one. Resolves
+   * when done; false when this message already had its second chance.
+   */
+  async renewPreview(message: Pick<Message, 'id' | 'chatId' | 'seq'>): Promise<boolean> {
+    if (this.renewed.has(message.id)) return false;
+    this.renewed.add(message.id);
+    let batch = this.renewing.get(message.chatId);
+    if (!batch) {
+      const seqs = new Set<number>();
+      const done = new Promise<void>((resolve) => setTimeout(resolve, 150)).then(() => {
+        this.renewing.delete(message.chatId);
+        return this.reloadSeqs(message.chatId, [...seqs].sort((a, b) => b - a)).catch(() => undefined);
+      });
+      batch = { seqs, done };
+      this.renewing.set(message.chatId, batch);
+    }
+    batch.seqs.add(message.seq);
+    await batch.done;
+    return true;
+  }
+
+  private async reloadSeqs(chatId: string, wanted: number[]): Promise<void> {
+    // Newest first; each page covers up to PAGE messages, at most a few pages.
+    for (let round = 0; wanted.length > 0 && round < 4; round += 1) {
+      const page = cast<Message[]>((await listMessages(chatId, { before: wanted[0]! + 1, limit: PAGE })).messages);
+      if (page.length === 0) return;
+      const oldest = Math.min(...page.map((item) => item.seq));
+      const known = new Set((this.snapshot.messages[chatId] ?? []).map((item) => item.id));
+      // Only messages already shown are replaced (the page may reach past what is loaded).
+      const fresh = page.filter((item) => known.has(item.id));
+      this.set({ messages: { ...this.snapshot.messages, [chatId]: mergeMessages(this.snapshot.messages[chatId] ?? [], fresh) } });
+      wanted = wanted.filter((seq) => seq < oldest);
+    }
   }
 
   async loadOlder(chatId: string): Promise<number> {

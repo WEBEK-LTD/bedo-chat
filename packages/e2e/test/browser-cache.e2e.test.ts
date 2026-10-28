@@ -119,6 +119,46 @@ describe.runIf(enabled)('Phase 14.4 opening from the browser cache', () => {
     await benContext.unroute('https://localhost:3400/storage/**');
   });
 
+  it('loads a photo preview again with a fresh link when its link no longer works, and fits it in its bubble', async () => {
+    // Phase 16.13: a chat kept on this device whose preview link has expired (here: storage refuses every picture
+    // until the app has asked the API again).
+    await ben.evaluate(() => caches.delete('bedo-media-v1'));
+    let expired = true;
+    let refused = 0;
+    await benContext.route('https://localhost:3400/storage/**', (route) => {
+      if (!expired) return route.continue();
+      refused += 1;
+      return route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ statusCode: '400', error: 'InvalidJWT', message: '"exp" claim timestamp check failed' }) });
+    });
+    const asked = (request: { url(): string }) => {
+      if (refused > 0 && /\/api\/v1\/chats\/[^/]+\/messages/.test(request.url())) expired = false;
+    };
+    ben.on('request', asked);
+    try {
+      await ben.reload();
+      await ben.getByRole('button', { name: /^Ana Lopez/ }).click();
+      const photo = messages(ben).getByRole('button', { name: 'Open photo' });
+      await photo.waitFor();
+      await expect.poll(() => photo.locator('img').evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0).catch(() => false), { timeout: 15_000 }).toBe(true);
+      expect(refused).toBeGreaterThan(0);
+      expect(expired).toBe(false);
+      // On a phone the picture fills its bubble, inside the screen (it used to stick out of the bubble).
+      await ben.setViewportSize({ width: 390, height: 844 });
+      await ben.waitForTimeout(300);
+      const bubble = await ben.getByTestId('message-bubble').filter({ has: ben.getByTestId('media-frame') }).first().boundingBox();
+      const frame = await ben.getByTestId('media-frame').first().boundingBox();
+      expect(frame!.x).toBeGreaterThanOrEqual(bubble!.x - 1);
+      expect(frame!.x + frame!.width).toBeLessThanOrEqual(bubble!.x + bubble!.width + 1);
+      expect(frame!.width).toBeGreaterThan(bubble!.width - 2);
+      expect(bubble!.x + bubble!.width).toBeLessThanOrEqual(390);
+      if (process.env.E2E_SCREENSHOTS) await ben.screenshot({ path: `${process.env.E2E_SCREENSHOTS}/145-phone-photo-bubble.png` });
+    } finally {
+      ben.off('request', asked);
+      await benContext.unroute('https://localhost:3400/storage/**');
+      await ben.setViewportSize({ width: 1280, height: 720 });
+    }
+  });
+
   it('shows the chats before the session check answers', async () => {
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => {

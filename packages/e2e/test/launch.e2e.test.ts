@@ -313,6 +313,70 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     expect(violations).toEqual([]);
   });
 
+  it('swipes right to go back, like Telegram: from a chat, a Settings page and a profile', async () => {
+    const cdp = await ana.context().newCDPSession(ana);
+    /** A finger dragged from one point to another in small steps (about 60 frames a second), then lifted. */
+    const swipe = async (from: { x: number; y: number }, to: { x: number; y: number }, options: { lift?: boolean; steps?: number } = {}) => {
+      const steps = options.steps ?? 10;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [from] });
+      for (let step = 1; step <= steps; step += 1) {
+        const point = { x: from.x + ((to.x - from.x) * step) / steps, y: from.y + ((to.y - from.y) * step) / steps };
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [point] });
+        await ana.waitForTimeout(16);
+      }
+      if (options.lift !== false) await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    };
+    // Hidden from screen readers while it only shows under the swipe, so found by its element.
+    const list = ana.locator('aside[aria-label="Chats"]');
+    const openBen = async () => {
+      await ana.getByRole('button', { name: /^Ben Brown/ }).first().click();
+      await composer(ana).waitFor();
+    };
+    await ana.goto(`${WEB_URL}/`);
+    await openBen();
+    // A short drag and an upward scroll leave the chat open.
+    await swipe({ x: 60, y: 420 }, { x: 110, y: 420 });
+    await ana.waitForTimeout(400);
+    expect(await composer(ana).isVisible()).toBe(true);
+    await swipe({ x: 200, y: 600 }, { x: 215, y: 300 });
+    await ana.waitForTimeout(400);
+    expect(await composer(ana).isVisible()).toBe(true);
+    // Half way: the chat follows the finger and the chat list shows underneath.
+    await swipe({ x: 40, y: 420 }, { x: 220, y: 420 }, { lift: false });
+    expect(await list.isVisible()).toBe(true);
+    const moved = await ana.getByRole('region', { name: 'Chat with Ben Brown' }).boundingBox();
+    expect(moved!.x).toBeGreaterThan(120);
+    await shot(ana, '143-phone-swipe-back');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    // Released past a third of the screen: back to the chat list.
+    await composer(ana).waitFor({ state: 'detached' });
+    await ana.getByRole('button', { name: /^Ben Brown/ }).first().waitFor();
+    // The profile of the person: swiped away, the chat stays open.
+    await openBen();
+    await ana.getByRole('region', { name: 'Chat with Ben Brown' }).getByRole('button', { name: /Ben Brown/ }).first().click();
+    const profile = ana.getByRole('dialog', { name: 'Profile' });
+    await profile.waitFor();
+    await swipe({ x: 40, y: 500 }, { x: 330, y: 500 });
+    await profile.waitFor({ state: 'detached' });
+    expect(await composer(ana).isVisible()).toBe(true);
+    await swipe({ x: 40, y: 420 }, { x: 330, y: 420 });
+    await composer(ana).waitFor({ state: 'detached' });
+    // Settings: a page goes back to the menu (shown underneath while swiping), the menu closes Settings.
+    await ana.getByRole('button', { name: 'Settings' }).click();
+    await ana.getByRole('dialog', { name: 'Settings' }).getByRole('button', { name: 'Privacy' }).click();
+    await ana.getByRole('dialog', { name: 'Privacy' }).waitFor();
+    await swipe({ x: 40, y: 500 }, { x: 230, y: 500 }, { lift: false });
+    await ana.getByText('Edit profile').first().waitFor();
+    await shot(ana, '144-phone-swipe-settings');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await ana.getByRole('dialog', { name: 'Privacy' }).waitFor({ state: 'detached' });
+    await ana.getByRole('dialog', { name: 'Settings' }).waitFor();
+    await swipe({ x: 40, y: 600 }, { x: 330, y: 600 });
+    await ana.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'detached' });
+    await ana.getByRole('button', { name: /^Ben Brown/ }).first().waitFor();
+    expect(violations).toEqual([]);
+  });
+
   it('fits the Admin Dashboard on a phone', async () => {
     const secret = await createAdmin(stack, ADMIN, 'Phone Admin', 'super_admin');
     const page = await phonePage('admin');

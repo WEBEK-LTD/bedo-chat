@@ -216,3 +216,30 @@ Test (`launch.e2e.test.ts`, real touch events on a phone-sized screen): holding 
 works; a tap does not open it; with the screen shortened as by a keyboard the chat header is still at the top and the
 message box fully visible; holding a chat opens its menu without opening the chat; right-click pins and unpins a chat.
 Not verifiable here: a real iPhone keyboard (Chromium only approximates it).
+
+## Phase 16.13 — swipe right to go back; photos fill their bubble and always load
+
+* **Swipe back, as in Telegram** (`apps/web/app/_lib/swipe-back.ts`). On a phone, a page follows the finger when it is
+  dragged to the right from anywhere on it; released past a third of the screen (or flicked) it slides away, otherwise
+  it slides back. It works on an open chat (back to the chat list, which shows underneath and slides in while
+  swiping), on every Settings page (back to the previous page, shown underneath; on the Settings menu it closes
+  Settings), and on a person's profile and a group's or channel's info (closes them). A vertical drag stays a scroll;
+  typing fields, sliders, sideways scrolling areas, menus and dialogs keep their own touches. The iPhone app's web view
+  has no back gesture of its own; Android's edge gesture keeps working as before. On computers and wider screens
+  nothing changes.
+* **Photo and video frames.** A picture used to keep a fixed 320px width and stick out of its bubble on a phone. It
+  now fills the bubble edge to edge and keeps its shape, with the caption underneath at the picture's width; with no
+  caption the time sits on the picture, as in Telegram.
+* **Pictures that did not load.** Photo previews are signed storage links valid for an hour. A chat kept on the device
+  from an earlier visit (or a page left open for hours, typical of the Android app) still had the old links, so a
+  picture not yet kept on the device showed as broken, while tapping it worked (that asks for a fresh link). Now an
+  opened chat loads its newest messages again behind the kept ones, and a preview that fails is loaded again with a
+  fresh link (once; if that also fails, the photo icon is shown instead of a broken picture).
+
+Website change only: the apps show the site, so no App Store or Google Play update is needed. No database change.
+
+Tests: `launch.e2e.test.ts` (real touch events on a phone-sized screen): a short drag and a vertical scroll leave the
+chat open; half way the chat follows the finger with the list underneath; released, the list is back; the profile is
+swiped away with the chat still open; a Settings page goes back to the menu (shown underneath), the menu closes
+Settings. `browser-cache.e2e.test.ts`: with storage refusing the expired link until the app asks again, the photo
+loads; on a phone the picture fills its bubble, inside the screen. Not verifiable here: a real iPhone.

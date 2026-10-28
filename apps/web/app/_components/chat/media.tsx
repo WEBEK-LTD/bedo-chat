@@ -59,16 +59,33 @@ function fileIcon(attachment: Attachment): IconName {
 }
 
 /** The file of a message, shown by kind (Phase 4, blueprint: Media). */
-export function AttachmentView({ message, attachment, onOpen }: { message: Message; attachment: Attachment; onOpen: () => void }) {
+export function AttachmentView({ message, attachment, onOpen, fill = false }: { message: Message; attachment: Attachment; onOpen: () => void; fill?: boolean }) {
   const store = useMessagingStore();
+  // Phase 16.13: a preview whose link no longer works is loaded again with a fresh link (once); if that fails too,
+  // the photo's icon is shown instead of a broken picture.
+  const [broken, setBroken] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   switch (attachment.kind) {
     case 'photo':
     case 'video': {
       const size = displaySize(attachment);
+      const preview = attachment.thumbnailUrl && !broken ? attachment.thumbnailUrl : null;
+      const failed = () => {
+        void store.renewPreview(message).then((renewed) => (renewed ? setAttempt((value) => value + 1) : setBroken(true)));
+      };
+      // In a photo bubble (fill) the picture takes the bubble's width and keeps its shape, as in Telegram.
+      const frame = fill ? { aspectRatio: `${size.width} / ${size.height}`, maxHeight: 420 } : size;
       return (
-        <button type="button" onClick={onOpen} aria-label={attachment.kind === 'photo' ? 'Open photo' : 'Play video'} className="relative block overflow-hidden rounded-sm bg-surface-subtle" style={size}>
-          {attachment.thumbnailUrl ? (
-            <CachedImg src={attachment.thumbnailUrl} alt="" className="size-full object-cover" style={size} />
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={attachment.kind === 'photo' ? 'Open photo' : 'Play video'}
+          data-testid="media-frame"
+          className={`relative block overflow-hidden bg-surface-subtle ${fill ? 'w-full' : 'rounded-sm'}`}
+          style={frame}
+        >
+          {preview ? (
+            <CachedImg key={attempt} src={preview} alt="" className="size-full object-cover" onError={failed} />
           ) : (
             <span className="grid size-full place-items-center text-ink-secondary">
               <Icon name={attachment.kind === 'photo' ? 'image' : 'movie'} size={36} />
@@ -81,7 +98,7 @@ export function AttachmentView({ message, attachment, onOpen }: { message: Messa
                   <Icon name="play_arrow" size={28} />
                 </span>
               </span>
-              <span className="absolute bottom-1 left-1 rounded-sm bg-scrim/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
+              <span className="absolute left-1.5 top-1.5 rounded-sm bg-scrim/60 px-1 text-[11px] text-on-accent">{formatDuration(attachment.durationMs)}</span>
             </>
           ) : null}
         </button>

@@ -137,6 +137,15 @@ export function MessageItem({
         ? { displayName: message.sender.displayName, photoUrl: message.sender.photoUrl }
         : null;
 
+  // Phase 16.13: a photo or video fills its bubble edge to edge, as in Telegram: the caption (if any) underneath at the
+  // picture's width, and with no caption the time sits on the picture.
+  const visual = !message.deleted && (message.attachment?.kind === 'photo' || message.attachment?.kind === 'video') ? message.attachment : null;
+  const visualSize = visual ? photoBubbleWidth(visual, Boolean(message.text)) : null;
+  const visualAtTop = Boolean(visual) && !(message.sender && !mine) && !message.forwardedFrom && !message.replyTo;
+  const visualAtBottom = Boolean(visual) && !message.text && !message.poll && message.reactions.length === 0;
+  const radius = 'var(--bedo-radius-bubble)';
+  const tail = '6px';
+
   return (
     <div id={`message-${message.id}`} className={`group flex items-start gap-2 rounded-sm py-0.5 transition-colors ${mine ? 'flex-row-reverse' : ''}`}>
       {author ? (
@@ -166,6 +175,7 @@ export function MessageItem({
         data-testid="message-bubble"
         className={`bedo-press relative max-w-[min(78%,560px)] ${message.mentionsMe && !message.deleted ? 'ring-2 ring-accent/60 ' : ''}${message.sticker && !message.deleted ? 'bg-transparent px-0' : `bedo-bubble ${mine ? 'bedo-bubble-out' : 'bedo-bubble-in'} px-3`} py-1.5 ${message.deleted ? 'italic opacity-75' : ''}`}
         onClick={selecting ? actions.onToggleSelect : undefined}
+        style={visualSize ? { width: visualSize } : undefined}
       >
         {picking ? (
           <ReactionPicker
@@ -191,7 +201,19 @@ export function MessageItem({
             <span className="block truncate text-xs opacity-80">{replyText(message.replyTo)}</span>
           </button>
         ) : null}
-        {!message.deleted && message.attachment ? (
+        {visual ? (
+          <div
+            className={`-mx-3 overflow-hidden ${visualAtTop ? '-mt-1.5' : 'mt-1'} ${visualAtBottom ? '-mb-1.5' : 'mb-1'}`}
+            style={{
+              borderTopLeftRadius: visualAtTop ? radius : 0,
+              borderTopRightRadius: visualAtTop ? radius : 0,
+              borderBottomLeftRadius: visualAtBottom ? (mine ? radius : tail) : 0,
+              borderBottomRightRadius: visualAtBottom ? (mine ? tail : radius) : 0,
+            }}
+          >
+            <AttachmentView message={message} attachment={visual} onOpen={actions.onOpenMedia} fill />
+          </div>
+        ) : !message.deleted && message.attachment ? (
           <div className="my-1">
             <AttachmentView message={message} attachment={message.attachment} onOpen={actions.onOpenMedia} />
           </div>
@@ -206,7 +228,13 @@ export function MessageItem({
           <RichText text={message.text} onHashtag={actions.onHashtag} />
         ) : null}
         <ReactionChips reactions={message.reactions} disabled={!canReact} onToggle={(emoji, isMine) => actions.onReact(isMine ? null : emoji)} />
-        <p className={`mt-0.5 flex items-center justify-end gap-1 text-[11px] ${mine ? 'opacity-70' : 'text-ink-secondary'}`}>
+        <p
+          className={
+            visualAtBottom
+              ? 'pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-scrim/55 px-1.5 py-px text-[11px] text-white'
+              : `mt-0.5 flex items-center justify-end gap-1 text-[11px] ${mine ? 'opacity-70' : 'text-ink-secondary'}`
+          }
+        >
           {pinned ? <Icon name="keep" size={12} title="Pinned" /> : null}
           {message.editedAt && !message.deleted ? <span>edited</span> : null}
           <time dateTime={message.createdAt}>{timeOf(message.createdAt)}</time>
@@ -225,6 +253,15 @@ export function MessageItem({
       )}
     </div>
   );
+}
+
+/** A photo bubble's width: the picture's (at most 320px, see displaySize in media.tsx), a little wider for a caption. */
+function photoBubbleWidth(attachment: { width: number | null; height: number | null }, caption: boolean): number {
+  const max = 320;
+  const width = attachment.width ?? max;
+  const height = attachment.height ?? Math.round(max * 0.75);
+  const shown = Math.max(120, Math.round(width * Math.min(max / width, max / height, 1)));
+  return caption ? Math.max(shown, 240) : shown;
 }
 
 /** A message stored on this device and not yet acknowledged (sending), or refused (failed, with retry). */

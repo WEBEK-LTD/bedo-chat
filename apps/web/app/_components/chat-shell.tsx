@@ -9,6 +9,7 @@ import { MessagingProvider, useMessaging, useMessagingStore } from '../_lib/mess
 import { appSetBadge } from '../_lib/native-app';
 import { enablePush, pushBannerSnoozed, pushTurnedOff, resumePush, snoozePushBanner } from '../_lib/push';
 import { useSession } from '../_lib/session';
+import { useSwipeBack } from '../_lib/swipe-back';
 import { useVisualViewportFit } from '../_lib/visual-viewport';
 import { ChatList } from './chat/chat-list';
 import { ChatView } from './chat/chat-view';
@@ -142,6 +143,12 @@ function ChatArea({
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chat = selectedId ? messaging.chats[selectedId] : undefined;
+  // Phase 16.13: on phones the open chat is swiped right to go back to the list, which shows underneath meanwhile.
+  const listRef = useRef<HTMLElement>(null);
+  const chatRef = useRef<HTMLElement>(null);
+  const [peeking, setPeeking] = useState(false);
+  const closeChat = useCallback(() => setSelectedId(null), []);
+  useSwipeBack(chatRef, chat ? closeChat : null, { under: listRef, onPeek: setPeeking });
   const [newGroup, setNewGroup] = useState(false);
   const [mayCreateGroups, setMayCreateGroups] = useState(false);
   const [newChannel, setNewChannel] = useState(false);
@@ -211,7 +218,7 @@ function ChatArea({
 
   return (
     <div className="bedo-app-viewport grid grid-cols-1 md:grid-cols-[var(--bedo-chat-list-width)_1fr]">
-      <aside className={`relative min-h-0 flex-col border-line md:flex md:border-r ${chat ? 'hidden' : 'flex'}`} aria-label="Chats">
+      <aside ref={listRef} className={`relative min-h-0 flex-col border-line max-md:[grid-area:1/1] md:flex md:border-r ${chat && !peeking ? 'hidden' : 'flex'}`} aria-label="Chats" aria-hidden={chat && peeking ? true : undefined}>
         <header className="flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 px-2">
           <button
             type="button"
@@ -306,14 +313,14 @@ function ChatArea({
         {settings}
       </aside>
 
-      <main className={`min-h-0 md:flex ${chat ? 'flex' : 'hidden'} ${chat ? 'flex-col' : 'bedo-wallpaper items-center justify-center'}`}>
+      <main ref={chatRef} className={`relative min-h-0 max-md:z-10 max-md:[grid-area:1/1] md:flex ${chat ? 'flex' : 'hidden'} ${chat ? 'flex-col bg-surface' : 'bedo-wallpaper items-center justify-center'}`}>
         {chat ? (
           <ChatView
             chat={chat}
             myId={myId}
             jump={jump?.chatId === chat.id ? jump : null}
             onJumped={() => setJump(null)}
-            onBack={() => setSelectedId(null)}
+            onBack={closeChat}
             onNotice={showNotice}
           />
         ) : (

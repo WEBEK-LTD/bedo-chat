@@ -47,9 +47,10 @@ import {
   type PublicUser,
 } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
-import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { errorMessage } from '../../_lib/api';
 import { useMessagingStore } from '../../_lib/messaging/context';
+import { useSwipeBack } from '../../_lib/swipe-back';
 import { Avatar, Button, FormError, TextField } from '../ui';
 import { chatPhoto, chatTitle, groupSubtitle } from './format';
 import { ActionMenu, Dialog, type MenuItem } from './menu';
@@ -604,6 +605,8 @@ function RightsDialog({ member, type, allowed, onClose, onSave }: { member: Grou
 /** Group info: details, members (when this member may see them), invite links, requests, settings, leave. */
 export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat: Chat; myId: string; onClose: () => void; onNotice: (message: string) => void; onLeft: () => void }) {
   const store = useMessagingStore();
+  const panel = useRef<HTMLElement>(null);
+  useSwipeBack(panel, onClose);
   const group = chat.group!;
   const channel = chat.type === 'channel';
   /** "group" or "channel", for labels. */
@@ -701,7 +704,7 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-scrim/30" onPointerDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside role="dialog" aria-modal="true" aria-label={`${Noun} info`} className="flex h-full w-full max-w-[400px] flex-col overflow-y-auto bg-surface">
+      <aside ref={panel} role="dialog" aria-modal="true" aria-label={`${Noun} info`} className="flex h-full w-full max-w-[400px] flex-col overflow-y-auto bg-surface">
         <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
           <button type="button" aria-label={`Close ${noun} info`} onClick={onClose} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />
