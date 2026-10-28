@@ -269,3 +269,20 @@ range checks; every number of a range signs in as its own account; outside the r
 academy-list numbers and existing students never use the code; the review account is unchanged even inside a range;
 the separate per-address allowance; turning off and removing a range end the sessions) and `admin-bootstrap.e2e`
 (the section in the Admin Dashboard and two test numbers signing in from the student app).
+
+## Phase 16.15 — the chat list no longer moves against the finger on iPhone
+
+On iPhone (app and Safari) dragging the chat list up or down moved it the other way. Since Phase 16.12 the app screen
+followed the visible area of the page (`visualViewport`) all the time; when iOS bounces the page at the end of a drag
+(always, when the list is too short to scroll), the visible area moves with the finger and the screen was moved the
+opposite way to follow it. Now the screen follows the visible area **only while the keyboard is open** (the visible
+area clearly shorter than the page, not zoomed), never above the top of the page; otherwise it is the whole window.
+The app screen also no longer bounces as a whole page (`overscroll-behavior: none` on the app screen only); the lists
+inside it scroll as before. The chat header still stays on screen with the keyboard (Phase 16.12).
+
+Website change only: no App Store or Google Play update.
+
+Test (`launch.e2e.test.ts`, with a stand-in for iOS's visible area): a bounce up or down and a zoom leave the screen
+in place; with the keyboard open the screen follows the visible area; a bounce while typing never moves it above the
+top; with the keyboard closed it is the whole window again; the page itself does not bounce. Not verifiable here: a
+real iPhone.

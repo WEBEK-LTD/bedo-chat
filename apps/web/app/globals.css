@@ -74,6 +74,14 @@
    * covers the bottom of the page instead of shrinking it, so the screen follows the visible area and its header
    * stays at the top. Elsewhere this is the whole window, as before.
    */
+  /*
+   * Phase 16.15: the app screen never bounces as a whole page (iPhone): only the lists inside it scroll. Pages that
+   * are not the app screen (sign-in, information pages) are unchanged.
+   */
+  html:has(.bedo-app-viewport),
+  html:has(.bedo-app-viewport) body {
+    overscroll-behavior: none;
+  }
   .bedo-app-viewport {
     position: fixed;
     left: 0;

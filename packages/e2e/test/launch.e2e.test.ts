@@ -411,4 +411,48 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     }
     expect(violations).toEqual([]);
   });
+
+  it('keeps the app screen still when iPhone bounces the page, and follows the visible area only while the keyboard is open', async () => {
+    // Phase 16.15: on iPhone the chat list moved against the finger. A stand-in for the visible area (visualViewport)
+    // reports what iOS does: a bounce at the end of a drag (offsetTop below 0, full height), then the keyboard.
+    await ana.context().addInitScript(() => {
+      const real = window.visualViewport!;
+      const fake = new EventTarget();
+      const state: Record<string, number | undefined> = {};
+      for (const key of ['height', 'width', 'offsetTop', 'offsetLeft', 'pageTop', 'pageLeft', 'scale'] as const) {
+        Object.defineProperty(fake, key, { get: () => state[key] ?? real[key] });
+      }
+      Object.defineProperty(window, 'visualViewport', { get: () => fake });
+      (window as unknown as { bedoViewport: (values: Record<string, number | undefined>) => void }).bedoViewport = (values) => {
+        Object.assign(state, values);
+        fake.dispatchEvent(new Event('scroll'));
+        fake.dispatchEvent(new Event('resize'));
+      };
+    });
+    await ana.goto(`${WEB_URL}/`);
+    await ana.getByRole('button', { name: /^Ben Brown/ }).first().waitFor();
+    const set = async (values: Record<string, number | undefined>) => {
+      await ana.evaluate((next) => (window as unknown as { bedoViewport: (values: Record<string, number | undefined>) => void }).bedoViewport(next), values);
+      await ana.waitForTimeout(150);
+      return ana.evaluate(() => {
+        const box = document.querySelector('.bedo-app-viewport')!.getBoundingClientRect();
+        return { top: Math.round(box.top), height: Math.round(box.height) };
+      });
+    };
+    const screen = PHONE.viewport.height;
+    // A bounce (no keyboard): the screen stays where it is.
+    expect(await set({ offsetTop: -60 })).toEqual({ top: 0, height: screen });
+    expect(await set({ offsetTop: 45 })).toEqual({ top: 0, height: screen });
+    // Zoomed in: the same.
+    expect(await set({ offsetTop: 120, height: 400, scale: 2 })).toEqual({ top: 0, height: screen });
+    // The keyboard open (the visible area 300px shorter, scrolled 280px down): the screen follows it.
+    expect(await set({ offsetTop: 280, height: screen - 300, scale: 1 })).toEqual({ top: 280, height: screen - 300 });
+    // A bounce while typing never moves it above the top.
+    expect(await set({ offsetTop: -30 })).toEqual({ top: 0, height: screen - 300 });
+    // Keyboard closed: the whole window again.
+    expect(await set({ offsetTop: 0, height: screen })).toEqual({ top: 0, height: screen });
+    // The page itself never bounces: only the lists inside it scroll.
+    expect(await ana.evaluate(() => getComputedStyle(document.documentElement).overscrollBehaviorY)).toBe('none');
+    expect(violations).toEqual([]);
+  });
 });
