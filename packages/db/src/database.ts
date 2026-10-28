@@ -83,6 +83,28 @@ export interface ReviewAccountSettingsTable {
   updated_at: Date | null;
 }
 
+/** Test accounts (D-59): one fixed code for every number in the ranges. One row. */
+export interface TestAccountSettingsTable {
+  id: Generated<boolean>;
+  enabled: Generated<boolean>;
+  code_enc: string | null;
+  updated_by: string | null;
+  updated_at: Date | null;
+}
+
+export interface TestNumberRangesTable {
+  id: Generated<string>;
+  first_phone: string;
+  last_phone: string;
+  added_by: string | null;
+  added_at: Generated<Date>;
+}
+
+export interface TestAccountsTable {
+  user_id: string;
+  created_at: Generated<Date>;
+}
+
 /** Site monitoring (Phase 14.5). */
 export type SiteCheckKind = 'heartbeat' | 'manual';
 export type SiteIncidentKind = 'outage' | 'storage' | 'whatsapp' | 'database_slow';
@@ -739,6 +761,9 @@ export interface Database {
   'app.otp_settings': OtpSettingsTable;
   'app.access_settings': AccessSettingsTable;
   'app.review_account_settings': ReviewAccountSettingsTable;
+  'app.test_account_settings': TestAccountSettingsTable;
+  'app.test_number_ranges': TestNumberRangesTable;
+  'app.test_accounts': TestAccountsTable;
   'app.site_checks': SiteChecksTable;
   'app.site_incidents': SiteIncidentsTable;
   'app.monitoring_settings': MonitoringSettingsTable;

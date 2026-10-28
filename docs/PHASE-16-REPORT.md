@@ -243,3 +243,29 @@ chat open; half way the chat follows the finger with the list underneath; releas
 swiped away with the chat still open; a Settings page goes back to the menu (shown underneath), the menu closes
 Settings. `browser-cache.e2e.test.ts`: with storage refusing the expired link until the app asks again, the photo
 loads; on a phone the picture fills its bubble, inside the screen. Not verifiable here: a real iPhone.
+
+## Phase 16.14 — test accounts (D-59)
+
+Many test accounts that behave exactly like students, for trying the apps. In the Admin Dashboard, **OTP / WhatsApp →
+Test accounts** (Super Admins), under the store review account:
+
+* **One sign-in code** (6 digits) for every test number, **Save and turn on** / **Turn off**.
+* **Number ranges**: first and last number (for example +201000000000 to +201000000099 = 100 numbers), at most 1000 in
+  one range and 50 ranges; to have more later, add the next range. Each range shows how many of its numbers have signed
+  in; **Remove** (asks for a second click) ends their sessions.
+
+Every number in a range signs in to the student app with the code (no WhatsApp message) and is its own account, with
+its own name, chats, groups and devices, like any student. Protections: never a number on the academy phone list,
+never an existing student's account whose number happens to be in a range, never the store review account's number
+(which keeps its own code and works exactly as before); student sign-in only; the usual limits and locks; test numbers
+use their own per-address allowance of codes, so testing from one place never blocks real students there; turning it
+off ends every test account's sessions.
+
+Owner step: run `docs/owner-sql/update-20261029120000.sql` once in the Supabase SQL Editor (new tables; nothing else
+changes). Until then the site works as before and the Test accounts section cannot load.
+
+Tests: `apps/api/test/test-accounts.integration.test.ts` (off by default; Super Admin only; code stored encrypted;
+range checks; every number of a range signs in as its own account; outside the range nothing changes; wrong codes lock;
+academy-list numbers and existing students never use the code; the review account is unchanged even inside a range;
+the separate per-address allowance; turning off and removing a range end the sessions) and `admin-bootstrap.e2e`
+(the section in the Admin Dashboard and two test numbers signing in from the student app).

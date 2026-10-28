@@ -1,9 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Put, Query, Req, UseGuards } from '@nestjs/common';
 import {
   adminAccessSettingsBodySchema,
   adminAccessSettingsSchema,
   adminReviewAccountBodySchema,
   adminReviewAccountSchema,
+  adminTestAccountsBodySchema,
+  adminTestAccountsSchema,
+  adminTestNumberRangeBodySchema,
   adminAddChatMembersBodySchema,
   adminAuditQuerySchema,
   adminAuditResponseSchema,
@@ -46,6 +49,7 @@ import { AdminAuthGuard, AdminRoles, CurrentAdmin } from './admin-auth.guard.js'
 import type { AdminContext } from './admin-auth.service.js';
 import { requirePhone } from '../auth/auth.controller.js';
 import { ReviewAccountService } from '../auth/review-account.service.js';
+import { TestAccountsService } from '../auth/test-accounts.service.js';
 import { AdminChatsService } from './admin-chats.service.js';
 import { AdminConsoleService } from './admin-console.service.js';
 import { MonitoringService } from '../runtime/monitoring.service.js';
@@ -66,6 +70,7 @@ export class AdminConsoleController {
     @Inject(AdminConsoleService) private readonly console: AdminConsoleService,
     @Inject(MonitoringService) private readonly monitoring: MonitoringService,
     @Inject(ReviewAccountService) private readonly reviewAccounts: ReviewAccountService,
+    @Inject(TestAccountsService) private readonly testAccounts: TestAccountsService,
   ) {}
 
   @Get('stats')
@@ -139,6 +144,44 @@ export class AdminConsoleController {
   ) {
     const phone = requirePhone(body.phone);
     return this.reviewAccounts.update(admin, { ...body, phone }, requestInfo(request));
+  }
+
+  /** D-59: test accounts. Super Admins only (the answer holds the fixed code). */
+  @Get('settings/test-accounts')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminTestAccountsSchema)
+  testAccountsSettings() {
+    return this.testAccounts.settings();
+  }
+
+  @Put('settings/test-accounts')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminTestAccountsSchema)
+  setTestAccounts(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(adminTestAccountsBodySchema)) body: z.infer<typeof adminTestAccountsBodySchema>,
+    @Req() request: FastifyRequest,
+  ) {
+    return this.testAccounts.update(admin, body, requestInfo(request));
+  }
+
+  @Post('settings/test-accounts/ranges')
+  @HttpCode(200)
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminTestAccountsSchema)
+  addTestNumberRange(
+    @CurrentAdmin() admin: AdminContext,
+    @Body(new ZodValidationPipe(adminTestNumberRangeBodySchema)) body: z.infer<typeof adminTestNumberRangeBodySchema>,
+    @Req() request: FastifyRequest,
+  ) {
+    return this.testAccounts.addRange(admin, requirePhone(body.firstPhone), requirePhone(body.lastPhone), requestInfo(request));
+  }
+
+  @Delete('settings/test-accounts/ranges/:id')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminTestAccountsSchema)
+  removeTestNumberRange(@CurrentAdmin() admin: AdminContext, @Param('id', new IdPipe()) id: string, @Req() request: FastifyRequest) {
+    return this.testAccounts.removeRange(admin, id, requestInfo(request));
   }
 
   @Get('users')

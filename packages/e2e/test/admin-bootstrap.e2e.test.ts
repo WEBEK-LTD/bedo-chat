@@ -251,6 +251,53 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     await section.getByTestId('review-account-status').getByText('Off.', { exact: false }).waitFor();
   });
 
+  it('D-59: a Super Admin turns on test accounts with a range; each number signs in with the one code as its own account', async () => {
+    await page.getByRole('button', { name: 'OTP / WhatsApp' }).click();
+    const section = page.getByRole('region', { name: 'Test accounts' });
+    await section.getByTestId('test-accounts-status').getByText('Off.').waitFor();
+    await section.getByLabel('Test accounts sign-in code').fill('975310');
+    await section.getByRole('button', { name: 'Save and turn on' }).click();
+    await section.getByTestId('test-accounts-status').getByText(/^On: 0 numbers/).waitFor();
+    // A range checked in the page first (more than 1000 numbers), then added.
+    await section.getByLabel('First number').fill('+61 400 200 000');
+    await section.getByLabel('Last number').fill('+61400201000');
+    await section.getByRole('button', { name: 'Add range' }).click();
+    await section.getByText(/A range holds at most 1000 numbers/).waitFor();
+    await section.getByLabel('Last number').fill('+61400200099');
+    await section.getByRole('button', { name: 'Add range' }).click();
+    await section.getByRole('list', { name: 'Test number ranges' }).getByText('+61400200000 – +61400200099').waitFor();
+    await section.getByTestId('test-accounts-status').getByText(/^On: 100 numbers in 1 range/).waitFor();
+    await shot(page, '36-test-accounts');
+
+    // Two numbers of the range: two separate accounts, each signed in with the same code.
+    for (const [phone, name] of [
+      ['+61400200001', 'Test One'],
+      ['+61400200002', 'Test Two'],
+    ] as const) {
+      const tester = await newPage();
+      await tester.goto(`${WEB_URL}/login`);
+      await tester.getByLabel('Phone number').fill(phone);
+      await tester.getByRole('button', { name: 'Continue' }).click();
+      await tester.getByLabel('Verification code').fill('975310');
+      await tester.getByRole('button', { name: 'Sign in' }).click();
+      await tester.getByLabel('Name').fill(name);
+      await tester.getByRole('button', { name: 'Continue' }).click();
+      await tester.waitForURL(`${WEB_URL}/`);
+    }
+    await page.reload();
+    await page.getByRole('button', { name: 'OTP / WhatsApp' }).click();
+    await section.getByText('100 numbers · 2 signed in').waitFor();
+    // The store review account is untouched.
+    await page.getByRole('region', { name: 'Store review account' }).getByTestId('review-account-status').getByText('Off.', { exact: false }).waitFor();
+
+    // Removing the range asks for a second click; then off.
+    await section.getByRole('button', { name: 'Remove +61400200000 to +61400200099' }).click();
+    await section.getByRole('button', { name: 'Confirm removing +61400200000 to +61400200099' }).click();
+    await section.getByText('No ranges yet.').waitFor();
+    await section.getByRole('button', { name: 'Turn off' }).click();
+    await section.getByTestId('test-accounts-status').getByText('Off.', { exact: false }).waitFor();
+  });
+
   it('owner recovery (D-33): the recovery token saves a new key from the sign-in page and signs nobody in', async () => {
     const recoveryToken = (await query<{ recovery_token: string }>(stack.ownerUrl, 'select * from app.open_otp_settings_recovery()')).rows[0]!.recovery_token;
     const fresh = await newPage();

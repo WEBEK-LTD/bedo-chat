@@ -31,6 +31,7 @@ import { clearRefreshCookie, setRefreshCookie } from './cookies.js';
 import { LoginService } from './login.service.js';
 import { OtpService } from './otp.service.js';
 import { ReviewAccountService } from './review-account.service.js';
+import { TestAccountsService } from './test-accounts.service.js';
 import { SessionsService } from './sessions.service.js';
 import { TokenService } from './token.service.js';
 import { TwoStepService } from './two-step.service.js';
@@ -56,12 +57,16 @@ export class AuthController {
     @Inject(TokenService) private readonly tokens: TokenService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ReviewAccountService) private readonly review: ReviewAccountService,
+    @Inject(TestAccountsService) private readonly tests: TestAccountsService,
   ) {}
 
-  /** D-56: whether this number may have an account: the usual rules, or the store review account's number. */
+  /**
+   * Whether this number may have an account: the usual rules, the store review account's number (D-56), or a test
+   * account number (D-59).
+   */
   private async mayUseNumber(phone: string): Promise<boolean> {
     const db = this.database.db;
-    return (await this.accounts.mayUseNumber(db, phone)) || (await this.review.codeFor(db, phone)) !== null;
+    return (await this.accounts.mayUseNumber(db, phone)) || (await this.review.codeFor(db, phone)) !== null || (await this.tests.codeFor(db, phone)) !== null;
   }
 
   /** Step 1: request a code. The same answer for every valid number (D-06). */
@@ -105,7 +110,10 @@ export class AuthController {
     if (!existing && !(await this.mayUseNumber(phone))) {
       throw new AppError(HttpStatus.BAD_REQUEST, 'OTP_INVALID');
     }
+    // D-59: a new account for a test account number is recorded as a test account (it keeps using the code).
+    const asTest = !existing && (await this.tests.codeFor(this.database.db, phone)) !== null;
     const user = existing ?? (await this.createAccount(phone));
+    if (asTest) await this.tests.markTestAccount(this.database.db, user.id);
     if (user.status === 'suspended' || user.status === 'banned') {
       throw new AppError(HttpStatus.FORBIDDEN, 'ACCOUNT_BLOCKED');
     }

@@ -349,3 +349,44 @@ export const adminReviewAccountBodySchema = z.object({
   phone: z.string().trim().min(5).max(32),
   code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
 });
+
+/**
+ * D-59: test accounts (Super Admins only: the answer holds the code). Ranges of numbers that sign in to the student
+ * app with one fixed code; each number is its own account. Separate from the store review account.
+ */
+export const TEST_ACCOUNT_RULES = {
+  /** Numbers in one range. */
+  maxRangeSize: 1000,
+  /** Ranges in all. */
+  maxRanges: 50,
+  /** Codes per address per hour for test numbers: their own allowance, so testing never uses up real students'. */
+  maxCodesPerIpPerHour: 200,
+} as const;
+export const adminTestNumberRangeSchema = z.object({
+  id: z.string(),
+  firstPhone: z.string(),
+  lastPhone: z.string(),
+  /** How many numbers the range holds. */
+  size: z.number().int(),
+  /** How many of them have signed in at least once (have an account). */
+  accounts: z.number().int(),
+  addedBy: z.string().nullable(),
+  addedAt: timestamp,
+});
+export type AdminTestNumberRange = z.infer<typeof adminTestNumberRangeSchema>;
+export const adminTestAccountsSchema = z.object({
+  enabled: z.boolean(),
+  code: z.string().nullable(),
+  ranges: z.array(adminTestNumberRangeSchema),
+  updatedBy: z.string().nullable(),
+  updatedAt: timestamp.nullable(),
+});
+export type AdminTestAccounts = z.infer<typeof adminTestAccountsSchema>;
+export const adminTestAccountsBodySchema = z.object({
+  enabled: z.boolean(),
+  code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+});
+export const adminTestNumberRangeBodySchema = z.object({
+  firstPhone: z.string().trim().min(5).max(32),
+  lastPhone: z.string().trim().min(5).max(32),
+});

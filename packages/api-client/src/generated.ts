@@ -5082,6 +5082,47 @@ export interface AdminReviewAccountBody {
   code: string;
 }
 
+export type AdminTestAccountsRangesItem = {
+  id: string;
+  firstPhone: string;
+  lastPhone: string;
+  size: number;
+  accounts: number;
+  /** @nullable */
+  addedBy: string | null;
+  addedAt: string;
+};
+
+export interface AdminTestAccounts {
+  enabled: boolean;
+  /** @nullable */
+  code: string | null;
+  ranges: AdminTestAccountsRangesItem[];
+  /** @nullable */
+  updatedBy: string | null;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export interface AdminTestAccountsBody {
+  enabled: boolean;
+  /** @pattern ^\d{6}$ */
+  code: string;
+}
+
+export interface AdminTestNumberRangeBody {
+  /**
+     * @minLength 5
+     * @maxLength 32
+     */
+  firstPhone: string;
+  /**
+     * @minLength 5
+     * @maxLength 32
+     */
+  lastPhone: string;
+}
+
 export type AdminAccessSettingsBodySignupMode = typeof AdminAccessSettingsBodySignupMode[keyof typeof AdminAccessSettingsBodySignupMode];
 
 
@@ -10575,6 +10616,130 @@ return apiFetch<AdminReviewAccount>(getAdminSetReviewAccountUrl(),
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(adminReviewAccountBody)
+  }
+);}
+
+
+
+export const getAdminTestAccountsUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/test-accounts`
+}
+
+/**
+ * @summary Test accounts: on or off, the fixed code and the number ranges (D-59, Super Admin)
+ */
+export const adminTestAccounts = async ( options?: Parameters<typeof apiFetch>[1]): Promise<AdminTestAccounts> => {
+
+  return apiFetch<AdminTestAccounts>(getAdminTestAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getAdminSetTestAccountsUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/test-accounts`
+}
+
+/**
+ * @summary Set the test accounts code and turn them on or off (D-59, Super Admin)
+ */
+export const adminSetTestAccounts = async (adminTestAccountsBody: AdminTestAccountsBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminTestAccounts> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminTestAccounts>(getAdminSetTestAccountsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminTestAccountsBody)
+  }
+);}
+
+
+
+export const getAdminAddTestNumberRangeUrl = () => {
+
+
+
+
+  return `/v1/admin/settings/test-accounts/ranges`
+}
+
+/**
+ * @summary Add a range of test account numbers (D-59, Super Admin)
+ */
+export const adminAddTestNumberRange = async (adminTestNumberRangeBody: AdminTestNumberRangeBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminTestAccounts> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminTestAccounts>(getAdminAddTestNumberRangeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminTestNumberRangeBody)
+  }
+);}
+
+
+
+export const getAdminRemoveTestNumberRangeUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/settings/test-accounts/ranges/${id}`
+}
+
+/**
+ * @summary Remove a range of test account numbers; ends their sessions (D-59, Super Admin)
+ */
+export const adminRemoveTestNumberRange = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<AdminTestAccounts> => {
+
+  return apiFetch<AdminTestAccounts>(getAdminRemoveTestNumberRangeUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 

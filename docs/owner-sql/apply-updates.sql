@@ -19,7 +19,8 @@
 --   19  20261019120000_site_monitoring
 --   20  20261020120000_everyone_channels
 --   21  20261021120000_store_review_account
--- then sets the two limits on bedo_api, checks everything and records the 15 migrations.
+--   22  20261029120000_test_accounts
+-- then sets the two limits on bedo_api, checks everything and records the 16 migrations.
 --
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- One request = one transaction: if any check or statement fails, NOTHING is kept and the message says why.
@@ -1087,7 +1088,62 @@ grant select on app.review_account_settings to bedo_runtime;
 grant update (enabled, phone, code_enc, updated_by, updated_at) on app.review_account_settings to bedo_runtime;
 -- End of the delivered migration file 20261021120000 ------------------------------------------------------------
 
--- Part 17: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
+-- Part 17: supabase/migrations/20261029120000_test_accounts.sql, exactly as delivered ---------------------------
+-- Bedo Chat - test accounts (D-59).
+--
+-- The owner decided on 2026-10-28 to have many test accounts that behave exactly like students, for trying the apps:
+-- ranges of phone numbers (for example +201000000000 to +201000000099) set by a Super Admin in the Admin Dashboard,
+-- that sign in to the student app with ONE fixed 6-digit code instead of a WhatsApp code. Each number is its own,
+-- independent account. It is separate from the store review account (D-56), which keeps its own number and code and
+-- comes first.
+--
+-- Safety: off until a Super Admin turns it on; student sign-in only (never admin accounts or phone changes); never a
+-- number on the academy phone list, and never the number of an existing account that was not created as a test
+-- account (so a real student whose number falls in a range is never reachable with the code). Turning it off, or
+-- removing a range, ends the sessions of those test accounts. The code is stored encrypted with
+-- SETTINGS_ENCRYPTION_KEY so the Super Admin can read it again.
+create table app.test_account_settings (
+  id          boolean primary key default true check (id),
+  enabled     boolean not null default false,
+  code_enc    text check (code_enc is null or length(code_enc) <= 500),
+  updated_by  uuid references app.admin_accounts (id),
+  updated_at  timestamptz,
+  constraint test_accounts_complete check (not enabled or code_enc is not null)
+);
+comment on table app.test_account_settings is
+  'Test accounts (D-59): numbers in app.test_number_ranges sign in with one fixed code set by a Super Admin. Off by default. One row.';
+insert into app.test_account_settings (id) values (true);
+create trigger test_account_settings_no_delete before delete on app.test_account_settings
+  for each row execute function app.forbid_mutation();
+create trigger test_account_settings_no_truncate before truncate on app.test_account_settings
+  for each statement execute function app.forbid_mutation();
+grant select on app.test_account_settings to bedo_runtime;
+grant update (enabled, code_enc, updated_by, updated_at) on app.test_account_settings to bedo_runtime;
+
+-- A range: every number from first_phone to last_phone (same length, at most 1000 numbers).
+create table app.test_number_ranges (
+  id           uuid primary key default gen_random_uuid(),
+  first_phone  text not null check (first_phone ~ '^\+[1-9][0-9]{6,14}$'),
+  last_phone   text not null check (last_phone ~ '^\+[1-9][0-9]{6,14}$'),
+  added_by     uuid references app.admin_accounts (id),
+  added_at     timestamptz not null default now(),
+  constraint test_number_range_order check (length(first_phone) = length(last_phone) and first_phone <= last_phone),
+  constraint test_number_range_size check (substr(last_phone, 2)::numeric - substr(first_phone, 2)::numeric < 1000)
+);
+comment on table app.test_number_ranges is 'Test accounts (D-59): the ranges of numbers that are test accounts.';
+create index test_number_ranges_first on app.test_number_ranges (first_phone);
+grant select, insert, delete on app.test_number_ranges to bedo_runtime;
+
+-- The accounts created as test accounts (only these, and new numbers, may use the code).
+create table app.test_accounts (
+  user_id     uuid primary key references app.users (id) on delete cascade,
+  created_at  timestamptz not null default now()
+);
+comment on table app.test_accounts is 'Test accounts (D-59): accounts created by signing in with the test accounts code.';
+grant select, insert on app.test_accounts to bedo_runtime;
+-- End of the delivered migration file 20261029120000 ------------------------------------------------------------
+
+-- Part 18: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
 -- they are set on the login itself: no statement runs longer than 15 seconds, and no connection stays idle inside
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
@@ -1110,7 +1166,7 @@ begin
 end
 $bedo_rls$;
 
--- Part 18: check the result, then the bookkeeping rows ---------------------------------------------------
+-- Part 19: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$
 begin
   if not exists (select 1 from pg_constraint
@@ -1232,6 +1288,18 @@ begin
      or not has_column_privilege('bedo_runtime', 'app.review_account_settings', 'code_enc', 'update') then
     raise exception 'Stopped: bedo_runtime privileges on app.review_account_settings are not as expected (nothing was kept)';
   end if;
+  if (select count(*) from app.test_account_settings) <> 1 or exists (select 1 from app.test_account_settings where enabled) then
+    raise exception 'Stopped: app.test_account_settings must hold its one row, turned off (nothing was kept)';
+  end if;
+  if exists (select 1 from app.test_number_ranges) or exists (select 1 from app.test_accounts) then
+    raise exception 'Stopped: the test account tables must start empty (nothing was kept)';
+  end if;
+  if has_table_privilege('bedo_runtime', 'app.test_account_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.test_account_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.test_account_settings', 'code_enc', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.test_number_ranges', 'insert') or has_table_privilege('bedo_runtime', 'app.test_number_ranges', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.test_accounts', 'insert') or has_table_privilege('bedo_runtime', 'app.test_accounts', 'delete') then
+    raise exception 'Stopped: bedo_runtime privileges on the test account tables are not as expected (nothing was kept)';
+  end if;
   insert into app_meta.schema_migrations (version, name, checksum) values
     ('20261006120000', 'd35_admin_password_owner_sql',
      'ce35f75dc26b4277f010930fb95a29994ff2a5bc2ccaa91970c3e6349bdb7961'),
@@ -1262,13 +1330,15 @@ begin
     ('20261020120000', 'everyone_channels',
      '4070d45138588d0ea841fd1abc60f2a51da125c76064fc6218a4d8335223b9d3'),
     ('20261021120000', 'store_review_account',
-     '9f7c9cdf1c46aa6477b9932709c8c47127e6cba3d0d662b855cb9633ccb09ba4');
+     '9f7c9cdf1c46aa6477b9932709c8c47127e6cba3d0d662b855cb9633ccb09ba4'),
+    ('20261029120000', 'test_accounts',
+     'f0e84462b0c35b91f4f7ed52193cbab84f5764131b76b12710a1dec13356188b');
 end
 $verify$;
 
 -- The result: every line should say "ok".
 select 'migrations recorded' as check_name,
-       case when (select count(*) from app_meta.schema_migrations) = 21 then 'ok' else 'NOT OK' end as result
+       case when (select count(*) from app_meta.schema_migrations) = 22 then 'ok' else 'NOT OK' end as result
 union all
 select 'bedo_api limits',
        case when (select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import type { ApiEnv } from '@bedo/config';
-import { OTP_RULES, type OtpRequestResponse } from '@bedo/contracts';
+import { OTP_RULES, type OtpRequestResponse, TEST_ACCOUNT_RULES } from '@bedo/contracts';
 import type { OtpPurpose } from '@bedo/db';
 import { sql } from 'kysely';
 import { AppError } from '../common/app-error.js';
@@ -13,6 +13,7 @@ import { DatabaseService } from '../database/database.service.js';
 import { OtpDeliveryService } from '../delivery/otp-delivery.service.js';
 import { RateLimitService } from '../state/rate-limit.service.js';
 import { ReviewAccountService } from './review-account.service.js';
+import { TestAccountsService } from './test-accounts.service.js';
 
 export interface OtpIssueInput {
   purpose: OtpPurpose;
@@ -52,6 +53,7 @@ export class OtpService {
     @Inject(OtpDeliveryService) private readonly delivery: OtpDeliveryService,
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ReviewAccountService) private readonly review: ReviewAccountService,
+    @Inject(TestAccountsService) private readonly tests: TestAccountsService,
   ) {}
 
   private scope(purpose: OtpPurpose): string {
@@ -61,10 +63,13 @@ export class OtpService {
 
   async issue(input: OtpIssueInput): Promise<OtpRequestResponse> {
     const db = this.database.db;
+    // D-59: a test account number gets the test accounts' fixed code (never the review number, never a real student).
+    const testCode = input.purpose === 'sign_in' ? await this.tests.codeFor(db, input.phone) : null;
     const gate = await this.rateLimit.otpGate(this.scope(input.purpose), input.phone, input.info.ip ?? 'unknown', {
       perPhonePerHour: OTP_RULES.maxCodesPerPhonePerHour,
-      perIpPerHour: OTP_RULES.maxCodesPerIpPerHour,
+      perIpPerHour: testCode ? TEST_ACCOUNT_RULES.maxCodesPerIpPerHour : OTP_RULES.maxCodesPerIpPerHour,
       cooldownSeconds: OTP_RULES.resendCooldownSeconds,
+      ...(testCode ? { ipScope: 'otp-ip-test' as const } : {}),
     });
     const auditBase = {
       ...input.subject,
@@ -84,7 +89,8 @@ export class OtpService {
     const challengeId = randomUUID();
     // D-56: the store review account's number gets its fixed code instead of a WhatsApp message (student sign-in only).
     const reviewCode = input.purpose === 'sign_in' ? await this.review.codeFor(db, input.phone) : null;
-    const code = reviewCode ?? randomOtpCode();
+    const fixedCode = reviewCode ?? testCode;
+    const code = fixedCode ?? randomOtpCode();
     await db.transaction().execute(async (trx) => {
       await trx
         .insertInto('app.otp_challenges')
@@ -102,10 +108,10 @@ export class OtpService {
       await this.audit.security(trx, {
         ...auditBase,
         event: input.eligible ? 'otp_requested' : 'otp_requested_not_eligible',
-        details: { purpose: input.purpose, ...(reviewCode ? { reviewAccount: true } : {}) },
+        details: { purpose: input.purpose, ...(reviewCode ? { reviewAccount: true } : testCode ? { testAccount: true } : {}) },
       });
     });
-    if (input.eligible && !reviewCode) {
+    if (input.eligible && !fixedCode) {
       this.delivery.sendCode(input.phone, code, input.purpose);
     }
 

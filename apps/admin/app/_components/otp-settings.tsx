@@ -4,6 +4,7 @@ import { adminOtpSettings, adminReplaceWaabekKey, adminSendWaabekTest, type OtpS
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { errorMessage, formatDateTime, testMessageResult } from '../_lib/api';
 import { ReviewAccount } from './review-account';
+import { TestAccounts } from './test-accounts';
 import { Button, FormError, Notice, TextField } from './ui';
 
 /**
@@ -142,6 +143,8 @@ export function OtpSettings({ onSessionError }: { onSessionError: (error: unknow
       </section>
 
       <ReviewAccount onSessionError={onSessionError} />
+
+      <TestAccounts onSessionError={onSessionError} />
     </div>
   );
 }

@@ -10397,6 +10397,115 @@
           "code"
         ]
       },
+      "AdminTestAccounts": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ranges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "firstPhone": {
+                  "type": "string"
+                },
+                "lastPhone": {
+                  "type": "string"
+                },
+                "size": {
+                  "type": "integer"
+                },
+                "accounts": {
+                  "type": "integer"
+                },
+                "addedBy": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "addedAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "firstPhone",
+                "lastPhone",
+                "size",
+                "accounts",
+                "addedBy",
+                "addedAt"
+              ]
+            }
+          },
+          "updatedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "code",
+          "ranges",
+          "updatedBy",
+          "updatedAt"
+        ]
+      },
+      "AdminTestAccountsBody": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          }
+        },
+        "required": [
+          "enabled",
+          "code"
+        ]
+      },
+      "AdminTestNumberRangeBody": {
+        "type": "object",
+        "properties": {
+          "firstPhone": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 32
+          },
+          "lastPhone": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 32
+          }
+        },
+        "required": [
+          "firstPhone",
+          "lastPhone"
+        ]
+      },
       "AdminAccessSettingsBody": {
         "type": "object",
         "properties": {
@@ -19988,6 +20097,222 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminReviewAccount"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/test-accounts": {
+      "get": {
+        "operationId": "adminTestAccounts",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Test accounts: on or off, the fixed code and the number ranges (D-59, Super Admin)",
+        "security": [
+          {
+            "adminSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTestAccounts"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "adminSetTestAccounts",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Set the test accounts code and turn them on or off (D-59, Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminTestAccountsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTestAccounts"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/test-accounts/ranges": {
+      "post": {
+        "operationId": "adminAddTestNumberRange",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Add a range of test account numbers (D-59, Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminTestNumberRangeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTestAccounts"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/settings/test-accounts/ranges/{id}": {
+      "delete": {
+        "operationId": "adminRemoveTestNumberRange",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Remove a range of test account numbers; ends their sessions (D-59, Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTestAccounts"
                 }
               }
             }

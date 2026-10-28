@@ -169,6 +169,19 @@ const RESULT_CHECKS = {
      or not has_column_privilege('bedo_runtime', 'app.review_account_settings', 'code_enc', 'update') then
     raise exception 'Stopped: bedo_runtime privileges on app.review_account_settings are not as expected (nothing was kept)';
   end if;`,
+  '20261029120000': `
+  if (select count(*) from app.test_account_settings) <> 1 or exists (select 1 from app.test_account_settings where enabled) then
+    raise exception 'Stopped: app.test_account_settings must hold its one row, turned off (nothing was kept)';
+  end if;
+  if exists (select 1 from app.test_number_ranges) or exists (select 1 from app.test_accounts) then
+    raise exception 'Stopped: the test account tables must start empty (nothing was kept)';
+  end if;
+  if has_table_privilege('bedo_runtime', 'app.test_account_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.test_account_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.test_account_settings', 'code_enc', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.test_number_ranges', 'insert') or has_table_privilege('bedo_runtime', 'app.test_number_ranges', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.test_accounts', 'insert') or has_table_privilege('bedo_runtime', 'app.test_accounts', 'delete') then
+    raise exception 'Stopped: bedo_runtime privileges on the test account tables are not as expected (nothing was kept)';
+  end if;`,
 };
 
 /**

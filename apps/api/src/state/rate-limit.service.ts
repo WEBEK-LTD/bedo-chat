@@ -37,6 +37,8 @@ export interface OtpGateLimits {
   perPhonePerHour: number;
   perIpPerHour: number;
   cooldownSeconds: number;
+  /** D-59: test account numbers count against their own per-address allowance, never real students' ("otp-ip"). */
+  ipScope?: 'otp-ip' | 'otp-ip-test';
 }
 
 /**
@@ -102,7 +104,7 @@ export class RateLimitService {
   async otpGate(scope: string, phone: string, ip: string, limits: OtpGateLimits): Promise<OtpGateResult> {
     const phoneBucket = `${scope}:phone:${phone}`;
     // One per-IP budget for every kind of code (sign-in, phone change, admin): 20 per hour in total.
-    const ipKey = `otp-ip:${ipBucket(ip)}`;
+    const ipKey = `${limits.ipScope ?? 'otp-ip'}:${ipBucket(ip)}`;
     const cooldownKey = `rl:${scope}:cooldown:${phone}`;
     return this.database.db.transaction().execute(async (trx) => {
       // Always the number first, then the address, so two requests can never wait for each other in a cycle.
