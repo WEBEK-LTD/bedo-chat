@@ -7,12 +7,12 @@ import { z } from 'zod';
 
 /** The exact message text sent through Waabek (spec §1). */
 export function otpMessage(code: string): string {
-  return `Your Bedo Chat verification code is: ${code}`;
+  return `Your Bedo Family verification code is: ${code}`;
 }
 
 /** The exact test message text (Admin Dashboard, Phase 3.1). */
 export const WAABEK_TEST_MESSAGE =
-  'Bedo Chat: this is a test message from the Admin Dashboard. WhatsApp delivery of verification codes is working.';
+  'Bedo Family: this is a test message from the Admin Dashboard. WhatsApp delivery of verification codes is working.';
 
 /**
  * Failure texts for WhatsApp delivery. They never contain the key, the number, the code or Waabek's response

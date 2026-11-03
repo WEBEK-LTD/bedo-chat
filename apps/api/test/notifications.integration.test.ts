@@ -120,7 +120,7 @@ describe.runIf(enabled)('Phase 7 notifications (real Postgres, runtime role)', (
     const dm = await api(ana).openChat(cleo);
     await api(ana).send(dm.id, 'A secret');
     const [generic] = await pushesFor(cleo);
-    expect(generic).toMatchObject({ title: 'Bedo Chat', body: 'New message', tag: `chat-${dm.id}` });
+    expect(generic).toMatchObject({ title: 'Bedo Family', body: 'New message', tag: `chat-${dm.id}` });
     expect(JSON.stringify(generic)).not.toContain('secret');
     expect((await api(cleo).get('/v1/me/notification-settings')).body).toEqual({ privateChats: true, groups: false, channels: true, previews: false });
     expect((await api(cleo).patch('/v1/me/notification-settings', {})).status).toBe(400);

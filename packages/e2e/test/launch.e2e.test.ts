@@ -17,7 +17,7 @@ const ADMIN = '+201000013901';
 const PHONE = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
 
 /**
- * Phase 13 (D-46) end to end: Bedo Chat as a website on a phone. The site is installable (manifest and icons for
+ * Phase 13 (D-46) end to end: Bedo Family as a website on a phone. The site is installable (manifest and icons for
  * "Add to Home Screen", which iPhone notifications need), and every main screen of the student app and the Admin
  * Dashboard fits a phone screen without sideways scrolling.
  */
@@ -93,10 +93,10 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
       return { status: response.status, body: (await response.json()) as { name: string; display: string; start_url: string; icons: Array<{ src: string; sizes: string; purpose: string }> } };
     });
     expect(manifest.status).toBe(200);
-    expect(manifest.body).toMatchObject({ name: 'Bedo Chat', display: 'standalone', start_url: '/' });
+    expect(manifest.body).toMatchObject({ name: 'Bedo Family', display: 'standalone', start_url: '/' });
     expect(manifest.body.icons.map((icon) => `${icon.sizes} ${icon.purpose}`)).toEqual(['192x192 any', '512x512 any', '512x512 maskable']);
     // D-54: the brand files too (logo, icon, the notification badge).
-    const brand = ['/icons/bedo-icon.svg', '/icons/bedo-chat-logo.svg', '/icons/bedo-chat-logo-white.svg', '/icons/badge-96.png'];
+    const brand = ['/icons/bedo-icon.svg', '/icons/bedo-family-logo.svg', '/icons/bedo-family-logo-white.svg', '/icons/badge-96.png'];
     for (const path of [...manifest.body.icons.map((icon) => icon.src), '/icons/apple-touch-icon.png', '/favicon.ico', ...brand]) {
       const response = await fetch(`${SITE_URL}${path}`);
       expect(response.status, path).toBe(200);
@@ -104,12 +104,12 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
     }
   });
 
-  it('D-54: shows the Bedo Chat logo on both sign-in pages, navy on light screens and white on dark ones', async () => {
+  it('D-54: shows the Bedo Family logo on both sign-in pages, navy on light screens and white on dark ones', async () => {
     for (const [url, scheme, file] of [
-      [`${WEB_URL}/login`, 'light', 'bedo-chat-logo.svg'],
-      [`${WEB_URL}/login`, 'dark', 'bedo-chat-logo-white.svg'],
-      [`${ADMIN_URL}/login`, 'light', 'bedo-chat-logo.svg'],
-      [`${ADMIN_URL}/login`, 'dark', 'bedo-chat-logo-white.svg'],
+      [`${WEB_URL}/login`, 'light', 'bedo-family-logo.svg'],
+      [`${WEB_URL}/login`, 'dark', 'bedo-family-logo-white.svg'],
+      [`${ADMIN_URL}/login`, 'light', 'bedo-family-logo.svg'],
+      [`${ADMIN_URL}/login`, 'dark', 'bedo-family-logo-white.svg'],
     ] as const) {
       const context = await browser.newContext({ ...PHONE, colorScheme: scheme });
       contexts.push(context);
@@ -118,7 +118,7 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
         if (/Content.Security.Policy|Refused to/i.test(message.text())) violations.push(`logo ${url}: ${message.text()}`);
       });
       await page.goto(url);
-      const logo = page.getByRole('img', { name: 'Bedo Chat, Australian Dental Academy' });
+      const logo = page.getByRole('img', { name: 'Bedo Family, Australian Dental Academy' });
       await logo.waitFor();
       // Exactly one of the two versions shows, and it is loaded.
       const shown = await logo.locator('img').evaluateAll((images) =>
@@ -144,7 +144,7 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
         ['Help and support', 'Help and support', 'support'],
       ] as const) {
         await page.goto(`${WEB_URL}/login`);
-        await page.getByRole('navigation', { name: 'About Bedo Chat' }).getByRole('link', { name: link }).click();
+        await page.getByRole('navigation', { name: 'About Bedo Family' }).getByRole('link', { name: link }).click();
         await page.getByRole('heading', { level: 1, name: heading }).waitFor();
         expect(new URL(page.url()).pathname).toBe(`/${file}`);
         // Its own stylesheet applies (card on the wallpaper), the right logo is loaded, and it fits a phone.
@@ -158,7 +158,7 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
           };
         });
         expect(look.radius, `${file} ${scheme}`).toBe('16px');
-        expect(look.logo).toContain(scheme === 'dark' ? '/icons/bedo-chat-logo-white.svg' : '/icons/bedo-chat-logo.svg');
+        expect(look.logo).toContain(scheme === 'dark' ? '/icons/bedo-family-logo-white.svg' : '/icons/bedo-family-logo.svg');
         expect(look.loaded).toBe(true);
         await fits(page, `${file} ${scheme}`);
         const response = await fetch(`${SITE_URL}/${file}`);
@@ -167,7 +167,7 @@ describe.runIf(enabled)('Phase 13: the website on a phone', () => {
         expect(response.headers.get('content-security-policy')).not.toContain('script-src');
         await shot(page, `136-${file}-${scheme}`);
         // Back to the app from the page.
-        await page.getByRole('link', { name: 'Open Bedo Chat' }).click();
+        await page.getByRole('link', { name: 'Open Bedo Family' }).click();
         await page.waitForURL(/\/login/);
       }
     }

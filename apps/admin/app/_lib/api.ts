@@ -30,7 +30,7 @@ async function adminTransport<T>(path: string, init: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include', cache: 'no-store' });
   } catch {
-    throw new ApiError(0, 'NETWORK', 'Cannot reach the Bedo Chat API. Check your connection.');
+    throw new ApiError(0, 'NETWORK', 'Cannot reach the Bedo Family API. Check your connection.');
   }
   if (response.ok) {
     return (await response.json()) as T;

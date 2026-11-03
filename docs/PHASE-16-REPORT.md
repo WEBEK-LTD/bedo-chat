@@ -286,3 +286,25 @@ Test (`launch.e2e.test.ts`, with a stand-in for iOS's visible area): a bounce up
 in place; with the keyboard open the screen follows the visible area; a bounce while typing never moves it above the
 top; with the keyboard closed it is the whole window again; the page itself does not bounce. Not verifiable here: a
 real iPhone.
+
+## Phase 16.16 — Bedo Chat is now Bedo Family (D-60)
+
+Everything people see now says **Bedo Family**: the website and the Admin Dashboard (page titles, sign-in pages,
+messages and notices, the name of the app added to a Home Screen), the WhatsApp sign-in code ("Your Bedo Family
+verification code is: …") and the Admin Dashboard's test message, notifications and their fallback title, the site
+monitoring alerts, the privacy policy and support pages, and the label of new admins' authenticator entries (existing
+entries keep their old label; their codes keep working). The logo keeps its icon, colours and layout, with the words
+redrawn as "Bedo Family" in the same typeface (new files `/icons/bedo-family-logo.svg` and `bedo-family-logo-white.svg`,
+so no browser keeps showing the old one from its cache).
+
+The apps: the name under the icon is **Bedo Family** on iPhone (`CFBundleDisplayName`, and the camera, microphone and
+photos permission texts) and on Android (`appName`, and the offline page). Pushing this to GitHub's `main` branch
+starts the **Apps** workflow: it uploads a new iPhone build to App Store Connect and makes a new Android App Bundle
+(the `android-app` download of that run).
+
+Unchanged on purpose: `bedochat.com`, the app identifiers (`com.bedochat.app`), the database (no SQL), internal code
+names, and the earlier sections of these reports.
+
+Owner steps: the store listings' names (Play Console → Main store listing → App name; App Store Connect → the app →
+App Information → Name), the new Android bundle uploaded to Play Console, and, on iPhone, the waiting review replaced
+by the new build (docs/APPS.md, "Renaming").

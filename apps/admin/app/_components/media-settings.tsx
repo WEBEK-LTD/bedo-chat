@@ -142,7 +142,7 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
           GIF search (GIPHY)
         </h2>
         <p className="text-sm text-ink-secondary">
-          Students search GIFs through Bedo Chat; GIPHY never sees their addresses. A sent GIF is copied into Bedo Chat&apos;s storage, so it keeps
+          Students search GIFs through Bedo Family; GIPHY never sees their addresses. A sent GIF is copied into Bedo Family&apos;s storage, so it keeps
           working if GIPHY removes it.
         </p>
         {gifs ? (

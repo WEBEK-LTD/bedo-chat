@@ -2,7 +2,7 @@ import { BrandIcon } from '@bedo/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-export const metadata: Metadata = { title: 'Not found · Bedo Chat Admin' };
+export const metadata: Metadata = { title: 'Not found · Bedo Family Admin' };
 
 /**
  * D-31: the "not found" page, styled from the dashboard's stylesheet. Next.js's built-in page uses inline

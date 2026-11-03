@@ -20,7 +20,7 @@ const MEDIA_WORDS: Record<FileKind, string> = {
   file: 'File',
   gif: 'GIF',
 };
-const GENERIC = { title: 'Bedo Chat', body: 'New message' } as const;
+const GENERIC = { title: 'Bedo Family', body: 'New message' } as const;
 const DELETED_ACCOUNT = 'Deleted account';
 const BODY_MAX = 280;
 const TITLE_MAX = 100;
@@ -205,7 +205,7 @@ export class NotificationsService {
     const blockedBy = new Set(blocks.map((row) => row.blocker_id));
     const mentioned = new Set(mentions.map((row) => row.user_id));
     const repliedTo = new Set(messages.map((message) => message.reply_sender_id).filter((id): id is string => id !== null));
-    const senderName = !sender || sender.status === 'deleted' ? DELETED_ACCOUNT : sender.name || 'Bedo Chat user';
+    const senderName = !sender || sender.status === 'deleted' ? DELETED_ACCOUNT : sender.name || 'Bedo Family user';
     const last = messages[messages.length - 1]!;
     const describe = (message: (typeof messages)[number]) => {
       const media = message.question
@@ -254,11 +254,11 @@ export class NotificationsService {
     ]);
     if (!chat) return;
     const noPreview = new Set(settings.filter((row) => !row.previews).map((row) => row.user_id));
-    const actorName = actorId === null ? 'An administrator' : !actor || actor.status === 'deleted' ? DELETED_ACCOUNT : actor.name || 'Bedo Chat user';
+    const actorName = actorId === null ? 'An administrator' : !actor || actor.status === 'deleted' ? DELETED_ACCOUNT : actor.name || 'Bedo Family user';
     const noun = chat.type === 'channel' ? 'channel' : 'group';
     await this.send(
       recipients,
-      (userId) => (noPreview.has(userId) ? { title: 'Bedo Chat', body: `You were added to a ${noun}` } : { title: chat.title ?? 'Bedo Chat', body: `${actorName} added you to the ${noun}` }),
+      (userId) => (noPreview.has(userId) ? { title: 'Bedo Family', body: `You were added to a ${noun}` } : { title: chat.title ?? 'Bedo Family', body: `${actorName} added you to the ${noun}` }),
       `chat-${chatId}`,
       `/?chat=${chatId}`,
     );

@@ -127,7 +127,7 @@ describe('iPhone notifications through APNs (D-53)', () => {
     expect(received).toHaveLength(0);
   });
 
-  it('turns a notification without fields into a plain Bedo Chat alert', () => {
-    expect(apnsPayload({})).toEqual({ aps: { alert: { title: 'Bedo Chat', body: '' }, sound: 'default' }, url: '/' });
+  it('turns a notification without fields into a plain Bedo Family alert', () => {
+    expect(apnsPayload({})).toEqual({ aps: { alert: { title: 'Bedo Family', body: '' }, sound: 'default' }, url: '/' });
   });
 });

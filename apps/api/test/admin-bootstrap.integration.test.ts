@@ -283,7 +283,7 @@ describe.runIf(enabled)('Phase 3.1 admin bootstrap and OTP settings (real Postgr
       expect(setup.statusCode, setup.body).toBe(200);
       expect(setup.headers['cache-control']).toBe('no-store');
       const { otpauthUri, setupKey, issuer, accountName } = setup.json();
-      expect(issuer).toBe('Bedo Chat Admin');
+      expect(issuer).toBe('Bedo Family Admin');
       expect(accountName).toBe(SUPER_PHONE);
       expect(otpauthUri).toContain(`secret=${setupKey}`);
       superSecret = base32Decode(setupKey);

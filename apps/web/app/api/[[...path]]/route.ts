@@ -2,7 +2,7 @@ import { handleApiRequest } from '@bedo/api/serverless';
 import { after } from 'next/server';
 
 /**
- * D-36: the Bedo Chat API, served by this website at /api/* (https://bedochat.com/api/...). Every request is
+ * D-36: the Bedo Family API, served by this website at /api/* (https://bedochat.com/api/...). Every request is
  * answered by the API application in this same server function; there is no separate API host. Work the API
  * continues after the response (one-time codes, push, realtime signals, housekeeping) is kept alive with
  * after(), which Netlify backs with waitUntil.

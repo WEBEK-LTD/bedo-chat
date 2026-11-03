@@ -205,7 +205,7 @@ final class OfflineView: UIView {
         icon.tintColor = .secondaryLabel
         icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 40)
         let title = UILabel()
-        title.text = "Can't reach Bedo Chat"
+        title.text = "Can't reach Bedo Family"
         title.font = .preferredFont(forTextStyle: .headline)
         let text = UILabel()
         text.text = "Check your internet connection and try again."

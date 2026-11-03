@@ -119,15 +119,15 @@ export class MonitoringService {
         const minutes = minutesBetween(startedAt, now);
         const id = await this.openIncident('outage', startedAt, `Not reached for about ${minutes} minutes`, now);
         if (id) {
-          await this.alert(id, 'alerted_at', `Bedo Chat: the website could not be reached from ${clock(startedAt)} to ${clock(now)} (Cairo time), about ${minutes} minutes. It is working again.`);
+          await this.alert(id, 'alerted_at', `Bedo Family: the website could not be reached from ${clock(startedAt)} to ${clock(now)} (Cairo time), about ${minutes} minutes. It is working again.`);
         }
       }
 
       if (measured.storageOk === false && lastStorage?.storage_ok === false) {
         const id = await this.openIncident('storage', now, measured.storageError ?? 'File storage did not answer');
-        if (id) await this.alert(id, 'alerted_at', 'Bedo Chat: file storage is not answering. Photos, files and voice messages cannot be sent or opened.');
+        if (id) await this.alert(id, 'alerted_at', 'Bedo Family: file storage is not answering. Photos, files and voice messages cannot be sent or opened.');
       } else if (measured.storageOk === true) {
-        await this.closeIncident('storage', now, 'Bedo Chat: file storage is working again.');
+        await this.closeIncident('storage', now, 'Bedo Family: file storage is working again.');
       }
 
       const failures = await this.db
@@ -138,16 +138,16 @@ export class MonitoringService {
         .executeTakeFirstOrThrow();
       if (failures.n >= MONITORING_RULES.whatsappFailures) {
         const id = await this.openIncident('whatsapp', now, `${failures.n} sign-in codes were not delivered in ${MONITORING_RULES.whatsappWindowMinutes} minutes`);
-        if (id) await this.alert(id, 'alerted_at', 'Bedo Chat: WhatsApp sign-in codes are failing. New sign-ins may not work. Check the Waabek key in the Admin Dashboard.');
+        if (id) await this.alert(id, 'alerted_at', 'Bedo Family: WhatsApp sign-in codes are failing. New sign-ins may not work. Check the Waabek key in the Admin Dashboard.');
       } else if (failures.n === 0) {
-        await this.closeIncident('whatsapp', now, 'Bedo Chat: WhatsApp sign-in codes are being delivered again.');
+        await this.closeIncident('whatsapp', now, 'Bedo Family: WhatsApp sign-in codes are being delivered again.');
       }
 
       if (measured.databaseMs > MONITORING_RULES.slowDatabaseMs) {
         const id = await this.openIncident('database_slow', now, `One database step took ${Math.round(measured.databaseMs)} ms`);
-        if (id) await this.alert(id, 'alerted_at', `Bedo Chat: the database is answering slowly (${Math.round(measured.databaseMs)} ms per step). Messages will be slow.`);
+        if (id) await this.alert(id, 'alerted_at', `Bedo Family: the database is answering slowly (${Math.round(measured.databaseMs)} ms per step). Messages will be slow.`);
       } else if (measured.databaseMs < MONITORING_RULES.normalDatabaseMs) {
-        await this.closeIncident('database_slow', now, 'Bedo Chat: the database is answering at normal speed again.');
+        await this.closeIncident('database_slow', now, 'Bedo Family: the database is answering at normal speed again.');
       }
     } catch (error) {
       this.logger.error(`Site check failed: ${error instanceof Error ? error.message : String(error)}`);

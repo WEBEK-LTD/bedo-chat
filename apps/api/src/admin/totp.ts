@@ -88,7 +88,7 @@ export function generateTotpSecret(): Buffer {
 }
 
 /** Name shown in the authenticator app. */
-export const TOTP_ISSUER = 'Bedo Chat Admin';
+export const TOTP_ISSUER = 'Bedo Family Admin';
 
 export function otpauthUri(secret: Buffer, accountLabel: string): string {
   const issuer = TOTP_ISSUER;

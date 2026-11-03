@@ -353,7 +353,7 @@ export function buildOpenApiDocument(options: OpenApiDocumentOptions): OpenApiDo
   const generator = new OpenApiGeneratorV31(registry.definitions);
   return generator.generateDocument({
     openapi: '3.1.0',
-    info: { title: 'Bedo Chat API', version: options.version },
+    info: { title: 'Bedo Family API', version: options.version },
     ...(options.serverUrl ? { servers: [{ url: options.serverUrl }] } : {}),
   });
 }

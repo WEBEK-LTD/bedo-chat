@@ -4,10 +4,10 @@ import { ThemeInit } from './_components/theme-init';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Bedo Chat Admin',
+  title: 'Bedo Family Admin',
   robots: { index: false, follow: false },
   // Phase 13: the site's favicon (apps/web/public), served from the same site.
-  // D-54: the Bedo Chat brand icon.
+  // D-54: the Bedo Family brand icon.
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },

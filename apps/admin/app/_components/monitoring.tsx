@@ -51,7 +51,7 @@ function StatusBanner({ data }: { data: AdminMonitoring }) {
   const minutesSince = data.lastCheckAt ? Math.round((Date.now() - new Date(data.lastCheckAt).getTime()) / 60_000) : null;
   const view =
     data.status === 'up'
-      ? { tone: 'border-success/30 bg-success/10', icon: 'check_circle' as const, iconTone: 'text-success', title: 'Bedo Chat is up', text: `Last check ${formatDateTime(data.lastCheckAt)}.` }
+      ? { tone: 'border-success/30 bg-success/10', icon: 'check_circle' as const, iconTone: 'text-success', title: 'Bedo Family is up', text: `Last check ${formatDateTime(data.lastCheckAt)}.` }
       : data.status === 'problem'
         ? {
             tone: 'border-danger/25 bg-danger/5',

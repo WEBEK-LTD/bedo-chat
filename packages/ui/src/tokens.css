@@ -1,5 +1,5 @@
 /*
- * Bedo Chat design tokens (D-48, Phase 14): a polished Telegram-like look in the Bedo Chat blue, light and dark.
+ * Bedo Family design tokens (D-48, Phase 14): a polished Telegram-like look in the Bedo Family blue, light and dark.
  *
  * The theme follows the device (prefers-color-scheme) unless the person picks one: the student app sets
  * <html data-theme="light|dark"> from its Appearance setting, the Admin Dashboard from its theme button. Components

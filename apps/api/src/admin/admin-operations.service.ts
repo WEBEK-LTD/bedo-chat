@@ -296,7 +296,7 @@ export class AdminOperationsService {
       }
       return this.eraseAccount(trx, admin, request.user_id, reason ?? null, info, requestId);
     });
-    this.tellDeleted(userId, subscriptions, 'Your request to delete your Bedo Chat account was approved. The account has been deleted.');
+    this.tellDeleted(userId, subscriptions, 'Your request to delete your Bedo Family account was approved. The account has been deleted.');
     return this.deletionRequestDetail(requestId);
   }
 
@@ -316,7 +316,7 @@ export class AdminOperationsService {
         .executeTakeFirst();
       return this.eraseAccount(trx, admin, userId, reason, info, pending?.id ?? null);
     });
-    this.tellDeleted(userId, subscriptions, 'An administrator deleted your Bedo Chat account.');
+    this.tellDeleted(userId, subscriptions, 'An administrator deleted your Bedo Family account.');
   }
 
   private tellDeleted(userId: string, subscriptions: Array<{ endpoint: string; p256dh: string; auth: string }>, body: string): void {
@@ -445,7 +445,7 @@ export class AdminOperationsService {
       excludeSessionId: null,
       notification: {
         title: 'Deletion request rejected',
-        body: 'Your request to delete your Bedo Chat account was rejected. Your account remains active.',
+        body: 'Your request to delete your Bedo Family account was rejected. Your account remains active.',
         tag: 'account-deletion',
       },
     });

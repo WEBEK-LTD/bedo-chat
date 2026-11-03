@@ -17,7 +17,7 @@ import com.google.firebase.messaging.RemoteMessage;
 import java.util.Map;
 
 /**
- * D-58: a notification from Bedo Chat (a data message sent by the API, apps/api/src/delivery/fcm.ts), shown with the
+ * D-58: a notification from Bedo Family (a data message sent by the API, apps/api/src/delivery/fcm.ts), shown with the
  * sender and the text. A new message in the same chat replaces the chat's previous notification; tapping it opens
  * that chat. Arrives whether the app is open, in the background or closed.
  */

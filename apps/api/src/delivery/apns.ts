@@ -181,7 +181,7 @@ export class ApnsClient {
 export function apnsPayload(notification: Notification): Record<string, unknown> {
   const aps: Record<string, unknown> = {
     alert: {
-      title: typeof notification.title === 'string' ? notification.title : 'Bedo Chat',
+      title: typeof notification.title === 'string' ? notification.title : 'Bedo Family',
       body: typeof notification.body === 'string' ? notification.body : '',
     },
     sound: 'default',

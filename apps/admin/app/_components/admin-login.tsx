@@ -131,7 +131,7 @@ export function AdminLogin() {
   return (
     <div className="flex flex-col gap-6">
       <header>
-        <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Bedo Chat Admin</h1>
+        <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Bedo Family Admin</h1>
         <p className="mt-2 text-sm text-ink-secondary">
           {step.kind === 'credentials'
             ? 'Sign in with your admin phone number and password.'

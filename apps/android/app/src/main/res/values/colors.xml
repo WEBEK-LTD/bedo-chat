@@ -5,6 +5,6 @@
     <color name="text">#142030</color>
     <color name="textSecondary">#5D6C80</color>
     <color name="accent">#2F5BD3</color>
-    <!-- The Bedo Chat navy, for the notification icon's tint. -->
+    <!-- The Bedo Family navy, for the notification icon's tint. -->
     <color name="brand">#1D4868</color>
 </resources>

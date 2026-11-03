@@ -200,7 +200,7 @@ function ChatArea({
   // Phase 7: the badge (tab title and app icon) from the server's unread counts, the same on every device (D-41).
   const badge = badgeCount(Object.values(messaging.chats));
   useEffect(() => {
-    document.title = badge > 0 ? `(${badge}) Bedo Chat` : 'Bedo Chat';
+    document.title = badge > 0 ? `(${badge}) Bedo Family` : 'Bedo Family';
     const nav = navigator as Navigator & { setAppBadge?: (count: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
     void (badge > 0 ? nav.setAppBadge?.(badge) : nav.clearAppBadge?.())?.catch(() => undefined);
     appSetBadge(badge);
@@ -282,7 +282,7 @@ function ChatArea({
           <div role="region" aria-label="Get notifications" className="mx-3 mb-2 flex flex-col gap-2 rounded-md border border-line bg-accent-soft/50 p-3 text-sm">
             <div className="flex items-start gap-2">
               <Icon name="notifications_active" size={20} className="shrink-0 text-accent" />
-              <span>Turn on notifications to know when new messages arrive, even when Bedo Chat is closed.</span>
+              <span>Turn on notifications to know when new messages arrive, even when Bedo Family is closed.</span>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" className="h-8 px-2" onClick={onSnoozePush}>

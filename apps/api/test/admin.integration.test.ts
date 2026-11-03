@@ -402,7 +402,7 @@ describe.runIf(enabled)('Phase 2 admin (real Postgres + Redis, runtime role)', (
         if (!result.ok) {
           throw new Error(result.reason);
         }
-        expect(result.setupLink).toMatch(/^otpauth:\/\/totp\/Bedo%20Chat%20Admin%3A%2B20.*secret=[A-Z2-7]+&issuer=Bedo\+Chat\+Admin/);
+        expect(result.setupLink).toMatch(/^otpauth:\/\/totp\/Bedo%20Family%20Admin%3A%2B20.*secret=[A-Z2-7]+&issuer=Bedo\+Family\+Admin/);
         const stored = await query<{ name: string; role: string; totp_secret_enc: string }>(ctx.ownerUrl, 'select name, role, totp_secret_enc from app.admin_accounts where id = $1', [result.id]);
         expect(stored.rows[0]).toMatchObject({ name: 'Academy Admin', role: 'super_admin' });
         expect(stored.rows[0]?.totp_secret_enc).not.toContain(result.secret);

@@ -131,7 +131,7 @@ export function LoginFlow() {
       {step.kind === 'phone' && (
         <>
           <header>
-            <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Sign in to Bedo Chat</h1>
+            <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Sign in to Bedo Family</h1>
             <p className="mt-2 text-sm text-ink-secondary">
               Choose your country and enter your phone number. We will send a verification code to it by WhatsApp.
             </p>
@@ -152,7 +152,7 @@ export function LoginFlow() {
           <header>
             <h1 className="text-[length:var(--bedo-font-size-xl)] font-semibold">Enter the code</h1>
             <p className="mt-2 text-sm text-ink-secondary">
-              If <span className="font-medium text-ink">{step.phone}</span> can use Bedo Chat, a 6-digit code was sent to
+              If <span className="font-medium text-ink">{step.phone}</span> can use Bedo Family, a 6-digit code was sent to
               it by WhatsApp. The code is valid for 5 minutes.
             </p>
           </header>

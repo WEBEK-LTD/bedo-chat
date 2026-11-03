@@ -160,7 +160,7 @@ describe.runIf(enabled)('Phase 3.1 initial Super Admin setup in the browser', ()
     await shot(page, '36-sign-in-password');
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByText('Set up your authenticator app. It is required for every admin sign-in.').waitFor();
-    await page.getByRole('img', { name: /QR code for Bedo Chat Admin/ }).waitFor();
+    await page.getByRole('img', { name: /QR code for Bedo Family Admin/ }).waitFor();
     const key = (await page.getByTestId('totp-setup-key').textContent()) ?? '';
     secret = base32Decode(key);
     expect(secret).toHaveLength(20);

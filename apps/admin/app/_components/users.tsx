@@ -57,7 +57,7 @@ export function Users({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
   const users = data ? [...data, ...more] : null;
   return (
     <div className="flex max-w-4xl flex-col gap-4">
-      <SectionTitle note="Everyone who has signed in to Bedo Chat. Messages are never shown here.">Users</SectionTitle>
+      <SectionTitle note="Everyone who has signed in to Bedo Family. Messages are never shown here.">Users</SectionTitle>
       <form
         className="flex items-end gap-2"
         onSubmit={(event: FormEvent) => {

@@ -100,7 +100,7 @@ describe.runIf(enabled)('Phase 2 in the browser (one site: web + admin + API, Po
     await page.goto(`${WEB_URL}/login`);
     await page.getByLabel('Phone number').fill(UNLISTED);
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByText(`If ${UNLISTED} can use Bedo Chat`).waitFor();
+    await page.getByText(`If ${UNLISTED} can use Bedo Family`).waitFor();
     await shot(page, '03-login-code');
     expect(await stack.codeCount(UNLISTED)).toBe(0);
   });
@@ -186,7 +186,7 @@ describe.runIf(enabled)('Phase 2 in the browser (one site: web + admin + API, Po
     // Device two is signed out on its next request.
     await deviceTwo.reload();
     await deviceTwo.waitForURL(`${WEB_URL}/login`);
-    await deviceTwo.getByRole('heading', { name: 'Sign in to Bedo Chat' }).waitFor();
+    await deviceTwo.getByRole('heading', { name: 'Sign in to Bedo Family' }).waitFor();
   });
 
   it('a student requests deletion; the admin reviews the history and approves; the student is signed out', async () => {

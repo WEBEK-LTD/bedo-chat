@@ -1,5 +1,5 @@
 /**
- * The Bedo Chat apps show this website in their own web view, which cannot receive Web Push. Each app gives the page
+ * The Bedo Family apps show this website in their own web view, which cannot receive Web Push. Each app gives the page
  * a channel to ask it for notifications: the app asks the phone for permission, registers with Apple (D-53, iPhone)
  * or Firebase (D-58, Android), and answers with its device address, which the page saves like a browser's.
  *
@@ -85,17 +85,17 @@ function handler(): Handler | null {
   return androidHandler;
 }
 
-/** Whether this page is running inside a Bedo Chat app (iPhone or Android). */
+/** Whether this page is running inside a Bedo Family app (iPhone or Android). */
 export function inNativeApp(): boolean {
   return handler() !== null;
 }
 
-/** Whether this page is running inside the Bedo Chat iPhone app. */
+/** Whether this page is running inside the Bedo Family iPhone app. */
 export function inIphoneApp(): boolean {
   return iphoneHandler() !== null;
 }
 
-/** Whether this page is running inside the Bedo Chat Android app (D-58). */
+/** Whether this page is running inside the Bedo Family Android app (D-58). */
 export function inAndroidApp(): boolean {
   return iphoneHandler() === null && androidBridge() !== null;
 }

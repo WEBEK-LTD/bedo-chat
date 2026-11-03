@@ -1,4 +1,4 @@
-# Bedo Chat
+# Bedo Family (formerly Bedo Chat)
 
 Private messaging platform for the academy. Users get exactly **Login → Chat Interface**; system
 administrators get a separate **Admin Dashboard**. The full requirements, architecture, decision log and

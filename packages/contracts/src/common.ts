@@ -6,7 +6,7 @@ import { z } from 'zod';
  */
 export const API_BASE_PATH = '/api';
 
-/** Machine-readable error codes returned by every Bedo Chat API endpoint. */
+/** Machine-readable error codes returned by every Bedo Family API endpoint. */
 export const ERROR_CODES = [
   'VALIDATION_FAILED',
   'UNAUTHENTICATED',

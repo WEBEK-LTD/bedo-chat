@@ -1,4 +1,4 @@
-# Bedo Chat for iPhone (D-53). GitHub Actions turns this into the Xcode project with XcodeGen and builds it
+# Bedo Family for iPhone (D-53). GitHub Actions turns this into the Xcode project with XcodeGen and builds it
 # (.github/workflows/apps.yml); no Mac is needed. The app shows https://bedochat.com.
 name: BedoChat
 options:
@@ -37,7 +37,7 @@ targets:
     info:
       path: BedoChat/Info.plist
       properties:
-        CFBundleDisplayName: Bedo Chat
+        CFBundleDisplayName: Bedo Family
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
@@ -53,6 +53,6 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSCameraUsageDescription: Bedo Chat uses the camera when you take a photo or record a video message.
-        NSMicrophoneUsageDescription: Bedo Chat uses the microphone when you record a voice or video message.
-        NSPhotoLibraryUsageDescription: Bedo Chat opens your photos when you choose one to send.
+        NSCameraUsageDescription: Bedo Family uses the camera when you take a photo or record a video message.
+        NSMicrophoneUsageDescription: Bedo Family uses the microphone when you record a voice or video message.
+        NSPhotoLibraryUsageDescription: Bedo Family opens your photos when you choose one to send.

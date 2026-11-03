@@ -219,7 +219,7 @@ public final class MainActivity extends ComponentActivity {
                 askNotifications(() -> Push.status(this, status -> answer(reply, id, status)));
                 break;
             case "badge":
-                // Android shows the count of Bedo Chat's notifications on the icon by itself.
+                // Android shows the count of Bedo Family's notifications on the icon by itself.
                 answer(reply, id, Boolean.TRUE);
                 break;
             case "open-settings":
@@ -253,7 +253,7 @@ public final class MainActivity extends ComponentActivity {
         runOnUiThread(() -> reply.postMessage(answer.toString()));
     }
 
-    /** Android 13 and later: asks "Allow Bedo Chat to send you notifications?" when it still may; then goes on. */
+    /** Android 13 and later: asks "Allow Bedo Family to send you notifications?" when it still may; then goes on. */
     private void askNotifications(Runnable then) {
         if (Build.VERSION.SDK_INT < 33 || !"default".equals(Push.permission(this))) {
             then.run();

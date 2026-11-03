@@ -2,7 +2,7 @@ import { BrandIcon } from '@bedo/ui';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 
-export const metadata: Metadata = { title: 'Not found · Bedo Chat' };
+export const metadata: Metadata = { title: 'Not found · Bedo Family' };
 
 /**
  * D-31: the "not found" page, styled from the app's stylesheet. Next.js's built-in page uses inline style
@@ -15,7 +15,7 @@ export default function NotFound() {
       <BrandIcon size={64} />
       <p className="text-sm text-ink-secondary">This page does not exist.</p>
       <Link href="/" className="text-sm font-medium text-accent hover:underline">
-        Go to Bedo Chat
+        Go to Bedo Family
       </Link>
     </main>
   );

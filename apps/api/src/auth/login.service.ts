@@ -67,7 +67,7 @@ export class LoginService {
         userId: input.userId,
         excludeSessionId: session.sessionId,
         notification: {
-          title: 'New sign-in to Bedo Chat',
+          title: 'New sign-in to Bedo Family',
           body: `Your account was signed in on ${alertDevice ?? 'a new device'}. If this was not you, end that session in Devices.`,
           tag: 'new-login',
         },

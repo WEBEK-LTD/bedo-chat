@@ -84,14 +84,14 @@ describe.runIf(enabled)('Phase 7 notifications and badges in the browser', () =>
       await composer(sender).fill(text);
       await composer(sender).press('Enter');
     }
-    await titleIs(laptop, '(3) Bedo Chat');
-    await titleIs(phone, '(3) Bedo Chat');
+    await titleIs(laptop, '(3) Bedo Family');
+    await titleIs(phone, '(3) Bedo Family');
     await shot(phone, '70-badge-phone');
     // Reading on the laptop clears the badge on the phone too.
     await laptop.getByRole('button', { name: /^Sara Sender/ }).click();
     await laptop.getByRole('log', { name: 'Messages' }).getByText('Class moved to 3pm').waitFor();
-    await titleIs(laptop, 'Bedo Chat');
-    await titleIs(phone, 'Bedo Chat');
+    await titleIs(laptop, 'Bedo Family');
+    await titleIs(phone, 'Bedo Family');
   });
 
   it('leaves muted chats out of the badge on every device', async () => {
@@ -105,13 +105,13 @@ describe.runIf(enabled)('Phase 7 notifications and badges in the browser', () =>
     await composer(sender).press('Enter');
     await phone.getByText('Muted, so no badge').first().waitFor({ timeout: 20_000 });
     await laptop.getByText('Muted, so no badge').first().waitFor({ timeout: 20_000 });
-    expect(await phone.title()).toBe('Bedo Chat');
-    expect(await laptop.title()).toBe('Bedo Chat');
+    expect(await phone.title()).toBe('Bedo Family');
+    expect(await laptop.title()).toBe('Bedo Family');
     // Unmuting brings the unread message back into the badge, on both.
     await phone.getByRole('button', { name: 'Actions for Sara Sender' }).click();
     await phone.getByRole('menuitem', { name: 'Unmute' }).click();
-    await titleIs(phone, '(1) Bedo Chat');
-    await titleIs(laptop, '(1) Bedo Chat');
+    await titleIs(phone, '(1) Bedo Family');
+    await titleIs(laptop, '(1) Bedo Family');
   });
 
   it('opens the chat a notification links to', async () => {

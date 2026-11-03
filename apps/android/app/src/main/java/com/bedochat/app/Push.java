@@ -51,7 +51,7 @@ final class Push {
     }
 
     /**
-     * The phone's answer for Bedo Chat's notifications: "granted"; "default" while the app may still ask (Android 13
+     * The phone's answer for Bedo Family's notifications: "granted"; "default" while the app may still ask (Android 13
      * and later: Android shows its question at most twice, and again after "Don't allow" once or the question closed
      * without an answer); "denied" when only the phone's Settings can turn them on.
      */
@@ -94,7 +94,7 @@ final class Push {
         return status;
     }
 
-    /** The phone's notification settings for Bedo Chat (where they are turned back on after "Don't allow"). */
+    /** The phone's notification settings for Bedo Family (where they are turned back on after "Don't allow"). */
     static void openSettings(Activity activity) {
         Intent intent;
         if (Build.VERSION.SDK_INT >= 26) {

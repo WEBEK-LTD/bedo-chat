@@ -35,7 +35,7 @@ export function presenceText(presence: Presence | null): string {
 }
 
 export function displayName(peer: Peer): string {
-  return peer.displayName || 'Bedo Chat user';
+  return peer.displayName || 'Bedo Family user';
 }
 
 /** The name a chat is shown under: the other person, or the group's title. */

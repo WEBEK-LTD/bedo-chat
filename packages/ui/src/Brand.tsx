@@ -1,5 +1,5 @@
 /**
- * The Bedo Chat brand (D-54), from the owner's files in apps/web/public/icons (originals in docs/brand). Served by the
+ * The Bedo Family brand (D-54), from the owner's files in apps/web/public/icons (originals in docs/brand). Served by the
  * one site, so the student app and the Admin Dashboard (under /admin) both load them from /icons.
  */
 
@@ -9,9 +9,9 @@ const LOGO_RATIO = 1244 / 512;
 export function BrandLogo({ height, className }: { height: number; className?: string }) {
   const width = Math.round(height * LOGO_RATIO);
   return (
-    <span role="img" aria-label="Bedo Chat, Australian Dental Academy" className={className}>
-      <img src="/icons/bedo-chat-logo.svg" alt="" width={width} height={height} className="bedo-brand-light" />
-      <img src="/icons/bedo-chat-logo-white.svg" alt="" width={width} height={height} className="bedo-brand-dark" />
+    <span role="img" aria-label="Bedo Family, Australian Dental Academy" className={className}>
+      <img src="/icons/bedo-family-logo.svg" alt="" width={width} height={height} className="bedo-brand-light" />
+      <img src="/icons/bedo-family-logo-white.svg" alt="" width={width} height={height} className="bedo-brand-dark" />
     </span>
   );
 }

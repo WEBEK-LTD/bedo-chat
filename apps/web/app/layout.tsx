@@ -7,8 +7,8 @@ import { THEME_COOKIE, themeFromCookie } from './_lib/theme';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Bedo Chat',
-  applicationName: 'Bedo Chat',
+  title: 'Bedo Family',
+  applicationName: 'Bedo Family',
   // Private academy application: never indexed by search engines.
   robots: { index: false, follow: false },
   // Phase 13 (D-46): installable from the browser ("Add to Home Screen" / "Install app"). On iPhone and iPad, Web
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [
-      // D-54: the Bedo Chat brand icon.
+      // D-54: the Bedo Family brand icon.
       { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
       { url: '/icons/bedo-icon.svg', type: 'image/svg+xml' },
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }],
   },
-  appleWebApp: { capable: true, title: 'Bedo Chat', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'Bedo Family', statusBarStyle: 'default' },
   formatDetection: { telephone: false },
 };
 

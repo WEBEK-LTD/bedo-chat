@@ -304,7 +304,7 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
       // D-36: delivered by the API right after the sign-in response, to the other session only.
       const pushed = await ctx.push.all();
       expect(pushed).toHaveLength(1);
-      expect(pushed[0]).toMatchObject({ endpoint: laptopEndpoint, payload: { tag: 'new-login', title: 'New sign-in to Bedo Chat' } });
+      expect(pushed[0]).toMatchObject({ endpoint: laptopEndpoint, payload: { tag: 'new-login', title: 'New sign-in to Bedo Family' } });
       const logins = await query(ctx.ownerUrl, "select 1 from audit.security_events where subject_id = $1 and event = 'login_succeeded'", [laptop.body.user.id]);
       expect(logins.rowCount).toBe(2);
 
@@ -469,7 +469,7 @@ describe.runIf(enabled)('Phase 2 sign-in, sessions and account (real Postgres + 
         photoVisibility: 'everyone',
         messagesFrom: 'everyone',
       });
-      // D-45: Bedo Chat has no calls, so there is no call setting.
+      // D-45: Bedo Family has no calls, so there is no call setting.
       expect((await app.inject({ method: 'PATCH', url: '/v1/me/privacy', headers: authed(accessToken), payload: { callsFrom: 'nobody' } })).statusCode).toBe(400);
       const updated = await app.inject({ method: 'PATCH', url: '/v1/me/privacy', headers: authed(accessToken), payload: { lastSeenVisibility: 'nobody' } });
       expect(updated.json().lastSeenVisibility).toBe('nobody');

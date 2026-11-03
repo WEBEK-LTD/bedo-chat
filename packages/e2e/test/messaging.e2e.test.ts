@@ -164,7 +164,7 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
     // The indicator ends when the message arrives (and in any case after 6 seconds, P-18).
     await anaPhone.getByText('typing…').first().waitFor({ state: 'detached', timeout: 8_000 });
 
-    // Ben's browser tab is closed; Ana writes twice; Ben opens Bedo Chat again.
+    // Ben's browser tab is closed; Ana writes twice; Ben opens Bedo Family again.
     await ben.close();
     await composer(anaPhone).fill('First while you were away');
     await composer(anaPhone).press('Enter');

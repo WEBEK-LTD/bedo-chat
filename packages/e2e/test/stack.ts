@@ -15,7 +15,7 @@ import { headersFor, readSiteRules, resolveStatic } from '../../../scripts/netli
 
 /**
  * A complete local stack for browser tests (D-36): a fresh migrated database and the ONE Netlify site, which is
- * the whole of Bedo Chat: the built web app served by `next start` (its /api route runs the API in-process,
+ * the whole of Bedo Family: the built web app served by `next start` (its /api route runs the API in-process,
  * connecting as the least-privilege runtime role), with the Admin Dashboard's static export under /admin, behind
  * a local stand-in for Netlify's file serving and headers:
  *   http://localhost:3100/        student web app      http://localhost:3100/admin  Admin Dashboard

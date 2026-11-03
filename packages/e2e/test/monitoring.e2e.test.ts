@@ -61,7 +61,7 @@ describe.runIf(enabled)('Phase 14.5 site monitoring in the Admin Dashboard', () 
     expect(await stack.minuteCall()).toBe(200);
     await admin.reload();
     await open();
-    await admin.getByTestId('monitoring-status').getByText('Bedo Chat is up').waitFor();
+    await admin.getByTestId('monitoring-status').getByText('Bedo Family is up').waitFor();
     await admin.getByRole('img', { name: /ten-minute periods without a check/ }).waitFor();
 
     // The site could not be reached for a while: the next minute call records it and tells the Super Admin.

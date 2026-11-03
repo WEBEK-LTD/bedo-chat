@@ -38,7 +38,7 @@ describe('Phase 14.5 site monitoring (real Postgres, runtime role)', () => {
     await query(ctx.ownerUrl, "update app.site_checks set checked_at = checked_at - interval '6 minutes' where storage_ok is not null");
     await minuteCall();
   };
-  const alerts = async () => (await ctx.waabek.to(superPhone)).filter((text) => text.startsWith('Bedo Chat:'));
+  const alerts = async () => (await ctx.waabek.to(superPhone)).filter((text) => text.startsWith('Bedo Family:'));
   const incidents = async () =>
     (await query<{ kind: string; ended: boolean; alerted: boolean }>(ctx.ownerUrl, 'select kind, ended_at is not null as ended, alerted_at is not null as alerted from app.site_incidents order by id')).rows;
 

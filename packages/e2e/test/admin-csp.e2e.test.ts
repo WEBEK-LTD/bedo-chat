@@ -84,7 +84,7 @@ describe.runIf(enabled)('Admin Dashboard Phase 3.1 and 3.2 screens under the Con
     await page.getByText('Your password is set. Sign in with it.').waitFor();
     await page.getByLabel('Password', { exact: true }).fill(ADMIN_PASSWORD);
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByRole('img', { name: /QR code for Bedo Chat Admin/ }).waitFor();
+    await page.getByRole('img', { name: /QR code for Bedo Family Admin/ }).waitFor();
     const secret = base32Decode((await page.getByTestId('totp-setup-key').textContent()) ?? '');
     await page.getByLabel('Code from the authenticator app').fill(hotp(secret, Math.floor(Date.now() / 30_000)));
     await page.getByRole('button', { name: 'Confirm and sign in' }).click();

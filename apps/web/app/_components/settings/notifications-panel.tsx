@@ -34,7 +34,7 @@ export function noticeText(notice: SecurityNotice): string {
 
 const PUSH_TEXT: Record<PushState, string> = {
   unsupported:
-    'This browser does not support notifications. On iPhone and iPad, add Bedo Chat to your Home Screen first (iOS 16.4 or later).',
+    'This browser does not support notifications. On iPhone and iPad, add Bedo Family to your Home Screen first (iOS 16.4 or later).',
   unavailable: 'Notifications are not available yet.',
   denied: 'Notifications are blocked for this site. Allow them in your browser settings, then come back here.',
   off: 'Get notifications on this device for new messages, mentions and replies, and when someone signs in to your account.',
@@ -42,7 +42,7 @@ const PUSH_TEXT: Record<PushState, string> = {
 };
 
 /** D-53: in the iPhone app the permission belongs to the app, in the iPhone's Settings. */
-const APP_DENIED_TEXT = 'Notifications are off for Bedo Chat on this phone. Tap Open Settings, turn on Notifications, then come back here.';
+const APP_DENIED_TEXT = 'Notifications are off for Bedo Family on this phone. Tap Open Settings, turn on Notifications, then come back here.';
 
 const SETTING_LABELS: Array<[keyof NotificationSettings, string, string]> = [
   ['privateChats', 'Private chats', 'New messages from one person'],

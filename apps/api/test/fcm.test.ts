@@ -152,6 +152,6 @@ describe('Android notifications through Firebase (D-58)', () => {
   });
 
   it('builds the message from any payload without failing', () => {
-    expect(fcmMessage('t', {})).toEqual({ token: 't', data: { title: 'Bedo Chat', body: '', url: '/' }, android: { priority: 'HIGH', ttl: '3600s' } });
+    expect(fcmMessage('t', {})).toEqual({ token: 't', data: { title: 'Bedo Family', body: '', url: '/' }, android: { priority: 'HIGH', ttl: '3600s' } });
   });
 });

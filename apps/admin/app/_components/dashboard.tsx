@@ -95,7 +95,7 @@ export function Dashboard() {
             <Icon name={menuOpen ? 'close' : 'menu'} />
           </button>
           <BrandIcon size={32} className="hidden shrink-0 md:block" />
-          <span className="truncate">Bedo Chat Admin</span>
+          <span className="truncate">Bedo Family Admin</span>
         </span>
         <div className="flex shrink-0 items-center gap-1 text-sm md:gap-2">
           <span className="mr-1 hidden text-ink-secondary sm:inline">

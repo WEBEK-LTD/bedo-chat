@@ -40,19 +40,19 @@ describe.runIf(enabled)('one site: /, /login, /admin, /admin/login, /api (D-36)'
     };
     const login = await html('/login');
     expect(login.status).toBe(200);
-    expect(login.body).toContain('<title>Sign in · Bedo Chat</title>');
+    expect(login.body).toContain('<title>Sign in · Bedo Family</title>');
     const root = await html('/');
     expect(root.status).toBe(200);
-    expect(root.body).toContain('<title>Bedo Chat</title>');
+    expect(root.body).toContain('<title>Bedo Family</title>');
     const adminLogin = await html('/admin/login');
     expect(adminLogin.status).toBe(200);
-    expect(adminLogin.body).toContain('<title>Sign in · Bedo Chat Admin</title>');
+    expect(adminLogin.body).toContain('<title>Sign in · Bedo Family Admin</title>');
     // The admin app's own files are served under /admin, separate from the student app's.
     expect(adminLogin.body).toMatch(/src="\/admin\/_next\/static\//);
     expect(login.body).not.toMatch(/src="\/admin\/_next\//);
     const admin = await html('/admin');
     expect(admin.status).toBe(200);
-    expect(admin.body).toContain('<title>Bedo Chat Admin</title>');
+    expect(admin.body).toContain('<title>Bedo Family Admin</title>');
 
     const ready = await fetch(`${API_URL}/health/ready`);
     expect(ready.status).toBe(200);
@@ -89,14 +89,14 @@ describe.runIf(enabled)('one site: /, /login, /admin, /admin/login, /api (D-36)'
     };
     // One site, one deploy.
     for (const base of [SITE_URL]) {
-      expect(await get(base, '/'), `${base}/`).toMatchObject({ status: 200, title: 'Bedo Chat' });
-      expect(await get(base, '/login'), `${base}/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Chat' });
-      expect(await get(base, '/admin'), `${base}/admin`).toMatchObject({ status: 200, title: 'Bedo Chat Admin' });
-      expect(await get(base, '/admin/'), `${base}/admin/`).toMatchObject({ status: 200, title: 'Bedo Chat Admin' });
-      expect(await get(base, '/admin/login'), `${base}/admin/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Chat Admin' });
+      expect(await get(base, '/'), `${base}/`).toMatchObject({ status: 200, title: 'Bedo Family' });
+      expect(await get(base, '/login'), `${base}/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Family' });
+      expect(await get(base, '/admin'), `${base}/admin`).toMatchObject({ status: 200, title: 'Bedo Family Admin' });
+      expect(await get(base, '/admin/'), `${base}/admin/`).toMatchObject({ status: 200, title: 'Bedo Family Admin' });
+      expect(await get(base, '/admin/login'), `${base}/admin/login`).toMatchObject({ status: 200, title: 'Sign in · Bedo Family Admin' });
       const sw = await get(base, '/sw.js');
       expect(sw.status).toBe(200);
-      expect(sw.body).toContain('Bedo Chat service worker');
+      expect(sw.body).toContain('Bedo Family service worker');
       // Unknown admin paths are not mapped to an admin page (no catch-all).
       expect((await get(base, '/admin/unknown')).status).toBe(404);
     }
@@ -138,11 +138,11 @@ describe.runIf(enabled)('one site: /, /login, /admin, /admin/login, /api (D-36)'
       // Without an admin session the dashboard sends the visitor to its sign-in page.
       await page.waitForURL(`${ADMIN_URL}/login`);
       await page.getByLabel('Phone number').waitFor();
-      expect(await page.title()).toBe('Sign in · Bedo Chat Admin');
+      expect(await page.title()).toBe('Sign in · Bedo Family Admin');
       await page.reload();
       await page.getByLabel('Phone number').waitFor();
       expect(page.url()).toBe(`${ADMIN_URL}/login`);
-      expect(await page.title()).toBe('Sign in · Bedo Chat Admin');
+      expect(await page.title()).toBe('Sign in · Bedo Family Admin');
     }
   });
 
@@ -175,7 +175,7 @@ describe.runIf(enabled)('one site: /, /login, /admin, /admin/login, /api (D-36)'
     // A signed-in student is not an admin: /admin asks for admin sign-in, and the admin API refuses.
     await page.goto(`${ADMIN_URL}`);
     await page.waitForURL(`${ADMIN_URL}/login`);
-    await page.getByRole('heading', { name: 'Bedo Chat Admin' }).waitFor();
+    await page.getByRole('heading', { name: 'Bedo Family Admin' }).waitFor();
     const adminCalls = await page.evaluate(async () => {
       const session = await fetch('/api/v1/auth/refresh', { method: 'POST', headers: { 'x-bedo-csrf': '1' } });
       const { accessToken } = (await session.json()) as { accessToken: string };

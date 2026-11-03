@@ -155,7 +155,7 @@ export class FcmClient {
  */
 export function fcmMessage(token: string, notification: Notification): Record<string, unknown> {
   const data: Record<string, string> = {
-    title: typeof notification.title === 'string' ? notification.title : 'Bedo Chat',
+    title: typeof notification.title === 'string' ? notification.title : 'Bedo Family',
     body: typeof notification.body === 'string' ? notification.body : '',
     url: typeof notification.url === 'string' ? notification.url : '/',
   };

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Bedo Chat for Android (D-53, D-58): shows https://bedochat.com in the app's own web view (no browser, so never an
+  Bedo Family for Android (D-53, D-58): shows https://bedochat.com in the app's own web view (no browser, so never an
   address bar), with the same sign-in, chats and settings as the website. Notifications come through Firebase: the
   page asks the app for permission and its device address, and the API sends to it (apps/api/src/delivery/fcm.ts).
 -->
@@ -70,7 +70,7 @@
                 android:resource="@xml/filepaths" />
         </provider>
 
-        <!-- Notifications from Firebase, shown as Bedo Chat's own. -->
+        <!-- Notifications from Firebase, shown as Bedo Family's own. -->
         <service
             android:name=".PushService"
             android:exported="false">

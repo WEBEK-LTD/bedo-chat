@@ -196,7 +196,7 @@ describe.runIf(enabled)('D-55 notifications on from the start', () => {
     expect(await offer(page).count()).toBe(0);
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('button', { name: /Notifications/ }).click();
-    await page.getByText('Notifications are off for Bedo Chat on this phone.').waitFor();
+    await page.getByText('Notifications are off for Bedo Family on this phone.').waitFor();
     await page.getByRole('button', { name: 'Open Settings' }).click();
     await expect.poll(() => sentToApp(page)).toContain('open-settings');
   });

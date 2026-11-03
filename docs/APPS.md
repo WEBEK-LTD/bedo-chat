@@ -172,3 +172,16 @@ push entitlement, and uploads it to App Store Connect. The next run removes the 
 (only those named `Bedo Chat CI ...`), so the account never collects them. No device has to be registered and no Mac is
 needed (`apps/ios/ci/signing.py`).
 
+
+## Renaming (D-60, Bedo Family)
+
+The name under the icon comes from the app builds (iPhone `CFBundleDisplayName` in `apps/ios/project.yml`, Android
+`appName` in `apps/android/app/src/main/res/values/strings.xml`); the name in the stores is set by hand:
+
+* **Google Play**: Play Console → the app → **Grow users → Store presence → Main store listing** → **App name**:
+  `Bedo Family` → Save. Then **Test and release → Production → Create new release** → upload the new `.aab` (GitHub →
+  Actions → the latest **Apps** run → download **android-app**) → release notes → Review → **Start rollout**.
+* **App Store**: App Store Connect → the app → **App Information → Name**: `Bedo Family` → Save. On the version waiting
+  for review: **Remove from Review** (or cancel the submission), choose the new build (the one the Apps run uploaded,
+  once it shows as processed), update the screenshots if they show the old logo, then **Add for Review → Submit**.
+  Apple reviews the version again from the start.

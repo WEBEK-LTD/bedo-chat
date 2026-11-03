@@ -1,7 +1,7 @@
 import UIKit
 import UserNotifications
 
-/// Bedo Chat for iPhone (D-53): shows https://bedochat.com and receives its notifications through Apple (APNs).
+/// Bedo Family for iPhone (D-53): shows https://bedochat.com and receives its notifications through Apple (APNs).
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?

@@ -233,7 +233,7 @@ export class AdminConsoleService {
       await this.audit.security(trx, { subjectType: 'user', subjectId: userId, event: 'sessions_ended_account_blocked', details: { count: ended.length, status } });
       notice = {
         title: action === 'suspend' ? 'Account suspended' : 'Account banned',
-        body: action === 'suspend' ? 'An administrator suspended your Bedo Chat account. Contact the academy.' : 'An administrator banned your Bedo Chat account.',
+        body: action === 'suspend' ? 'An administrator suspended your Bedo Family account. Contact the academy.' : 'An administrator banned your Bedo Family account.',
         tag: 'account-status',
         subscriptions,
       };

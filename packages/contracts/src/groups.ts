@@ -266,7 +266,7 @@ export const pollVotersResponseSchema = z.object({
 
 // ------------------------------------------------------------------------------ System permissions
 
-/** O-21: what an admin lets one user do across Bedo Chat. */
+/** O-21: what an admin lets one user do across Bedo Family. */
 export const userPermissionsSchema = z.object({
   createGroups: z.boolean(),
   createChannels: z.boolean(),

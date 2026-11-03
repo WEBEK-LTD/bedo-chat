@@ -70,7 +70,7 @@ describe('WaabekClient', () => {
     expect(request?.url).toBe('/api/v1/send');
     expect(request?.headers['x-api-key']).toBe(FAKE_KEY);
     expect(request?.headers['content-type']).toBe('application/json');
-    expect(JSON.parse(request!.body)).toEqual({ to: '201234567890', message: 'Your Bedo Chat verification code is: 123456' });
+    expect(JSON.parse(request!.body)).toEqual({ to: '201234567890', message: 'Your Bedo Family verification code is: 123456' });
   });
 
   it('reports HTTP failures with the status only, never the key, number, message or response body', async () => {
@@ -127,7 +127,7 @@ describe('OtpDeliveryService', () => {
     // Nothing is sent before the response; the work is handed to the platform.
     expect(sent).toEqual([]);
     await background!();
-    expect(sent).toEqual([{ apiKey: FAKE_KEY, phone: '+201234567890', text: 'Your Bedo Chat verification code is: 246810' }]);
+    expect(sent).toEqual([{ apiKey: FAKE_KEY, phone: '+201234567890', text: 'Your Bedo Family verification code is: 246810' }]);
   });
 
   it('tries once more after a temporary failure, and records a final failure without the code', async () => {

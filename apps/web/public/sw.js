@@ -1,5 +1,5 @@
 /* global self, clients */
-// Bedo Chat service worker: shows push notifications (login alerts and account notices, D-13, D-21; messages,
+// Bedo Family service worker: shows push notifications (login alerts and account notices, D-13, D-21; messages,
 // mentions, replies and being added to a group or channel, D-41) and opens the right chat when one is clicked. It
 // does not cache pages or data.
 //
@@ -22,12 +22,12 @@ self.addEventListener('push', (event) => {
   } catch {
     data = {};
   }
-  const title = typeof data.title === 'string' ? data.title : 'Bedo Chat';
+  const title = typeof data.title === 'string' ? data.title : 'Bedo Family';
   const tag = typeof data.tag === 'string' ? data.tag : undefined;
   const work = [
     self.registration.showNotification(title, {
       body: typeof data.body === 'string' ? data.body : '',
-      // D-54: the Bedo Chat icon beside the notification, and its one-colour shape in Android's status bar.
+      // D-54: the Bedo Family icon beside the notification, and its one-colour shape in Android's status bar.
       icon: '/icons/icon-192.png',
       badge: '/icons/badge-96.png',
       tag,
@@ -49,7 +49,7 @@ self.addEventListener('notificationclick', (event) => {
   const url = safePath(event.notification.data && event.notification.data.url);
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windows) => {
-      // Bedo Chat windows only: the Admin Dashboard shares this origin under /admin (D-25).
+      // Bedo Family windows only: the Admin Dashboard shares this origin under /admin (D-25).
       const open = windows.find((client) => {
         const address = new URL(client.url);
         return address.origin === self.location.origin && address.pathname !== '/admin' && !address.pathname.startsWith('/admin/');

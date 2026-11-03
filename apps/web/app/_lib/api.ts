@@ -56,7 +56,7 @@ class Session {
     try {
       response = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: 'include', cache: 'no-store' });
     } catch {
-      throw new ApiError(0, 'NETWORK', 'Cannot reach Bedo Chat. Check your connection.');
+      throw new ApiError(0, 'NETWORK', 'Cannot reach Bedo Family. Check your connection.');
     }
     if (response.ok) {
       return (await response.json()) as T;
