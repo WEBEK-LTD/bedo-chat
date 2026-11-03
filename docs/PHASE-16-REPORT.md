@@ -308,3 +308,18 @@ names, and the earlier sections of these reports.
 Owner steps: the store listings' names (Play Console → Main store listing → App name; App Store Connect → the app →
 App Information → Name), the new Android bundle uploaded to Play Console, and, on iPhone, the waiting review replaced
 by the new build (docs/APPS.md, "Renaming").
+
+## Phase 16.17 — iPhone version 1.1
+
+Build 21 (Bedo Family) never reached App Store Connect: Apple refused the upload because version **1.0** of the
+iPhone app is already approved and takes no new builds ("The train version '1.0' is closed for new build submissions";
+the version must be higher than the approved 1.0). The Apps workflow still reported it as uploaded, because `altool`
+ended with success after printing "UPLOAD FAILED".
+
+* The iPhone app is now version **1.1** (`MARKETING_VERSION` in `apps/ios/project.yml`), the same as the Android app.
+* The workflow fails the iPhone job when `altool` prints "UPLOAD FAILED" or "Failed to upload", with Apple's lines in
+  the run's annotations, so a refused upload can no longer look like a success.
+
+Owner steps (docs/APPS.md, "Renaming"): after the Apps run uploads the new build, App Store Connect → the app →
+**+** next to iOS App → version **1.1** → choose the build → what's new → **Add for Review** → **Submit for Review**.
+Each later iPhone release needs the next version number (1.2, …) once the previous one is approved.

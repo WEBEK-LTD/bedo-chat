@@ -181,7 +181,8 @@ The name under the icon comes from the app builds (iPhone `CFBundleDisplayName` 
 * **Google Play**: Play Console → the app → **Grow users → Store presence → Main store listing** → **App name**:
   `Bedo Family` → Save. Then **Test and release → Production → Create new release** → upload the new `.aab` (GitHub →
   Actions → the latest **Apps** run → download **android-app**) → release notes → Review → **Start rollout**.
-* **App Store**: App Store Connect → the app → **App Information → Name**: `Bedo Family` → Save. On the version waiting
-  for review: **Remove from Review** (or cancel the submission), choose the new build (the one the Apps run uploaded,
-  once it shows as processed), update the screenshots if they show the old logo, then **Add for Review → Submit**.
-  Apple reviews the version again from the start.
+* **App Store**: App Store Connect → the app → **App Information → Name**: `Bedo Family` → Save. Version 1.0 is
+  approved, so the new build is version **1.1**: **+** next to *iOS App* → `1.1` → in **Build** choose the build the
+  Apps run uploaded (once processed) → *What's New in This Version* → update the screenshots if they show the old logo
+  → **Add for Review → Submit for Review**. (Apple accepts new builds only for a version higher than the last approved
+  one: each later release raises `MARKETING_VERSION` in `apps/ios/project.yml`.)

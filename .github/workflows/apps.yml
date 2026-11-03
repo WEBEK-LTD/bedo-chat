@@ -178,7 +178,9 @@ jobs:
           echo "::notice title=iPhone app::$(codesign -dvv "$APP" 2>&1 | grep -m1 '^Authority='), push: $(grep -o 'production\|development' "$RUNNER_TEMP/entitlements.xml" | head -1)"
           mkdir -p ~/.appstoreconnect/private_keys
           printf '%s\n' "$ASC_KEY" > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          # altool can end with success even when Apple refused the upload (it did for build 21): its text decides.
           xcrun altool --upload-app --type ios -f "$IPA" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/xcode.log" || report
+          ! grep -qE 'UPLOAD FAILED|Failed to upload' "$RUNNER_TEMP/xcode.log" || report
           echo "::notice title=iPhone app::Build $GITHUB_RUN_NUMBER uploaded to App Store Connect (TestFlight shows it after Apple's processing)."
           rm -rf ~/.appstoreconnect/private_keys "$SIGN"
           security delete-keychain "$KEYCHAIN"
