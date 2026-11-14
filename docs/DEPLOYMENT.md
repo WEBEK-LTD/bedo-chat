@@ -63,9 +63,10 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
       `ok`. It turns it off on Bedo Chat's own tables only, after checking no Supabase API role can reach them; safe
       to run again. (`apply-updates.sql` now does the same at its end.)
    3. **Updates after go-live**: each later release that changes the database brings one file per change,
-      `docs/owner-sql/update-<version>.sql`. Run each once, in order of the number in its name; every line of the
-      result says `ok`. A file that was already run, or one whose earlier updates are missing, stops and changes
-      nothing.
+      `docs/owner-sql/update-<version>.sql`; files made after 2026-11-14 also say what they do, e.g.
+      `update-20261115120000-bot-tags.sql` (D-61). Run each once, in order of the number in its name; every line of
+      the result says `ok`. A file that was already run, or one whose earlier updates are missing, stops and changes
+      nothing. A file is never changed once it exists: a correction comes as a new file.
    4. Paste [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql), change the three values at the
       top (section 4d) → **Run** → delete the query afterwards (it holds the password).
 5. **Supabase settings**: Project Settings → **Realtime** → turn **off** "Allow public access" (only devices with a

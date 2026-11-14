@@ -224,6 +224,24 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
     await composer(ben).waitFor();
   });
 
+  it('makes only the web addresses in a message into links that open in the browser', async () => {
+    const text = 'Notes at https://example.com/notes?week=3. Or www.example.org, and #revision';
+    await composer(ben).fill(text);
+    await composer(ben).press('Enter');
+    await messages(anaPhone).getByText('Notes at').waitFor();
+    const first = messages(anaPhone).getByRole('link', { name: 'https://example.com/notes?week=3' });
+    await first.waitFor();
+    // The sentence's full stop is not part of the address; another site opens outside this page.
+    expect(await first.getAttribute('href')).toBe('https://example.com/notes?week=3');
+    expect(await first.getAttribute('target')).toBe('_blank');
+    expect(await first.getAttribute('rel')).toContain('noopener');
+    const second = messages(anaPhone).getByRole('link', { name: 'www.example.org' });
+    expect(await second.getAttribute('href')).toBe('https://www.example.org/');
+    // Only the addresses are links: the rest stays text, and the hashtag stays a search button.
+    expect(await messages(anaPhone).getByRole('link').filter({ hasText: 'Notes at' }).count()).toBe(0);
+    await messages(anaPhone).getByRole('button', { name: '#revision' }).waitFor();
+  });
+
   it('never sends screenshot events from the web app (P-28), and raised no CSP violation', async () => {
     const events = await query<{ n: number }>(stack.ownerUrl, 'select count(*)::int as n from audit.screenshot_events');
     expect(events.rows[0]!.n).toBe(0);

@@ -51,9 +51,25 @@ export interface MessageActions {
   onNotice?: (message: string) => void;
 }
 
-/** Text with @mentions highlighted and #hashtags as buttons that search the chat (Phase 5). */
-function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) => void }) {
-  const parts: Array<string | { kind: 'mention' | 'tag'; value: string }> = [];
+/** Web addresses in a message: http(s) links and bare www. addresses. */
+const LINK_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"]+/giu;
+/** Punctuation that ends a sentence, not the address ("see https://example.com." or "(www.example.com)"). */
+const LINK_TRAILING = /[.,!?;:'")\]}،؛؟]+$/u;
+
+/** The address a link opens: only http and https (never javascript: or other schemes); null if it is not one. */
+function linkTarget(raw: string): URL | null {
+  try {
+    const url = new URL(/^www\./i.test(raw) ? `https://${raw}` : raw);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+type TextPart = string | { kind: 'mention' | 'tag'; value: string } | { kind: 'link'; value: string; href: string; external: boolean };
+
+/** @mentions and #hashtags in a stretch of text without links (Phase 5). */
+function mentionParts(text: string, parts: TextPart[]): void {
   // \p{M}: Arabic diacritics (and other combining marks) belong to the word, so "#مَرحبا" is one hashtag.
   const pattern = /(^|[^\p{L}\p{M}\p{N}_@#])([@#][\p{L}\p{M}\p{N}_]{2,64})/gu;
   let last = 0;
@@ -65,11 +81,48 @@ function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) 
     last = start + token.length;
   }
   if (last < text.length) parts.push(text.slice(last));
+}
+
+/** Splits a message into plain text, links, @mentions and #hashtags. */
+export function textParts(text: string): TextPart[] {
+  const parts: TextPart[] = [];
+  let last = 0;
+  for (const match of text.matchAll(LINK_PATTERN)) {
+    const start = match.index ?? 0;
+    const value = match[0].replace(LINK_TRAILING, '');
+    const url = value ? linkTarget(value) : null;
+    if (!url) continue;
+    if (start > last) mentionParts(text.slice(last, start), parts);
+    const external = typeof window === 'undefined' || url.origin !== window.location.origin;
+    parts.push({ kind: 'link', value, href: url.href, external });
+    last = start + value.length;
+  }
+  if (last < text.length) mentionParts(text.slice(last), parts);
+  return parts;
+}
+
+/**
+ * Text with links that open (only the address itself is the link), @mentions highlighted and #hashtags as buttons
+ * that search the chat (Phase 5). A link to another site opens in the browser (in the apps: outside the app); a
+ * Bedo Family link opens here.
+ */
+function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) => void }) {
+  const parts = textParts(text);
   return (
     <p dir="auto" className="whitespace-pre-wrap break-words">
       {parts.map((part, index) =>
         typeof part === 'string' ? (
           part
+        ) : part.kind === 'link' ? (
+          <a
+            key={index}
+            href={part.href}
+            {...(part.external ? { target: '_blank', rel: 'noopener noreferrer nofollow' } : {})}
+            onClick={(event) => event.stopPropagation()}
+            className="break-all text-accent underline underline-offset-2"
+          >
+            {part.value}
+          </a>
         ) : part.kind === 'mention' ? (
           <span key={index} className="font-medium text-accent">
             {part.value}
