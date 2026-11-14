@@ -9,6 +9,7 @@ import { PollsService } from '../groups/polls.service.js';
 import { MediaViewsService } from '../media/media-views.service.js';
 import { PermissionService, type Relation } from './permissions.service.js';
 import { lastSeenToMinute, PresenceService } from './presence.service.js';
+import { TopicsSchemaService } from './topics-schema.service.js';
 
 export type MessageRow = Pick<
   Selectable<MessagesTable>,
@@ -28,7 +29,10 @@ export type MessageRow = Pick<
   | 'created_at'
   | 'edited_at'
   | 'deleted_at'
->;
+> & {
+  /** D-63: read only once the topics update exists (TopicsSchemaService); missing: General. */
+  topic_id?: string | null;
+};
 
 export const MESSAGE_COLUMNS = [
   'id',
@@ -48,6 +52,10 @@ export const MESSAGE_COLUMNS = [
   'edited_at',
   'deleted_at',
 ] as const;
+
+/** D-63: the message columns with the topic, once the database has it (see ViewsService.columns). */
+export const MESSAGE_COLUMNS_WITH_TOPIC = [...MESSAGE_COLUMNS, 'topic_id'] as const;
+export type MessageColumn = (typeof MESSAGE_COLUMNS_WITH_TOPIC)[number];
 
 /** Signed photo URLs last an hour; they are reused for 50 minutes. */
 const PHOTO_CACHE_MS = 50 * 60 * 1000;
@@ -71,7 +79,21 @@ export class ViewsService {
     @Inject(MediaViewsService) private readonly media: MediaViewsService,
     @Inject(PollsService) private readonly polls: PollsService,
     @Inject(MentionsService) private readonly mentions: MentionsService,
+    @Inject(TopicsSchemaService) private readonly topicsSchema: TopicsSchemaService,
   ) {}
+
+  /**
+   * The columns every message query reads for its views: with the topic only once the database has it (D-63), so
+   * chats keep working before the owner runs the update for topics.
+   */
+  async columns(): Promise<readonly MessageColumn[]> {
+    return (await this.topicsSchema.available()) ? MESSAGE_COLUMNS_WITH_TOPIC : MESSAGE_COLUMNS;
+  }
+
+  /** The same, as `m.<column>` for queries that name the messages table `m`. */
+  async columnsOf(alias: 'm'): Promise<ReadonlyArray<`m.${MessageColumn}`>> {
+    return (await this.columns()).map((column) => `${alias}.${column}` as const);
+  }
 
   private async photoUrl(key: string | null): Promise<string | null> {
     if (!key) {
@@ -221,6 +243,7 @@ export class ViewsService {
           : row.forward_from_user_id
             ? (originById.get(row.forward_from_user_id) ?? null)
             : null,
+        topicId: row.topic_id ?? null,
         createdAt: new Date(row.created_at).toISOString(),
         editedAt: iso(row.edited_at),
       };

@@ -20,7 +20,7 @@ import { AppError } from '../common/app-error.js';
 import { DatabaseService } from '../database/database.service.js';
 import { MessagingLimitsService } from '../messaging/messaging-limits.service.js';
 import { PermissionService } from '../messaging/permissions.service.js';
-import { MESSAGE_COLUMNS, ViewsService } from '../messaging/views.service.js';
+import { ViewsService } from '../messaging/views.service.js';
 import { CHAT_MEDIA_BUCKET, detectFileType, EXECUTABLE_TYPES, MediaStorage } from '../storage/media-storage.js';
 
 /** Bytes read back from every upload to detect its real type. */
@@ -279,7 +279,7 @@ export class FilesService {
     let builder = db
       .selectFrom('app.messages as m')
       .innerJoin('app.files as f', 'f.id', 'm.file_id')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('m.conversation_id', '=', chatId)
       .where('m.file_id', 'is not', null)
       .where('m.deleted_at', 'is', null)

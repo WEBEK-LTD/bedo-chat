@@ -20,6 +20,7 @@ import { MessagingLimitsService } from './messaging-limits.service.js';
 import { type ChatAccess, PermissionService, type PostKind } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import { joinEveryoneChannels } from '../groups/everyone-channels.js';
+import { TopicsService } from '../groups/topics.service.js';
 
 /** What a scheduled message sends, stored as JSON (D-40). Files and GIFs are already checked and kept. */
 interface ScheduledPayload {
@@ -30,6 +31,8 @@ interface ScheduledPayload {
   poll?: PollInput;
   /** The file is a GIF (counts as a sticker for group permissions). */
   gif?: boolean;
+  /** D-63: the group topic named when scheduling (checked then and again when sent). A reply without it follows its message. */
+  topicId?: string;
 }
 
 type ScheduledRow = Selectable<ScheduledMessagesTable>;
@@ -96,6 +99,7 @@ export class ScheduledService {
     @Inject(UserPermissionsService) private readonly systemPermissions: UserPermissionsService,
     @Inject(DeferredTasks) private readonly deferred: DeferredTasks,
     @Inject(BroadcastsService) private readonly broadcasts: BroadcastsService,
+    @Inject(TopicsService) private readonly topics: TopicsService,
     @Inject(API_ENV) env: ApiEnv,
   ) {
     this.expectedToken = Buffer.from(dispatchToken(env.ACCESS_TOKEN_SECRET), 'utf8');
@@ -158,6 +162,7 @@ export class ScheduledService {
       ...(message.stickerId ? { stickerId: message.stickerId } : {}),
       ...(message.poll ? { poll: message.poll } : {}),
       ...(message.gifId ? { gif: true } : {}),
+      ...(message.topicId ? { topicId: message.topicId } : {}),
     };
     const kind = ScheduledService.postKind({ ...payload, ...(message.fileId ? { fileId: message.fileId } : {}) });
     const access = await this.permissions.chatAccess(db, auth.userId, chatId);
@@ -169,6 +174,8 @@ export class ScheduledService {
       if (!visible || visible.chatId !== chatId) throw notFound();
     }
     if (message.stickerId) await this.stickers.assertSendable(db, message.stickerId);
+    // D-63: a topic is checked now as for sending (topics on, this group's, open or the author an admin).
+    if (message.topicId) await this.topics.topicForSend(db, access, chatId, message.topicId, message.replyToId);
     const pending = await db
       .selectFrom('app.scheduled_messages')
       .select(sql<number>`count(*)::int`.as('n'))
@@ -356,6 +363,7 @@ export class ScheduledService {
       ...(payload.fileId ? { fileId: payload.fileId } : {}),
       ...(payload.stickerId ? { stickerId: payload.stickerId } : {}),
       ...(payload.poll ? { poll: payload.poll } : {}),
+      ...(payload.topicId ? { topicId: payload.topicId } : {}),
     } as SendMessageBody;
     const gif = payload.gif === true && Boolean(payload.fileId);
     try {
@@ -412,6 +420,7 @@ export class ScheduledService {
         fileName: file?.file_name ?? null,
         pollQuestion: payload.poll?.question ?? null,
         replyToId: payload.replyToId ?? null,
+        topicId: payload.topicId ?? null,
         createdAt: new Date(row.created_at).toISOString(),
       };
     });
