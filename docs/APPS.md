@@ -186,3 +186,7 @@ The name under the icon comes from the app builds (iPhone `CFBundleDisplayName` 
   Apps run uploaded (once processed) → *What's New in This Version* → update the screenshots if they show the old logo
   → **Add for Review → Submit for Review**. (Apple accepts new builds only for a version higher than the last approved
   one: each later release raises `MARKETING_VERSION` in `apps/ios/project.yml`.)
+* **Version 1.2** (2026-11-14, after 1.1 was approved): `MARKETING_VERSION` 1.2 for the iPhone app and version name
+  1.2 for the Android app. App Store Connect → **+** next to *iOS App* → `1.2` → choose the build → What's New → **Add
+  for Review → Submit for Review**. Until 1.2 is approved, 1.1 stays on the App Store and keeps working: both show the
+  same website.

@@ -29,7 +29,7 @@ android {
         minSdk 24
         targetSdk 36
         versionCode buildNumber
-        versionName "1.1 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
+        versionName "1.2 (" + new java.text.SimpleDateFormat('yyyy.MM.dd', Locale.ROOT).format(new Date()) + ")"
         buildConfigField 'String', 'SITE_HOST', "\"${siteHost}\""
         buildConfigField 'String', 'STORAGE_HOST', "\"${storageHost}\""
         buildConfigField 'boolean', 'FIREBASE', "${firebaseConfigured}"
