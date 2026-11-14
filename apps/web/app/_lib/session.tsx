@@ -79,7 +79,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         settled = true;
         if (cancelled) return;
         const code = error instanceof ApiError ? error.code : null;
-        if (code === 'NETWORK') {
+        // A network failure or a busy or failing server (5xx, 429) is not the end of the session.
+        const temporary = code === 'NETWORK' || code === 'RATE_LIMITED' || (error instanceof ApiError && error.status >= 500);
+        if (temporary) {
           // Offline: keep showing what this browser has (if anything); requests try the session again later.
           void loadAccount().then((me) => !cancelled && setState(me && me.profileComplete ? { status: 'signedIn', me } : { status: 'signedOut', reason: null }));
           return;

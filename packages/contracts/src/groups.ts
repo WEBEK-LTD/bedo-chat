@@ -9,8 +9,11 @@ import { publicUserSchema } from './users.js';
 export const GROUP_RULES = {
   titleMaxLength: 128,
   descriptionMaxLength: 255,
-  /** O-12: members per group. */
-  maxMembers: 500,
+  /**
+   * O-12: members per group (raised from 500 to 5000 on 2026-11-14, the owner's decision: large groups are mostly
+   * read, chatty groups stay small; the same as a channel's subscribers).
+   */
+  maxMembers: 5000,
   /** Blueprint rate limit: groups created per user per day. */
   groupsPerDay: 10,
   /** Members added in one request (creation included). */

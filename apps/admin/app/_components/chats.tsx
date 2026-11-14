@@ -17,7 +17,7 @@ import {
 } from '@bedo/api-client';
 import { adminRightsFor, ADMIN_CONSOLE_RULES, type AdminRight, type MemberPermission, MEMBER_PERMISSIONS } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import { errorMessage, formatDateTime } from '../_lib/api';
 import { Button, FormError, Notice, TextArea, TextField } from './ui';
 import { BackButton, Field, PERMISSION_LABELS, personLabel, ReasonAction, RIGHT_LABELS, SectionTitle, Tabs, UserPicker, useLoader } from './console-ui';
@@ -49,11 +49,16 @@ export function Chats({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
   const [more, setMore] = useState<ChatItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const params = { ...(search ? { q: search } : {}), ...(filter !== 'all' ? { type: filter } : {}) };
+  // Only the newest list request sets the "Show more" position (a quick change of filter or search can answer late).
+  const latestLoad = useRef(0);
   const { data, error, reload } = useLoader(
     async () => {
+      const request = ++latestLoad.current;
       const response = await adminListChats(params);
-      setMore([]);
-      setCursor(response.nextCursor);
+      if (request === latestLoad.current) {
+        setMore([]);
+        setCursor(response.nextCursor);
+      }
       return response.chats;
     },
     onSessionError,
@@ -163,9 +168,14 @@ export function Chats({ isSuperAdmin, onSessionError }: { isSuperAdmin: boolean;
           variant="secondary"
           className="self-start"
           onClick={async () => {
-            const response = await adminListChats({ ...params, cursor });
-            setMore((list) => [...list, ...response.chats]);
-            setCursor(response.nextCursor);
+            try {
+              const response = await adminListChats({ ...params, cursor });
+              setMore((list) => [...list, ...response.chats]);
+              setCursor(response.nextCursor);
+            } catch (failure) {
+              // An ended session goes back to sign-in; anything else is shown like a failed load.
+              onSessionError(failure);
+            }
           }}
         >
           Show more

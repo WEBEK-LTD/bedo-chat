@@ -211,6 +211,8 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
 
   it('gives a blocked sender the neutral answer, and asks the blocker to unblock first', async () => {
     await ben.getByRole('button', { name: 'Chat actions' }).click();
+    // Blocking asks first.
+    ben.once('dialog', (dialog) => void dialog.accept());
     await ben.getByRole('menuitem', { name: 'Block user' }).click();
     await ben.getByText('You blocked this user.').waitFor();
     await composer(anaPhone).fill('Are you still there?');
@@ -220,6 +222,36 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
     await expect.poll(async () => messages(ben).getByText('Are you still there?').count()).toBe(0);
     await ben.getByRole('button', { name: 'Unblock' }).click();
     await composer(ben).waitFor();
+  });
+
+  it('makes only the web addresses in a message into links that open in the browser', async () => {
+    const text = 'Notes at https://example.com/notes?week=3. Or www.example.org, and #revision';
+    await composer(ben).fill(text);
+    await composer(ben).press('Enter');
+    await messages(anaPhone).getByText('Notes at').waitFor();
+    const first = messages(anaPhone).getByRole('link', { name: 'https://example.com/notes?week=3' });
+    await first.waitFor();
+    // The sentence's full stop is not part of the address; another site opens outside this page.
+    expect(await first.getAttribute('href')).toBe('https://example.com/notes?week=3');
+    expect(await first.getAttribute('target')).toBe('_blank');
+    expect(await first.getAttribute('rel')).toContain('noopener');
+    const second = messages(anaPhone).getByRole('link', { name: 'www.example.org' });
+    expect(await second.getAttribute('href')).toBe('https://www.example.org/');
+    // Only the addresses are links: the rest stays text, and the hashtag stays a search button.
+    expect(await messages(anaPhone).getByRole('link').filter({ hasText: 'Notes at' }).count()).toBe(0);
+    await messages(anaPhone).getByRole('button', { name: '#revision' }).waitFor();
+
+    // A link to Bedo Family itself opens here (same tab, same app), also when written with www.
+    const site = new URL(WEB_URL);
+    await composer(ben).fill(`Join us: ${site.protocol}//${site.host}/?join=abc and www.${site.host}/login`);
+    await composer(ben).press('Enter');
+    const own = messages(anaPhone).getByRole('link', { name: `${site.protocol}//${site.host}/?join=abc` });
+    await own.waitFor();
+    expect(await own.getAttribute('target')).toBeNull();
+    expect(await own.getAttribute('href')).toBe(`${site.origin}/?join=abc`);
+    const www = messages(anaPhone).getByRole('link', { name: `www.${site.host}/login` });
+    expect(await www.getAttribute('target')).toBeNull();
+    expect(await www.getAttribute('href')).toBe(`${site.origin}/login`);
   });
 
   it('never sends screenshot events from the web app (P-28), and raised no CSP violation', async () => {

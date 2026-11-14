@@ -103,6 +103,9 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard (real Postgres, runtime role)'
     // A Super Admin bans; only a Super Admin lifts a ban.
     expect((await superAdmin.post(`/v1/admin/users/${again.id}/action`, { action: 'ban', reason })).body.user.status).toBe('banned');
     expect((await moderator.post(`/v1/admin/users/${again.id}/action`, { action: 'reactivate', reason })).status).toBe(403);
+    // Nor can a moderator turn the ban into a suspension (which a moderator could then reactivate).
+    expect((await moderator.post(`/v1/admin/users/${again.id}/action`, { action: 'suspend', reason })).status).toBe(403);
+    expect((await superAdmin.get(`/v1/admin/users/${again.id}`)).body.user.status).toBe('banned');
     expect((await superAdmin.post(`/v1/admin/users/${again.id}/action`, { action: 'reactivate', reason })).body.user.status).toBe('active');
 
     // A Super Admin deletes an account directly: the identity goes to the history, the number off the list.
@@ -171,6 +174,19 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard (real Postgres, runtime role)'
     const revision = await query(ctx.ownerUrl, `select action, actor_type, previous_text from audit.message_revisions where message_id = $1`, [bad.body.id]);
     expect(revision.rows).toEqual([{ action: 'deleted_for_both', actor_type: 'admin', previous_text: 'Something inappropriate' }]);
     expect((await moderator.get('/v1/admin/reports?status=decided')).body.reports.some((item: { id: string }) => item.id === report.id)).toBe(true);
+  });
+
+  it('never lifts a ban with a suspension decided on a report', async () => {
+    const reported = await newUser('Banned Reported');
+    const chat = await api(ana).openChat(reported);
+    const bad = await api(reported).send(chat.id, 'Reported before the ban');
+    expect((await api(ana).post('/v1/reports', { userId: reported.id, messageId: bad.body.id, reason: 'inappropriate_content' })).status).toBe(200);
+    expect((await superAdmin.post(`/v1/admin/users/${reported.id}/action`, { action: 'ban', reason })).body.user.status).toBe('banned');
+    const open = await moderator.get('/v1/admin/reports');
+    const report = open.body.reports.find((item: { message: { id: string } | null }) => item.message?.id === bad.body.id);
+    const decided = await moderator.post(`/v1/admin/reports/${report.id}/decision`, { decision: 'user_suspended', note: 'Suspend' });
+    expect(decided.status).toBe(200);
+    expect((await superAdmin.get(`/v1/admin/users/${reported.id}`)).body.user.status).toBe('banned');
   });
 
   it('opens the audit history only for Super Admins, with a reason, recording every view', async () => {

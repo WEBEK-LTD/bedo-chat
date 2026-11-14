@@ -66,6 +66,17 @@
   input[type="radio"] {
     accent-color: var(--bedo-color-accent);
   }
+
+  /*
+   * What people type follows its own language: Arabic text is written right to left (with its punctuation and
+   * numbers in place), English left to right, in the message box and every text field. The layout stays as it is.
+   */
+  textarea,
+  input:not([type]),
+  input[type="text"],
+  input[type="search"] {
+    unicode-bidi: plaintext;
+  }
 }
 
 @layer components {

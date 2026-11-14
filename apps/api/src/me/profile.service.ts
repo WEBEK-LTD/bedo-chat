@@ -14,10 +14,13 @@ import { AuditService } from '../audit/audit.service.js';
 import { AccountsService } from '../auth/accounts.service.js';
 import { DatabaseService } from '../database/database.service.js';
 import { EphemeralStore } from '../state/ephemeral.store.js';
+import { RateLimitService } from '../state/rate-limit.service.js';
 import { detectImageType, ProfilePhotoStorage } from '../storage/profile-photo-storage.js';
 import { PROFILE_RULES } from '@bedo/contracts';
 
 const UPLOAD_TTL_SECONDS = 15 * 60;
+/** Upload links for profile pictures per account per hour (each one lets the browser store a file). */
+const PHOTO_UPLOADS_PER_HOUR = 30;
 const EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const;
 
 interface PendingUpload {
@@ -43,6 +46,7 @@ export class ProfileService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(EphemeralStore) private readonly store: EphemeralStore,
     @Inject(ProfilePhotoStorage) private readonly storage: ProfilePhotoStorage,
+    @Inject(RateLimitService) private readonly rateLimit: RateLimitService,
   ) {}
 
   async me(userId: string): Promise<Me> {
@@ -126,6 +130,10 @@ export class ProfileService {
   async startPhotoUpload(userId: string, contentType: keyof typeof EXTENSIONS): Promise<PhotoUploadResponse> {
     if (!this.storage.enabled) {
       throw new AppError(HttpStatus.SERVICE_UNAVAILABLE, 'SERVICE_UNAVAILABLE');
+    }
+    const limit = await this.rateLimit.take(`rl:profile-photo:${userId}`, 1, PHOTO_UPLOADS_PER_HOUR, 60 * 60 * 1000);
+    if (!limit.allowed) {
+      throw new AppError(HttpStatus.TOO_MANY_REQUESTS, 'RATE_LIMITED', Math.max(1, Math.ceil(Math.max(limit.retryAfterMs, 0) / 1000)));
     }
     const key = `${userId}/${randomUUID()}.${EXTENSIONS[contentType]}`;
     const upload = await this.storage.createUpload(key, contentType);

@@ -63,9 +63,10 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
       `ok`. It turns it off on Bedo Chat's own tables only, after checking no Supabase API role can reach them; safe
       to run again. (`apply-updates.sql` now does the same at its end.)
    3. **Updates after go-live**: each later release that changes the database brings one file per change,
-      `docs/owner-sql/update-<version>.sql`. Run each once, in order of the number in its name; every line of the
-      result says `ok`. A file that was already run, or one whose earlier updates are missing, stops and changes
-      nothing.
+      `docs/owner-sql/update-<version>.sql`; files made after 2026-11-14 also say what they do, e.g.
+      `update-20261115120000-bot-tags.sql` (D-61). Run each once, in order of the number in its name; every line of
+      the result says `ok`. A file that was already run, or one whose earlier updates are missing, stops and changes
+      nothing. A file is never changed once it exists: a correction comes as a new file.
    4. Paste [`docs/owner-sql/set-super-admin.sql`](owner-sql/set-super-admin.sql), change the three values at the
       top (section 4d) → **Run** → delete the query afterwards (it holds the password).
 5. **Supabase settings**: Project Settings → **Realtime** → turn **off** "Allow public access" (only devices with a
@@ -78,9 +79,10 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
    is issued within minutes (*Verify DNS configuration* / *Provision certificate* if it asks).
 7. **Check**: `https://bedochat.com/api/health/ready` → `{"status":"ok", ...}` with the database `up`; then
    `https://bedochat.com/admin/login` → phone and password → set up the authenticator app → the dashboard opens.
-8. **Admin Dashboard**: OTP / WhatsApp → save the Waabek API key and send a test message; Academy phone list → add
-   the students' numbers (or import them).
-9. **On a phone**: open `https://bedochat.com` → sign in with a number from the list (the code comes by WhatsApp) →
+8. **Admin Dashboard**: OTP / WhatsApp → save the Waabek API key and send a test message; Academy phone list →
+   "Who can create an account" (D-47): *Anyone with a WhatsApp number* (the default) or *Only numbers on this list*;
+   with the list, add the students' numbers (or import them).
+9. **On a phone**: open `https://bedochat.com` → sign in (with the list: a number from it; the code comes by WhatsApp) →
    add the site to the Home Screen (iPhone: Safari → Share → **Add to Home Screen**; Android: Chrome → menu →
    **Install app**) → open it from the Home Screen → Settings → **Notifications** → **Turn on notifications**.
 
@@ -117,7 +119,9 @@ is not needed.
    service_role key. Turn **off** Project Settings → Realtime → **Allow public access**, so that no channel can be
    used without such a token. Turn off **Authentication → Allow new users to sign up**: Bedo Chat never uses
    Supabase Auth (D-08), and the baseline migration keeps the `anon` role out of the `app` schema.
-7. **Storage**: the Phase 2 migration created the private bucket `profile-photos`; nothing to do by hand.
+7. **Storage**: the migrations create the buckets, nothing to do by hand: `profile-photos` (private, Phase 2),
+   `chat-media` (private, Phase 4: photos, videos, files, voice messages and GIF copies) and `stickers` (public,
+   Phase 4).
 
 ## 2. Netlify site (one site, D-26, D-36)
 
@@ -398,7 +402,9 @@ Signing in needs the site (section 2) and migration `20261006180000` (section 1)
   **Send test message** reports that Waabek accepted it. Add your own number to the academy phone list.
 - `https://bedochat.com/` sends you to `/login`. Sign in with that number: the WhatsApp code arrives, a new
   account asks for a name, the chat interface opens at `/`, and a reload keeps you signed in.
-- A number not on the list gets the same "code sent" answer, and no WhatsApp message.
+- With "Who can create an account" set to *Only numbers on this list*: a number not on the list gets the same
+  "code sent" answer, and no WhatsApp message. With *Anyone with a WhatsApp number* (the default, D-47) it gets a
+  code and a new account.
 - Sign in on two browsers with two academy numbers, find the other by name and send a message: it appears on
   the other browser within a second or two, with typing shown while the other person writes. In the browser's
   developer tools, the Network panel shows the WebSocket to `wss://<ref>.supabase.co/realtime/v1/websocket`

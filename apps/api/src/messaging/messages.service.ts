@@ -30,6 +30,11 @@ import { MESSAGE_COLUMNS, type MessageRow, ViewsService } from './views.service.
  */
 export interface SendOptions {
   scheduled?: boolean;
+  /**
+   * A scheduled GIF: its file is the shared copy of that GIF (owned by whoever first sent it), and it needs the
+   * group permission for stickers and GIFs, as when it is sent at once.
+   */
+  gif?: boolean;
 }
 
 /** Raised inside a transaction when another request with the same client id won the race. */
@@ -60,8 +65,8 @@ export class MessagesService {
   ) {}
 
   /** What a new message carries, for the group permission it needs. */
-  private static postKind(body: SendMessageBody): PostKind {
-    return body.poll ? 'poll' : body.stickerId || body.gifId ? 'sticker' : body.fileId ? 'media' : 'text';
+  private static postKind(body: SendMessageBody, options: SendOptions = {}): PostKind {
+    return body.poll ? 'poll' : body.stickerId || body.gifId || options.gif ? 'sticker' : body.fileId ? 'media' : 'text';
   }
 
   private async viewOne(db: Executor, viewerId: string, messageId: string): Promise<Message> {
@@ -137,7 +142,7 @@ export class MessagesService {
     if (!options.scheduled) {
       await this.limits.messages(auth.userId);
     }
-    const kind = MessagesService.postKind(body);
+    const kind = MessagesService.postKind(body, options);
     if (withFile) {
       // Membership and the right to post are checked before any file is fetched or checked (and again below).
       const access = await this.permissions.chatAccess(this.database.db, auth.userId, chatId);
@@ -150,7 +155,7 @@ export class MessagesService {
     let verified: VerifiedFile | null = null;
     let fileId: string | null = null;
     if (body.fileId && options.scheduled) {
-      fileId = await this.files.assertPrepared(auth.userId, body.fileId);
+      fileId = options.gif ? await this.files.assertSharedGif(body.fileId) : await this.files.assertPrepared(auth.userId, body.fileId);
     } else if (body.fileId) {
       verified = await this.files.verify(auth.userId, body.fileId);
       fileId = verified.fileId;

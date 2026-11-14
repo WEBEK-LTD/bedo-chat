@@ -225,6 +225,9 @@ export class AdminConsoleService {
     if (action === 'suspend' || action === 'ban') {
       const status = action === 'suspend' ? 'suspended' : 'banned';
       if (user.status === status) throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
+      // Suspending a banned account would lift the ban (and a suspension can then be reactivated by a moderator):
+      // like reactivating it, that is for Super Admins only.
+      if (action === 'suspend' && user.status === 'banned' && admin.role !== 'super_admin') throw new AppError(HttpStatus.FORBIDDEN, 'FORBIDDEN');
       // The user is told on every device before the sessions end.
       const subscriptions = await trx.selectFrom('app.push_subscriptions').select(['endpoint', 'p256dh', 'auth']).where('user_id', '=', userId).execute();
       await trx.updateTable('app.users').set({ status }).where('id', '=', userId).execute();
@@ -404,7 +407,9 @@ export class AdminConsoleService {
       if (decision === 'user_suspended' || decision === 'user_banned') {
         const status = await trx.selectFrom('app.users').select('status').where('id', '=', report.reported_user_id).executeTakeFirstOrThrow();
         const wanted = decision === 'user_suspended' ? 'suspended' : 'banned';
-        if (status.status !== wanted && status.status !== 'deleted') {
+        // A suspension decided on a report never replaces a ban (that would lift it).
+        const stronger = wanted === 'suspended' && status.status === 'banned';
+        if (status.status !== wanted && status.status !== 'deleted' && !stronger) {
           notice = await this.applyUserAction(trx, admin, report.reported_user_id, decision === 'user_suspended' ? 'suspend' : 'ban', note ?? `Report ${reportId}`, info);
         }
       }

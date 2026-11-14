@@ -26,6 +26,33 @@ function cacheKey(src: string): string | null {
 
 /** Object URLs handed out for each key in this page, shared by every picture showing it. */
 const live = new Map<string, Promise<string | null>>();
+/** How many pictures on screen show each key. */
+const shown = new Map<string, number>();
+/**
+ * Pictures kept in memory although none shows them now (scrolling back is instant). Beyond this, a picture that is
+ * no longer shown is let go from memory (it stays kept in this browser and comes back from there when needed), so a
+ * page left open for days does not keep every picture it ever showed in memory.
+ */
+const LIVE_KEEP = 400;
+
+function show(key: string): void {
+  shown.set(key, (shown.get(key) ?? 0) + 1);
+}
+
+function hide(key: string): void {
+  const count = (shown.get(key) ?? 1) - 1;
+  if (count > 0) {
+    shown.set(key, count);
+    return;
+  }
+  shown.delete(key);
+  if (live.size <= LIVE_KEEP) return;
+  const pending = live.get(key);
+  live.delete(key);
+  void pending?.then((url) => {
+    if (url) URL.revokeObjectURL(url);
+  });
+}
 
 async function load(key: string, src: string): Promise<string | null> {
   try {
@@ -67,17 +94,20 @@ export function useCachedSrc(src: string | null | undefined): string | null | un
   useEffect(() => {
     if (!key || !src) return;
     let cancelled = false;
+    show(key);
     let pending = live.get(key);
     if (!pending) {
       pending = load(key, src);
       live.set(key, pending);
     }
-    void pending.then((url) => {
-      if (!url) live.delete(key);
+    const current = pending;
+    void current.then((url) => {
+      if (!url && live.get(key) === current) live.delete(key);
       if (!cancelled) setResolved({ key, url });
     });
     return () => {
       cancelled = true;
+      hide(key);
     };
   }, [key, src]);
   if (!key) return src;
@@ -90,5 +120,6 @@ export function useCachedSrc(src: string | null | undefined): string | null | un
 export async function clearMediaCache(): Promise<void> {
   for (const url of await Promise.all(live.values())) if (url) URL.revokeObjectURL(url);
   live.clear();
+  shown.clear();
   if (typeof caches !== 'undefined') await caches.delete(CACHE_NAME).catch(() => false);
 }

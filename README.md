@@ -4,14 +4,18 @@ Private messaging platform for the academy. Users get exactly **Login → Chat I
 administrators get a separate **Admin Dashboard**. The full requirements, architecture, decision log and
 phase plan live in the *Bedo Chat — Phase 0 Blueprint*; `docs/DECISIONS.md` mirrors the approved decisions.
 
-**Current state: Phase 3.3 (one Netlify site, D-36).** Students sign in with a WhatsApp code (academy phone
-list only), chat privately with realtime delivery, and manage their profile, privacy, devices, 2-Step
-Verification, notifications and account deletion requests inside the chat interface. Admins sign in with their
-phone number, a password and an authenticator app (D-34) and manage the academy phone list, deletion requests,
-2-Step resets and the WhatsApp settings. Every identity, account, security and admin action is kept in an
-append-only history. The whole system is one Netlify site plus Supabase: the API runs inside the website's
-server functions at `/api`. Phase reports: `docs/PHASE-*-REPORT.md`; the latest is
-[`docs/PHASE-3.3-REPORT.md`](docs/PHASE-3.3-REPORT.md).
+**Current state: Phase 16 (live at https://bedochat.com, with Android and iPhone apps).** Students sign in with a
+WhatsApp code (anyone with WhatsApp by default, or only the academy phone list: an Admin Dashboard setting, D-47) and
+use private chats, groups and channels with realtime delivery: replies, edits, reactions, polls, stickers and GIFs,
+photos, videos, files, voice and video messages, scheduled messages, folders, search and notifications (Web Push, and
+the apps' own notifications through APNs and Firebase). Inside the chat interface they manage their profile, privacy,
+devices, 2-Step Verification, notifications and account deletion requests. Admins sign in with their phone number, a
+password and an authenticator app (D-34) and manage users, reports, groups and channels, broadcasts, the academy phone
+list, deletion requests, 2-Step resets, permissions, stickers and GIFs, the WhatsApp settings, the store review account
+and test accounts, with site monitoring. Every identity, account, security and admin action is kept in an append-only
+history. The whole system is one Netlify site plus Supabase: the API runs inside the website's server functions at
+`/api`; the Android and iPhone apps show that site (`apps/android`, `apps/ios`, `docs/APPS.md`). Phase reports:
+`docs/PHASE-*-REPORT.md`; the latest is [`docs/PHASE-16-REPORT.md`](docs/PHASE-16-REPORT.md).
 
 ## Repository layout
 

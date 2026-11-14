@@ -54,8 +54,17 @@ const EVERYONE_EVERY_MS = 60_000;
 /** A message claimed for sending but not finished after this long (the instance stopped) is claimed again. */
 const STALE_SENDING_SECONDS = 120;
 const BATCH = 25;
-/** One dispatch run stops claiming after this long (a scheduled function has 30 seconds). */
+/**
+ * One dispatch run (scheduled messages, then broadcasts) stops claiming after this long in all (the scheduled
+ * function waits 25 seconds for an answer).
+ */
 const RUN_BUDGET_MS = 20_000;
+/** A run started by an ordinary request (after its response) is kept short: the scheduled function does the rest. */
+const POKE_BUDGET_MS = 8_000;
+/** Broadcasts still get this long at the end of a run in which scheduled messages used the whole budget. */
+const MIN_BROADCAST_BUDGET_MS = 2_000;
+/** A message that could not be sent (the database or storage briefly unavailable) waits this long per attempt. */
+const RETRY_DELAY_SECONDS = 30;
 
 const notFound = () => new AppError(HttpStatus.NOT_FOUND, 'NOT_FOUND');
 const invalid = () => new AppError(HttpStatus.BAD_REQUEST, 'VALIDATION_FAILED');
@@ -289,25 +298,30 @@ export class ScheduledService {
       const due = await sql<{ due: boolean }>`
         select exists (
           select 1 from app.scheduled_messages
-          where (status = 'pending' and send_at <= now())
+          where (status = 'pending' and send_at <= now()
+                 and (attempts = 0 or updated_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS} * attempts)))
              or (status = 'sending' and updated_at < now() - make_interval(secs => ${STALE_SENDING_SECONDS}))
         ) or exists (select 1 from app.broadcasts where status = 'sending') as due
       `.execute(this.db);
-      if (due.rows[0]?.due) await this.dispatchDue();
+      if (due.rows[0]?.due) await this.dispatchDue(POKE_BUDGET_MS);
     });
   }
 
-  /** Sends every scheduled message that is due (in batches, for at most about 20 seconds). */
-  async dispatchDue(): Promise<{ sent: number; failed: number }> {
+  /**
+   * Sends every scheduled message that is due, then continues broadcasts, in batches for about `budgetMs` in all
+   * (20 seconds for the scheduled function, less after an ordinary request).
+   */
+  async dispatchDue(budgetMs: number = RUN_BUDGET_MS): Promise<{ sent: number; failed: number }> {
     const started = Date.now();
     let sent = 0;
     let failed = 0;
-    while (Date.now() - started < RUN_BUDGET_MS) {
+    while (Date.now() - started < budgetMs) {
       const { rows } = await sql<ScheduledRow>`
         update app.scheduled_messages s set status = 'sending', attempts = s.attempts + 1
         where s.id in (
           select id from app.scheduled_messages
-          where (status = 'pending' and send_at <= now())
+          where (status = 'pending' and send_at <= now()
+                 and (attempts = 0 or updated_at < now() - make_interval(secs => ${RETRY_DELAY_SECONDS} * attempts)))
              or (status = 'sending' and updated_at < now() - make_interval(secs => ${STALE_SENDING_SECONDS}))
           order by send_at
           limit ${BATCH}
@@ -323,8 +337,8 @@ export class ScheduledService {
         if (outcome.status === 'failed') failed += 1;
       }
     }
-    // Phase 10 (O-20): broadcast notifications still being sent continue in the same run.
-    await this.broadcasts.dispatch();
+    // Phase 10 (O-20): broadcast notifications still being sent continue in the same run, within its budget.
+    await this.broadcasts.dispatch(Math.max(MIN_BROADCAST_BUDGET_MS, budgetMs - (Date.now() - started)));
     return { sent, failed };
   }
 
@@ -343,11 +357,12 @@ export class ScheduledService {
       ...(payload.stickerId ? { stickerId: payload.stickerId } : {}),
       ...(payload.poll ? { poll: payload.poll } : {}),
     } as SendMessageBody;
+    const gif = payload.gif === true && Boolean(payload.fileId);
     try {
       const access = await this.permissions.chatAccess(this.db, row.sender_id, row.conversation_id);
       // The author must still be allowed to schedule here (a channel admin who lost the right to post, say).
       await this.assertMaySchedule(this.db, row.sender_id, access, ScheduledService.postKind(payload));
-      const message = await this.messages.send({ userId: row.sender_id, sessionId: row.session_id }, row.conversation_id, body, { scheduled: true });
+      const message = await this.messages.send({ userId: row.sender_id, sessionId: row.session_id }, row.conversation_id, body, { scheduled: true, ...(gif ? { gif } : {}) });
       await this.finish(row, { status: 'sent', message_id: message.id, sent_at: new Date(), error_code: null });
       return { status: 'sent', messageId: message.id };
     } catch (error) {

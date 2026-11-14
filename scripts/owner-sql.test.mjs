@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { buildOwnerSql, buildUpdateScripts, LIVE_APPLIED_THROUGH, migrations, OUTPUT } from './build-owner-sql.mjs';
+import { buildOwnerSql, buildUpdateScripts, LIVE_APPLIED_THROUGH, migrations, OUTPUT, updateFileName } from './build-owner-sql.mjs';
 
 test('docs/owner-sql/apply-updates.sql is generated from the current migrations (run node scripts/build-owner-sql.mjs)', () => {
   assert.equal(readFileSync(OUTPUT, 'utf8'), buildOwnerSql());
@@ -23,10 +23,15 @@ test('each migration after the live state has its own update script, generated a
   const updates = buildUpdateScripts();
   assert.equal(updates.length, later.length);
   updates.forEach((update, index) => {
-    assert.ok(update.file.endsWith(`update-${later[index].version}.sql`));
+    assert.ok(update.file.endsWith(updateFileName(later[index])), update.file);
     assert.equal(readFileSync(update.file, 'utf8'), update.sql);
     assert.ok(update.sql.includes(later[index].sql.replace(/\r\n/g, '\n').trimEnd()));
     assert.ok(update.sql.includes(`'${later[index].checksum}'`));
     assert.doesNotMatch(update.sql, /PASTE_|CHANGE_ME/);
   });
+});
+
+test('update scripts made from now on are named after what they do; the earlier ones keep their names', () => {
+  assert.equal(updateFileName({ version: '20261029120000', name: 'test_accounts' }), 'update-20261029120000.sql');
+  assert.equal(updateFileName({ version: '20261115120000', name: 'bot_tags_and_settings' }), 'update-20261115120000-bot-tags-and-settings.sql');
 });

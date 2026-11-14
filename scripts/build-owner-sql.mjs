@@ -190,6 +190,18 @@ const RESULT_CHECKS = {
  */
 export const LIVE_APPLIED_THROUGH = '20261017120000';
 export const UPDATES_DIR = path.join(root, 'docs/owner-sql');
+/**
+ * Owner's rule of 2026-11-14: an update script made after this migration is named after what it does as well as its
+ * order, e.g. update-20261115120000-bot-tags.sql (from the migration 20261115120000_bot_tags.sql), and never changed
+ * once made: a correction is a new migration with a new script. The scripts made before keep their names.
+ */
+export const NAMED_UPDATES_AFTER = '20261029120000';
+
+/** The update script's file name for a migration (see NAMED_UPDATES_AFTER). */
+export function updateFileName(migration) {
+  if (migration.version <= NAMED_UPDATES_AFTER) return `update-${migration.version}.sql`;
+  return `update-${migration.version}-${migration.name.replace(/_/g, '-')}.sql`;
+}
 
 const RLS_OFF = `do $bedo_rls$
 declare
@@ -352,7 +364,7 @@ select 'Bedo Chat tables with row level security on (should be none)',
                              where n.nspname in ('app', 'audit', 'app_meta') and c.relkind in ('r', 'p') and c.relrowsecurity)
             then 'ok' else 'NOT OK' end;
 `;
-    return { file: path.join(UPDATES_DIR, `update-${migration.version}.sql`), sql };
+    return { file: path.join(UPDATES_DIR, updateFileName(migration)), sql };
   });
 }
 

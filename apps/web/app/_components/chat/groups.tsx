@@ -319,7 +319,7 @@ export function JoinDialog({ code, onClose, onJoined }: { code: string; onClose:
           <Avatar name={preview.title} photoUrl={preview.photoUrl} size={80} />
           <p className="text-[length:var(--bedo-font-size-lg)] font-medium">{preview.title}</p>
           {preview.memberCount !== null ? <p className="text-sm text-ink-secondary">{preview.memberCount} {noun === 'channel' ? 'subscribers' : 'members'}</p> : null}
-          {preview.description ? <p className="whitespace-pre-wrap text-sm">{preview.description}</p> : null}
+          {preview.description ? <p dir="auto" className="whitespace-pre-wrap text-sm">{preview.description}</p> : null}
           {preview.chatId ? (
             <Button onClick={() => onJoined(preview.chatId!)}>Open {noun}</Button>
           ) : preview.requested ? (
@@ -685,7 +685,15 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
       );
     }
     if (rights.has('restrict_members') && (member.role === 'member' || member.role === 'subscriber' || rights.has('manage_admins'))) {
-      items.push({ label: `Remove from ${noun}`, icon: 'person_remove', danger: true, onSelect: () => void run(() => removeGroupMember(chat.id, member.user.id), `Removed from the ${noun}.`).then(() => loadMembers()) });
+      items.push({
+        label: `Remove from ${noun}`,
+        icon: 'person_remove',
+        danger: true,
+        onSelect: () => {
+          if (!window.confirm(`Remove ${member.user.displayName} from the ${noun}?`)) return;
+          void run(() => removeGroupMember(chat.id, member.user.id), `Removed from the ${noun}.`).then(() => loadMembers());
+        },
+      });
     }
     if (group.role === 'owner') {
       items.push({
@@ -755,7 +763,7 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
             <>
               <p className="text-[length:var(--bedo-font-size-lg)] font-medium">{group.title}</p>
               <p className="text-sm text-ink-secondary">{groupSubtitle(chat)}</p>
-              {group.description ? <p className="whitespace-pre-wrap text-sm">{group.description}</p> : null}
+              {group.description ? <p dir="auto" className="whitespace-pre-wrap text-sm">{group.description}</p> : null}
               {channel ? <p className="text-xs text-ink-secondary">{group.public ? 'Public channel' : 'Private channel'}</p> : null}
               {group.restricted ? <p className="text-sm text-danger">The admins restricted what you can do here.</p> : null}
             </>
@@ -917,7 +925,10 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
                     <button
                       type="button"
                       aria-label="Revoke invite link"
-                      onClick={() => void run(async () => setLinks(cast<InviteLink[]>((await revokeInviteLink(chat.id, link.id)).links)), 'Link revoked.')}
+                      onClick={() => {
+                        if (!window.confirm('Revoke this invite link? People who have it can no longer join with it.')) return;
+                        void run(async () => setLinks(cast<InviteLink[]>((await revokeInviteLink(chat.id, link.id)).links)), 'Link revoked.');
+                      }}
                       className="grid size-8 place-items-center rounded-full text-danger transition-colors hover:bg-surface-hover"
                     >
                       <Icon name="link_off" size={18} />

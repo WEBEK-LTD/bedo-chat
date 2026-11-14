@@ -424,7 +424,7 @@ export function PendingUploadItem({ item, onRetry, onCancel }: { item: PendingUp
             <span className="block h-full bg-accent transition-[width]" style={{ width: `${Math.round(item.progress * 100)}%` }} />
           </span>
         ) : null}
-        {item.caption ? <p className="whitespace-pre-wrap break-words text-sm">{item.caption}</p> : null}
+        {item.caption ? <p dir="auto" className="whitespace-pre-wrap break-words text-sm">{item.caption}</p> : null}
       </div>
     </div>
   );

@@ -1,5 +1,9 @@
 -- Bedo Chat: create or update ONE Super Admin with a password, from the Supabase SQL Editor (D-35).
--- Change the three values below, then Run once. Afterwards, delete this query from the SQL Editor.
+-- Change the three values below, then Run once. Afterwards, delete this query from the SQL Editor, and also run
+--   select extensions.pg_stat_statements_reset();
+-- once: Supabase's query statistics (Database -> Query Performance) keep the text of statements like this one,
+-- including the password typed below, until they are reset. (Or use the setup token, section 4c of DEPLOYMENT.md,
+-- which never puts a password into SQL.)
 --
 -- The account becomes an active super_admin with this password. Every existing session of the admin ends and
 -- any unused password setup token is closed. The authenticator (TOTP) is not touched: it is still required at

@@ -36,6 +36,10 @@ const securityHeaders = [
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // The site never uses next/image (pictures are plain <img> tags from signed storage links), so Next.js's image
+  // optimisation endpoint (/_next/image) is switched off: it serves nothing here and removes a whole class of
+  // server-side advisories (e.g. the 2026-10 Image Optimization remote code execution in Next.js <= 16.4.0).
+  images: { unoptimized: true },
   // D-36: the API (app/api/[[...path]]) is bundled into the web app's server function. Native password hashing
   // and the Postgres driver stay Node.js packages loaded at run time (in Next.js's default list of server
   // packages, and dependencies of this app so they resolve from here). The API reads no files at run time.

@@ -259,7 +259,15 @@ export function ChatView({
       : [
           peer.blockedByMe
             ? { label: 'Unblock user', icon: 'block' as const, onSelect: () => void store.setBlocked(peer.id, false).catch((error: unknown) => onNotice(errorMessage(error))) }
-            : { label: 'Block user', icon: 'block' as const, danger: true, onSelect: () => void store.setBlocked(peer.id, true).then(() => onNotice('User blocked.')).catch((error: unknown) => onNotice(errorMessage(error))) },
+            : {
+                label: 'Block user',
+                icon: 'block' as const,
+                danger: true,
+                onSelect: () => {
+                  if (!window.confirm(BLOCK_QUESTION)) return;
+                  void store.setBlocked(peer.id, true).then(() => onNotice('User blocked.')).catch((error: unknown) => onNotice(errorMessage(error)));
+                },
+              },
           { label: 'Report user', icon: 'flag' as const, danger: true, onSelect: () => setDialog({ kind: 'report', userId: peer.id }) },
         ]),
   ];
@@ -540,6 +548,20 @@ function Composer({
   const [recording, setRecording] = useState<{ recorder: Recorder; kind: 'voice' | 'video_note' } | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const filePicker = useRef<HTMLInputElement>(null);
+  // A recording belongs to the chat it was started in: leaving that chat (another chat, back to the list, selecting
+  // messages) throws it away and turns the microphone and camera off, so it can never be sent later or elsewhere.
+  const activeRecorder = useRef<Recorder | null>(null);
+  activeRecorder.current = recording?.recorder ?? null;
+  useEffect(
+    () => () => {
+      const recorder = activeRecorder.current;
+      if (recorder) {
+        recorder.onLimit = null;
+        recorder.cancel();
+      }
+    },
+    [chat.id],
+  );
 
   useEffect(() => {
     if (mode.kind === 'edit') setText(mode.message.text ?? '');
@@ -548,8 +570,13 @@ function Composer({
 
   useEffect(() => {
     setText('');
-    setTray([]);
+    // Files chosen but not sent in the previous chat: their previews are released.
+    setTray((current) => {
+      releasePreviews(current);
+      return [];
+    });
     setPicker(false);
+    setRecording(null);
   }, [chat.id]);
 
   // Each file is prepared once per mode ("send as files" sends photos without resizing); a change of mode prepares
@@ -762,7 +789,12 @@ function Composer({
                 <button
                   type="button"
                   aria-label={`Remove ${item.original.name}`}
-                  onClick={() => setTray((current) => current.filter((entry) => entry.id !== item.id))}
+                  onClick={() =>
+                    setTray((current) => {
+                      releasePreviews(current.filter((entry) => entry.id === item.id));
+                      return current.filter((entry) => entry.id !== item.id);
+                    })
+                  }
                   className="absolute right-0.5 top-0.5 grid size-6 place-items-center rounded-full bg-surface text-ink-secondary hover:bg-surface-hover"
                 >
                   <Icon name="close" size={14} />
@@ -777,7 +809,10 @@ function Composer({
                 checked={asFiles}
                 onChange={(event) => {
                   setAsFiles(event.target.checked);
-                  setTray((current) => current.map((entry) => ({ ...entry, prepared: null, error: null })));
+                  setTray((current) => {
+                    releasePreviews(current);
+                    return current.map((entry) => ({ ...entry, prepared: null, error: null }));
+                  });
                 }}
               />
               Send as files (no compression)
@@ -932,6 +967,14 @@ function Composer({
 }
 
 /** Recording a voice message: time, live level, cancel or send (stops by itself at 15 minutes). */
+/** Asked before blocking someone (unblocking needs no question). */
+const BLOCK_QUESTION = "Block this user? They will no longer be able to message you.";
+
+/** Releases the in-memory previews of files that will not be sent (a preview of a sent file is kept by the store). */
+function releasePreviews(items: ReadonlyArray<{ prepared: PreparedFile | null }>): void {
+  for (const item of items) if (item.prepared?.previewUrl) URL.revokeObjectURL(item.prepared.previewUrl);
+}
+
 function VoiceRecordingBar({ recorder, onCancel, onSend }: { recorder: Recorder; onCancel: () => void; onSend: () => void }) {
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>([]);
@@ -1087,7 +1130,7 @@ function PeerPanel({ chat, onClose, onReport, onNotice }: { chat: Chat; onClose:
           {peer.bio ? (
             <div>
               <dt className="text-xs text-ink-secondary">Bio</dt>
-              <dd className="whitespace-pre-wrap">{peer.bio}</dd>
+              <dd dir="auto" className="whitespace-pre-wrap">{peer.bio}</dd>
             </div>
           ) : null}
         </dl>
@@ -1095,12 +1138,13 @@ function PeerPanel({ chat, onClose, onReport, onNotice }: { chat: Chat; onClose:
           <div className="mt-auto flex flex-col gap-2 border-t border-line p-4">
             <Button
               variant="danger"
-              onClick={() =>
+              onClick={() => {
+                if (!peer.blockedByMe && !window.confirm(BLOCK_QUESTION)) return;
                 void store
                   .setBlocked(peer.id, !peer.blockedByMe)
                   .then(() => onNotice(peer.blockedByMe ? 'User unblocked.' : 'User blocked.'))
-                  .catch((error: unknown) => onNotice(errorMessage(error)))
-              }
+                  .catch((error: unknown) => onNotice(errorMessage(error)));
+              }}
             >
               {peer.blockedByMe ? 'Unblock user' : 'Block user'}
             </Button>
