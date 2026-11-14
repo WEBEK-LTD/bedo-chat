@@ -24,6 +24,10 @@ const GENERIC = { title: 'Bedo Family', body: 'New message' } as const;
 const DELETED_ACCOUNT = 'Deleted account';
 const BODY_MAX = 280;
 const TITLE_MAX = 100;
+/** Users whose unread badges are counted in one query (a post in a large channel reaches thousands). */
+const BADGE_CHUNK = 500;
+/** Users pushed at the same time (as for broadcasts), so a large chat does not open thousands of requests at once. */
+const PUSH_CONCURRENCY = 20;
 
 const clip = (text: string, max: number) => {
   const chars = Array.from(text.replace(/\s+/g, ' ').trim());
@@ -161,19 +165,25 @@ export class NotificationsService {
   private async send(recipients: readonly Recipient[], content: (userId: string) => { title: string; body: string } | null, tag: string, url: string): Promise<void> {
     const byUser = new Map<string, Recipient[]>();
     for (const recipient of recipients) byUser.set(recipient.user_id, [...(byUser.get(recipient.user_id) ?? []), recipient]);
-    const badges = await this.badges(this.db, [...byUser.keys()]);
-    await Promise.all(
-      [...byUser].map(async ([userId, devices]) => {
-        const text = content(userId);
-        if (!text) return;
-        await this.push.deliver({
-          userId,
-          excludeSessionId: null,
-          notification: { title: clip(text.title, TITLE_MAX), body: clip(text.body, BODY_MAX), tag, url, badge: badges.get(userId) ?? 0 },
-          subscriptions: devices.map((device) => ({ endpoint: device.endpoint, p256dh: device.p256dh, auth: device.auth })),
-        });
-      }),
-    );
+    const users = [...byUser];
+    for (let chunkStart = 0; chunkStart < users.length; chunkStart += BADGE_CHUNK) {
+      const chunk = users.slice(chunkStart, chunkStart + BADGE_CHUNK);
+      const badges = await this.badges(this.db, chunk.map(([userId]) => userId));
+      for (let start = 0; start < chunk.length; start += PUSH_CONCURRENCY) {
+        await Promise.all(
+          chunk.slice(start, start + PUSH_CONCURRENCY).map(async ([userId, devices]) => {
+            const text = content(userId);
+            if (!text) return;
+            await this.push.deliver({
+              userId,
+              excludeSessionId: null,
+              notification: { title: clip(text.title, TITLE_MAX), body: clip(text.body, BODY_MAX), tag, url, badge: badges.get(userId) ?? 0 },
+              subscriptions: devices.map((device) => ({ endpoint: device.endpoint, p256dh: device.p256dh, auth: device.auth })),
+            });
+          }),
+        );
+      }
+    }
   }
 
   private async deliverMessages(chatId: string, messageIds: string[], senderId: string): Promise<void> {

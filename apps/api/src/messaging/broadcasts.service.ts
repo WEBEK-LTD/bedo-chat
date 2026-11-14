@@ -31,11 +31,11 @@ export class BroadcastsService {
     this.deferred.defer('broadcasts', () => this.dispatch());
   }
 
-  /** Sends the next batches of every broadcast still sending, for about 15 seconds. Returns the devices reached. */
-  async dispatch(): Promise<number> {
+  /** Sends the next batches of every broadcast still sending, for about `budgetMs`. Returns the devices reached. */
+  async dispatch(budgetMs: number = RUN_BUDGET_MS): Promise<number> {
     const started = Date.now();
     let reached = 0;
-    while (Date.now() - started < RUN_BUDGET_MS) {
+    while (Date.now() - started < budgetMs) {
       const sent = await this.batch();
       if (sent === null) break;
       reached += sent;

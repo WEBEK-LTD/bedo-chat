@@ -94,9 +94,8 @@ export class RealtimeActivityService {
     // Groups: members who may see the member list learn who is typing; the others only that someone is (O-03).
     const members = (await this.permissions.memberIds(db, chatId)).filter((member) => member !== userId);
     const named = new Set(await this.permissions.memberListViewers(db, access));
-    for (const member of members) {
-      this.realtime.sendEvent(member, { type: 'typing', chatId, userId: named.has(member) ? userId : null });
-    }
+    this.realtime.sendEventToMany(members.filter((member) => named.has(member)), { type: 'typing', chatId, userId });
+    this.realtime.sendEventToMany(members.filter((member) => !named.has(member)), { type: 'typing', chatId, userId: null });
   }
 
   private async sweep(): Promise<void> {
@@ -127,10 +126,7 @@ export class RealtimeActivityService {
       return;
     }
     const presence = { online: state.online, lastSeenAt: state.online ? null : lastSeenToMinute(state.lastSeenMs) };
-    for (const [partnerId, relation] of relations) {
-      if (this.permissions.visibilities(relation).presence) {
-        this.realtime.sendEvent(partnerId, { type: 'presence', userId, presence });
-      }
-    }
+    const allowed = [...relations].filter(([, relation]) => this.permissions.visibilities(relation).presence).map(([partnerId]) => partnerId);
+    this.realtime.sendEventToMany(allowed, { type: 'presence', userId, presence });
   }
 }

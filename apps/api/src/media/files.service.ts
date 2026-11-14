@@ -196,6 +196,22 @@ export class FilesService {
   }
 
   /** A file prepared for a scheduled message: ready and owned by its sender. */
+  /** A scheduled GIF's file: the shared, ready copy of a GIF (app.gif_files), whoever sent that GIF first. */
+  async assertSharedGif(fileId: string): Promise<string> {
+    const file = await this.database.db
+      .selectFrom('app.files as f')
+      .innerJoin('app.gif_files as g', 'g.file_id', 'f.id')
+      .select('f.id')
+      .where('f.id', '=', fileId)
+      .where('f.kind', '=', 'gif')
+      .where('f.status', '=', 'ready')
+      .executeTakeFirst();
+    if (!file) {
+      throw notFound();
+    }
+    return file.id;
+  }
+
   async assertPrepared(senderId: string, fileId: string): Promise<string> {
     const file = await this.database.db.selectFrom('app.files').select(['id', 'owner_id', 'status']).where('id', '=', fileId).executeTakeFirst();
     if (!file || file.owner_id !== senderId || file.status !== 'ready') {

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { adminClient, createTestAdmin } from './admin-helpers.js';
 import { FakeGifProvider, FakeMediaStorage, type IntegrationEnv, query, setupIntegrationEnv, startApp } from './integration-env.js';
 import { client, createUser, resetMessageLimit, type TestUser } from './messaging-helpers.js';
+import { dispatchToken } from '../src/messaging/scheduled.service.js';
 
 const enabled = Boolean(process.env.TEST_DATABASE_URL);
 /** A made-up GIPHY key (a real key never appears in tests). */
@@ -357,6 +358,34 @@ describe.runIf(enabled)('Phase 4 media: files, stickers, GIFs, reactions (real P
     expect(storage.objectFor(link.body.url)).toEqual(MP4(9000));
     expect((await client(app, alice).post(`/v1/chats/${chatId}/messages`, { clientId: randomUUID(), gifId: 'missing1' })).status).toBe(404);
     expect((await client(app, alice).post(`/v1/chats/${chatId}/messages`, { clientId: randomUUID(), gifId: 'abc123', text: 'caption' })).status).toBe(400);
+
+    // A scheduled GIF is sent when due also by someone who was not the first to send that GIF (its stored copy
+    // belongs to the first sender).
+    await query(ctx.ownerUrl, 'insert into app.user_permissions (user_id, schedule_messages) values ($1, true) on conflict (user_id) do update set schedule_messages = true', [bob.id]);
+    const clientId = randomUUID();
+    const scheduled = await client(app, bob).post(`/v1/chats/${chatId}/scheduled`, { sendAt: new Date(Date.now() + 60_000).toISOString(), message: { clientId, gifId: 'abc123' } });
+    expect(scheduled.status, JSON.stringify(scheduled.body)).toBe(200);
+    await query(ctx.ownerUrl, `update app.scheduled_messages set send_at = now() - interval '1 second' where id = $1`, [scheduled.body.id]);
+    const dispatched = await app.inject({ method: 'POST', url: '/v1/internal/dispatch', headers: { 'x-bedo-dispatch': dispatchToken(ctx.env.ACCESS_TOKEN_SECRET!) } });
+    expect(dispatched.json()).toEqual({ sent: 1, failed: 0 });
+    const delivered = (await client(app, alice).get(`/v1/chats/${chatId}/messages`)).body.messages.find((message: { clientId: string }) => message.clientId === clientId);
+    expect(delivered).toMatchObject({ senderId: bob.id, attachment: { id: first.body.attachment.id, kind: 'gif' } });
+  });
+
+  it('waits before trying a scheduled message again after a temporary failure', async () => {
+    await query(ctx.ownerUrl, 'insert into app.user_permissions (user_id, schedule_messages) values ($1, true) on conflict (user_id) do update set schedule_messages = true', [alice.id]);
+    const scheduled = await client(app, alice).post(`/v1/chats/${chatId}/scheduled`, { sendAt: new Date(Date.now() + 60_000).toISOString(), message: { clientId: randomUUID(), text: 'Later' } });
+    expect(scheduled.status, JSON.stringify(scheduled.body)).toBe(200);
+    // As after one attempt that failed for a moment: due, attempted once, just now.
+    await query(ctx.ownerUrl, `update app.scheduled_messages set send_at = now() - interval '1 minute', attempts = 1, error_code = 'SERVICE_UNAVAILABLE' where id = $1`, [scheduled.body.id]);
+    const dispatch = () => app.inject({ method: 'POST', url: '/v1/internal/dispatch', headers: { 'x-bedo-dispatch': dispatchToken(ctx.env.ACCESS_TOKEN_SECRET!) } });
+    expect((await dispatch()).json()).toEqual({ sent: 0, failed: 0 });
+    expect((await query(ctx.ownerUrl, 'select status, attempts from app.scheduled_messages where id = $1', [scheduled.body.id])).rows[0]).toEqual({ status: 'pending', attempts: 1 });
+    // Once the wait is over it is sent.
+    await query(ctx.ownerUrl, `alter table app.scheduled_messages disable trigger scheduled_messages_set_updated_at`);
+    await query(ctx.ownerUrl, `update app.scheduled_messages set updated_at = now() - interval '31 seconds' where id = $1`, [scheduled.body.id]);
+    await query(ctx.ownerUrl, `alter table app.scheduled_messages enable trigger scheduled_messages_set_updated_at`);
+    expect((await dispatch()).json()).toEqual({ sent: 1, failed: 0 });
   });
 
   it('removes upload slots that were never used, and only those', async () => {

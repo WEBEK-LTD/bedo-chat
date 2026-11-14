@@ -86,6 +86,14 @@ export class RealtimeService {
     }
   }
 
+  /** The same short-lived event for several users' devices: one sessions query and batched sends, not one each. */
+  sendEventToMany(to: Iterable<string>, signal: RealtimeSignal): void {
+    const users = [...new Set(to)];
+    if (users.length > 0 && this.enabled) {
+      this.deferred.defer('realtime-event', () => this.signal(users, signal));
+    }
+  }
+
   private async signal(userIds: string[], signal: RealtimeSignal): Promise<void> {
     const sessions = await this.database.db
       .selectFrom('app.sessions as s')
