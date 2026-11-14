@@ -300,12 +300,16 @@ function ChatRow({ chat, myId, selected, onSelect, onNotice }: { chat: Chat; myI
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             {chat.type === 'channel' ? <Icon name="campaign" size={16} className="shrink-0 text-ink-secondary" /> : chat.group ? <Icon name="group" size={16} className="shrink-0 text-ink-secondary" /> : null}
-            <span className="min-w-0 flex-1 truncate font-semibold">{chatTitle(chat)}</span>
+            <span className="min-w-0 flex-1 truncate font-semibold">
+              <bdi>{chatTitle(chat)}</bdi>
+            </span>
             {isMuted(chat) ? <Icon name="notifications_off" size={14} className="shrink-0 text-ink-secondary" title="Muted" /> : null}
             <span className={`shrink-0 text-xs ${chat.unreadCount > 0 && !isMuted(chat) ? 'font-medium text-accent' : 'text-ink-secondary'}`}>{listTime(chat.lastMessageAt)}</span>
           </span>
           <span className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-sm text-ink-secondary">{(state.typing[chat.id] ?? 0) > Date.now() ? 'typing…' : preview(chat, myId)}</span>
+            <span className="min-w-0 flex-1 truncate text-sm text-ink-secondary">
+              <bdi>{(state.typing[chat.id] ?? 0) > Date.now() ? 'typing…' : preview(chat, myId)}</bdi>
+            </span>
             {chat.pinned ? <Icon name="keep" size={16} className="shrink-0 text-ink-secondary" title="Pinned" /> : null}
             {chat.unreadCount > 0 ? (
               <span className={`grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1.5 text-center text-xs font-semibold ${isMuted(chat) ? 'bg-ink-secondary/60 text-surface' : 'bg-accent text-on-accent'}`} aria-label={`${chat.unreadCount} unread`}>

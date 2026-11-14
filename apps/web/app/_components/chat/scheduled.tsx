@@ -135,7 +135,7 @@ export function ScheduledPanel({ chat, onClose, onNotice }: { chat: Chat; onClos
               <Icon name={item.status === 'failed' ? 'error' : 'schedule_send'} size={16} className={item.status === 'failed' ? 'text-danger' : 'text-accent'} />
               {item.status === 'failed' ? 'Not sent' : `Sends ${scheduleLabel(item.sendAt)}`}
             </span>
-            <p className="whitespace-pre-wrap break-words text-sm">{contentOf(item)}</p>
+            <p dir="auto" className="whitespace-pre-wrap break-words text-sm">{contentOf(item)}</p>
             {item.status === 'failed' ? <p className="text-xs text-danger">{FAILURE[item.error ?? ''] ?? 'It could not be sent. Try again.'}</p> : null}
             <div className="flex flex-wrap gap-3 text-sm">
               <button type="button" className="text-accent" onClick={() => act(() => store.sendScheduledNow(item), 'Sent.')}>

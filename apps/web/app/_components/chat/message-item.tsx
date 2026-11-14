@@ -54,7 +54,8 @@ export interface MessageActions {
 /** Text with @mentions highlighted and #hashtags as buttons that search the chat (Phase 5). */
 function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) => void }) {
   const parts: Array<string | { kind: 'mention' | 'tag'; value: string }> = [];
-  const pattern = /(^|[^\p{L}\p{N}_@#])([@#][\p{L}\p{N}_]{2,64})/gu;
+  // \p{M}: Arabic diacritics (and other combining marks) belong to the word, so "#مَرحبا" is one hashtag.
+  const pattern = /(^|[^\p{L}\p{M}\p{N}_@#])([@#][\p{L}\p{M}\p{N}_]{2,64})/gu;
   let last = 0;
   for (const match of text.matchAll(pattern)) {
     const start = (match.index ?? 0) + match[1]!.length;
@@ -65,7 +66,7 @@ function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) 
   }
   if (last < text.length) parts.push(text.slice(last));
   return (
-    <p className="whitespace-pre-wrap break-words">
+    <p dir="auto" className="whitespace-pre-wrap break-words">
       {parts.map((part, index) =>
         typeof part === 'string' ? (
           part
@@ -269,7 +270,7 @@ export function PendingItem({ item, onRetry, onDiscard }: { item: PendingMessage
   return (
     <div className="flex flex-row-reverse items-start gap-2 py-0.5">
       <div className="bedo-bubble bedo-bubble-out max-w-[min(78%,560px)] px-3 py-1.5">
-        <p className="whitespace-pre-wrap break-words">{item.text}</p>
+        <p dir="auto" className="whitespace-pre-wrap break-words">{item.text}</p>
         <p className="mt-0.5 flex items-center justify-end gap-1 text-[11px] opacity-70">
           <time dateTime={item.createdAt}>{timeOf(item.createdAt)}</time>
           <StatusMark status={item.status === 'failed' ? 'failed' : 'sending'} />

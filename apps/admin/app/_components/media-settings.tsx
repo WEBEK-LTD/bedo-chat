@@ -174,7 +174,13 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
                 Save key
               </Button>
               {gifs?.configured ? (
-                <Button variant="danger" disabled={busy} onClick={() => void saveGifKey(null, true)}>
+                <Button
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => {
+                    if (window.confirm('Turn GIF search off? The saved GIPHY key is deleted; to turn it on again, paste a key.')) void saveGifKey(null, true);
+                  }}
+                >
                   Turn GIF search off
                 </Button>
               ) : null}
@@ -255,7 +261,10 @@ export function MediaSettings({ canChange, onSessionError }: { canChange: boolea
                         type="button"
                         aria-label={`Take sticker ${sticker.emoji} out of the pack`}
                         disabled={busy}
-                        onClick={() => void run(() => adminRemoveSticker(sticker.id), 'Sticker taken out of the pack. Messages that carry it keep showing it.')}
+                        onClick={() => {
+                          if (!window.confirm('Take this sticker out of the pack? Messages that carry it keep showing it.')) return;
+                          void run(() => adminRemoveSticker(sticker.id), 'Sticker taken out of the pack. Messages that carry it keep showing it.');
+                        }}
                         className="absolute right-1 top-1 grid size-7 place-items-center rounded-sm text-ink-secondary hover:bg-surface-hover"
                       >
                         <Icon name="delete" size={18} />

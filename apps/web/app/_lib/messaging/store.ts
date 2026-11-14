@@ -176,7 +176,8 @@ export class MessagingStore {
   private httpSyncing = false;
   /** A sync was asked for while one was running: run once more after it. */
   private syncAgain = false;
-  private outboxFlushed = false;
+  /** Each start() gets a new number, so a start overtaken by stop() and another start() gives up after its await. */
+  private run = 0;
   private readonly lastTypingSent = new Map<string, number>();
   private readonly sending = new Set<string>();
   /** Files of uploads in progress (and their upload slot once given), for retries. */
@@ -216,9 +217,9 @@ export class MessagingStore {
   async start(userId: string): Promise<void> {
     this.userId = userId;
     this.stopped = false;
-    this.outboxFlushed = false;
+    const run = ++this.run;
     const cached = await loadCache(userId);
-    if (this.stopped) return;
+    if (this.stopped || run !== this.run) return;
     if (cached) {
       this.seq = cached.seq;
       this.initialized = true;
@@ -236,6 +237,7 @@ export class MessagingStore {
       );
     }
     this.realtime.start();
+    if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = setInterval(() => {
       if (!this.realtime.live) void this.httpSync();
     }, POLL_MS);
@@ -291,10 +293,9 @@ export class MessagingStore {
     } else if (serverSeq !== this.seq) {
       await this.httpSync();
     }
-    if (!this.outboxFlushed) {
-      this.outboxFlushed = true;
-      this.flushOutbox();
-    }
+    // A heartbeat means the server is reachable: messages kept because the device was offline are sent now (the
+    // first heartbeat also sends what was waiting when the page was closed).
+    this.flushOutbox();
   }
 
   // ------------------------------------------------------------------------------ sync
@@ -601,6 +602,7 @@ export class MessagingStore {
 
   private flushOutbox(): void {
     for (const item of this.snapshot.outbox) {
+      if (this.sending.has(item.clientId)) continue;
       if (item.status === 'sending' || (item.status === 'failed' && item.error === null)) {
         this.updatePending(item.clientId, { status: 'sending', error: null });
         void this.deliver(item);

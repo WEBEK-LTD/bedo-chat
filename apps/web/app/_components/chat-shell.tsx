@@ -186,9 +186,16 @@ function ChatArea({
       if (data?.type === 'bedo-open' && typeof data.url === 'string') open(data.url);
     };
     // D-53: the iPhone app, when a notification is tapped while the app is open.
+    // The Android app also passes on a bedochat.com link tapped while it is open: an invite link opens its preview.
     const onAppOpen = (event: Event) => {
       const url = (event as CustomEvent<unknown>).detail;
-      if (typeof url === 'string') open(url);
+      if (typeof url !== 'string') return;
+      const join = new URL(url, window.location.origin).searchParams.get('join');
+      if (join && /^[A-Za-z0-9_-]{22}$/.test(join)) {
+        setJoinCode(join);
+        return;
+      }
+      open(url);
     };
     navigator.serviceWorker?.addEventListener('message', onMessage);
     window.addEventListener('bedo-app-open', onAppOpen);

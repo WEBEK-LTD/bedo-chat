@@ -211,6 +211,8 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
 
   it('gives a blocked sender the neutral answer, and asks the blocker to unblock first', async () => {
     await ben.getByRole('button', { name: 'Chat actions' }).click();
+    // Blocking asks first.
+    ben.once('dialog', (dialog) => void dialog.accept());
     await ben.getByRole('menuitem', { name: 'Block user' }).click();
     await ben.getByText('You blocked this user.').waitFor();
     await composer(anaPhone).fill('Are you still there?');

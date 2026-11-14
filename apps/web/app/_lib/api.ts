@@ -24,6 +24,9 @@ const API_URL = API_BASE_PATH;
 const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync', '/v1/realtime', '/v1/files', '/v1/stickers', '/v1/gifs', '/v1/groups', '/v1/invites', '/v1/channels', '/v1/scheduled', '/v1/search'];
 const isUserRoute = (path: string) => USER_ROUTES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));
 
+/** Answers to a refresh that mean the session has really ended (anything else may be temporary). */
+const SESSION_OVER = new Set<string>(['UNAUTHENTICATED', 'SESSION_INVALID', 'ACCOUNT_DELETED', 'ACCOUNT_BLOCKED']);
+
 /**
  * The web app's transport for the generated API client (@bedo/api-client). The access token lives only in
  * memory (never in storage); the refresh token is an httpOnly cookie the browser sends to /v1/auth only.
@@ -103,6 +106,10 @@ class Session {
       try {
         await this.refresh();
       } catch (refreshError) {
+        // Only an answer that the session is over ends it. A network failure, a busy or failing server (5xx, 429) is
+        // passed on and the next request tries again, so a moment without signal never signs the user out (or wipes
+        // the messages kept on this device, including those not sent yet).
+        if (refreshError instanceof ApiError && !SESSION_OVER.has(refreshError.code)) throw refreshError;
         this.signedOut(refreshError instanceof ApiError ? refreshError : caught);
       }
       try {
