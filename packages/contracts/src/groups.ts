@@ -98,6 +98,12 @@ export const groupInfoSchema = z.object({
   pendingRequests: z.number().int().nonnegative().nullable(),
   /** Phase 6, channels: anyone in the academy can find and join it (false for groups). */
   public: z.boolean(),
+  /**
+   * Channels: whether subscribers may comment on posts (off until the owner or an admin who may change the channel
+   * info turns it on). Null for groups, and while the comments database update is not applied (the feature is not
+   * available yet).
+   */
+  commentsEnabled: z.boolean().nullable(),
 });
 export type GroupInfo = z.infer<typeof groupInfoSchema>;
 

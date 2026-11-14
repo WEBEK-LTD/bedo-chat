@@ -1190,6 +1190,8 @@ export type ChatsResponseChatsItemGroup = {
      */
   pendingRequests: number | null;
   public: boolean;
+  /** @nullable */
+  commentsEnabled: boolean | null;
 } | null;
 
 export type ChatsResponseChatsItemLastMessageKind = typeof ChatsResponseChatsItemLastMessageKind[keyof typeof ChatsResponseChatsItemLastMessageKind];
@@ -1382,6 +1384,11 @@ export type ChatsResponseChatsItemLastMessage = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 } | null;
 
 export type ChatsResponseChatsItem = {
@@ -1554,6 +1561,8 @@ export type ChatGroup = {
      */
   pendingRequests: number | null;
   public: boolean;
+  /** @nullable */
+  commentsEnabled: boolean | null;
 } | null;
 
 export type ChatLastMessageKind = typeof ChatLastMessageKind[keyof typeof ChatLastMessageKind];
@@ -1746,6 +1755,11 @@ export type ChatLastMessage = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 } | null;
 
 export interface Chat {
@@ -1969,6 +1983,11 @@ export type MessagesResponseMessagesItem = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 };
 
 export interface MessagesResponse {
@@ -2210,6 +2229,11 @@ export interface Message {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 }
 
 export interface ReadChatBody {
@@ -2482,6 +2506,8 @@ export type SyncResponseChatsItemGroup = {
      */
   pendingRequests: number | null;
   public: boolean;
+  /** @nullable */
+  commentsEnabled: boolean | null;
 } | null;
 
 export type SyncResponseChatsItemLastMessageKind = typeof SyncResponseChatsItemLastMessageKind[keyof typeof SyncResponseChatsItemLastMessageKind];
@@ -2674,6 +2700,11 @@ export type SyncResponseChatsItemLastMessage = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 } | null;
 
 export type SyncResponseChatsItem = {
@@ -2897,6 +2928,11 @@ export type SyncResponseMessagesItem = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 };
 
 export type SyncResponseFoldersItem = {
@@ -3557,6 +3593,99 @@ export interface ChannelSearchResponse {
   channels: ChannelSearchResponseChannelsItem[];
 }
 
+export interface ChannelCommentSettingsBody {
+  enabled: boolean;
+}
+
+export type ChannelCommentsResponseCommentsItemAuthor = {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  photoUrl: string | null;
+  deleted: boolean;
+};
+
+/**
+ * @nullable
+ */
+export type ChannelCommentsResponseCommentsItemReplyTo = {
+  id: string;
+  authorName: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+export type ChannelCommentsResponseCommentsItem = {
+  id: string;
+  chatId: string;
+  postId: string;
+  author: ChannelCommentsResponseCommentsItemAuthor;
+  clientId: string;
+  text: string;
+  /** @nullable */
+  replyTo: ChannelCommentsResponseCommentsItemReplyTo;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+  mine: boolean;
+  canDelete: boolean;
+};
+
+export interface ChannelCommentsResponse {
+  comments: ChannelCommentsResponseCommentsItem[];
+  /** @nullable */
+  nextAfter: string | null;
+  /** @minimum 0 */
+  count: number;
+  canComment: boolean;
+}
+
+export interface CreateCommentBody {
+  clientId: string;
+  /** @minLength 1 */
+  text: string;
+  replyToId?: string;
+}
+
+export type ChannelCommentAuthor = {
+  id: string;
+  displayName: string;
+  /** @nullable */
+  photoUrl: string | null;
+  deleted: boolean;
+};
+
+/**
+ * @nullable
+ */
+export type ChannelCommentReplyTo = {
+  id: string;
+  authorName: string;
+  /** @nullable */
+  text: string | null;
+} | null;
+
+export interface ChannelComment {
+  id: string;
+  chatId: string;
+  postId: string;
+  author: ChannelCommentAuthor;
+  clientId: string;
+  text: string;
+  /** @nullable */
+  replyTo: ChannelCommentReplyTo;
+  createdAt: string;
+  /** @nullable */
+  editedAt: string | null;
+  mine: boolean;
+  canDelete: boolean;
+}
+
+export interface EditCommentBody {
+  /** @minLength 1 */
+  text: string;
+}
+
 export type ScheduleMessageBodyMessagePollKind = typeof ScheduleMessageBodyMessagePollKind[keyof typeof ScheduleMessageBodyMessagePollKind];
 
 
@@ -3930,6 +4059,11 @@ export type GlobalSearchResponseMessagesItem = {
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  commentCount: number | null;
 };
 
 export interface GlobalSearchResponse {
@@ -5304,6 +5438,10 @@ export type SearchChannelsParams = {
  * @maxLength 64
  */
 q: string;
+};
+
+export type ListCommentsParams = {
+after?: string;
 };
 
 export type SearchEverywhereParams = {
@@ -9445,6 +9583,180 @@ export const joinChannel = async (id: string, options?: Parameters<typeof apiFet
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export const getSetChannelCommentsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/channels/${id}/comments`
+}
+
+/**
+ * @summary Turn comments on posts on or off (owner, or admins who may change the channel info)
+ */
+export const setChannelComments = async (id: string,
+    channelCommentSettingsBody: ChannelCommentSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<Chat> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<Chat>(getSetChannelCommentsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(channelCommentSettingsBody)
+  }
+);}
+
+
+
+export const getListCommentsUrl = (id: string,
+    params?: ListCommentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/v1/messages/${id}/comments?${stringifiedParams}` : `/v1/messages/${id}/comments`
+}
+
+/**
+ * @summary A channel post's comments, oldest first, 50 per page
+ */
+export const listComments = async (id: string,
+    params?: ListCommentsParams, options?: Parameters<typeof apiFetch>[1]): Promise<ChannelCommentsResponse> => {
+
+  return apiFetch<ChannelCommentsResponse>(getListCommentsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getCreateCommentUrl = (id: string,) => {
+
+
+
+
+  return `/v1/messages/${id}/comments`
+}
+
+/**
+ * @summary Comment on a channel post (subscribers, while comments are on; counts as a message)
+ */
+export const createComment = async (id: string,
+    createCommentBody: CreateCommentBody, options?: Parameters<typeof apiFetch>[1]): Promise<ChannelComment> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ChannelComment>(getCreateCommentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createCommentBody)
+  }
+);}
+
+
+
+export const getEditCommentUrl = (id: string,) => {
+
+
+
+
+  return `/v1/comments/${id}`
+}
+
+/**
+ * @summary Edit one's own comment (the previous text is kept in the history)
+ */
+export const editComment = async (id: string,
+    editCommentBody: EditCommentBody, options?: Parameters<typeof apiFetch>[1]): Promise<ChannelComment> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<ChannelComment>(getEditCommentUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(editCommentBody)
+  }
+);}
+
+
+
+export const getDeleteCommentUrl = (id: string,) => {
+
+
+
+
+  return `/v1/comments/${id}`
+}
+
+/**
+ * @summary Delete a comment (its author, the owner, or admins who may delete messages)
+ */
+export const deleteComment = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<OkResponse> => {
+
+  return apiFetch<OkResponse>(getDeleteCommentUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

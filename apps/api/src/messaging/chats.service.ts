@@ -5,6 +5,7 @@ import { sql } from 'kysely';
 import type { Executor } from '../audit/audit.service.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService } from '../database/database.service.js';
+import { ChannelCommentsFeature } from '../groups/channel-comments.feature.js';
 import { accessFromRow, PermissionService } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import { MESSAGE_COLUMNS, ViewsService } from './views.service.js';
@@ -51,6 +52,7 @@ export class ChatsService {
     @Inject(ViewsService) private readonly views: ViewsService,
     @Inject(UpdateLogService) private readonly updateLog: UpdateLogService,
     @Inject(AccountsService) private readonly accounts: AccountsService,
+    @Inject(ChannelCommentsFeature) private readonly comments: ChannelCommentsFeature,
   ) {}
 
   /**
@@ -157,6 +159,9 @@ export class ChatsService {
    */
   private async groupInfos(db: Executor, viewerId: string, rows: ChatRow[]): Promise<Map<string, GroupInfo>> {
     const result = new Map<string, GroupInfo>();
+    const channelIds = rows.filter((row) => row.type === 'channel').map((row) => row.id);
+    // Comments on channel posts: null while the feature is unavailable (its database update not applied).
+    const commentsOn = channelIds.length > 0 ? await this.comments.enabledChannels(db, channelIds) : null;
     for (const row of rows) {
       const access = accessFromRow({ ...row, conversation_id: row.id, peer_id: null });
       const staff = access.role === 'owner' || access.role === 'admin';
@@ -189,6 +194,7 @@ export class ChatsService {
         settings: staff ? { defaultPermissions: [...access.defaultPermissions], hideMemberCount: access.hideMemberCount, hideMemberList: access.hideMemberList } : null,
         pendingRequests: pending,
         public: access.isPublic,
+        commentsEnabled: row.type === 'channel' && commentsOn ? commentsOn.has(row.id) : null,
       });
     }
     return result;

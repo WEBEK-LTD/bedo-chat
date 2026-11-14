@@ -149,6 +149,12 @@ export const messageSchema = z.object({
   forwardedFrom: forwardOriginSchema.nullable(),
   createdAt: timestamp,
   editedAt: timestamp.nullable(),
+  /**
+   * Channel posts with comments turned on: how many comments the post has (comments that were deleted are not
+   * counted). Null everywhere else: other chats, channels with comments off, deleted posts, and while the comments
+   * database update is not applied.
+   */
+  commentCount: z.number().int().nonnegative().nullable(),
 });
 export type Message = z.infer<typeof messageSchema>;
 

@@ -283,7 +283,7 @@ const fakesByEnv = new WeakMap<ApiEnv, { waabek: FakeWaabek; push: FakePush; rea
 
 export async function setupIntegrationEnv(
   overrides: Record<string, string> = {},
-  options: { waabekKey?: boolean; signupMode?: 'open' | 'academy_list' } = {},
+  options: { waabekKey?: boolean; signupMode?: 'open' | 'academy_list'; withoutChannelComments?: boolean } = {},
 ): Promise<IntegrationEnv> {
   const adminUrl = process.env.TEST_DATABASE_URL;
   if (!adminUrl) {
@@ -296,6 +296,9 @@ export async function setupIntegrationEnv(
   await query(adminUrl, `create database ${dbName}`);
   const ownerUrl = Object.assign(new URL(adminUrl), { pathname: `/${dbName}` }).toString();
   await runMigrations({ connectionString: ownerUrl, migrationsDir: defaultMigrationsDir() });
+  if (options.withoutChannelComments || process.env.BEDO_TEST_WITHOUT_CHANNEL_COMMENTS === '1') {
+    await dropChannelCommentTables(ownerUrl);
+  }
   await query(adminUrl, `create role ${login} login password '${password}' in role bedo_runtime`);
   const runtime = new URL(ownerUrl);
   runtime.username = login;
@@ -338,6 +341,14 @@ export async function setupIntegrationEnv(
       await query(adminUrl, `drop role if exists ${login}`);
     },
   };
+}
+
+/**
+ * The live database before the owner runs update 20261115120000 (the site is deployed first): no comment tables. Set
+ * BEDO_TEST_WITHOUT_CHANNEL_COMMENTS=1 to run every integration suite against such a database.
+ */
+export async function dropChannelCommentTables(ownerUrl: string): Promise<void> {
+  await query(ownerUrl, 'drop table app.channel_comments, app.channel_comment_settings, audit.channel_comment_revisions');
 }
 
 /**

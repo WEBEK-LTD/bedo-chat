@@ -2283,6 +2283,12 @@
                     },
                     "public": {
                       "type": "boolean"
+                    },
+                    "commentsEnabled": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -2298,7 +2304,8 @@
                     "canViewMembers",
                     "settings",
                     "pendingRequests",
-                    "public"
+                    "public",
+                    "commentsEnabled"
                   ]
                 },
                 "lastMessage": {
@@ -2684,6 +2691,13 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "commentCount": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
                     }
                   },
                   "required": [
@@ -2704,7 +2718,8 @@
                     "replyTo",
                     "forwardedFrom",
                     "createdAt",
-                    "editedAt"
+                    "editedAt",
+                    "commentCount"
                   ]
                 },
                 "lastSeq": {
@@ -3026,6 +3041,12 @@
               },
               "public": {
                 "type": "boolean"
+              },
+              "commentsEnabled": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -3041,7 +3062,8 @@
               "canViewMembers",
               "settings",
               "pendingRequests",
-              "public"
+              "public",
+              "commentsEnabled"
             ]
           },
           "lastMessage": {
@@ -3427,6 +3449,13 @@
                   "string",
                   "null"
                 ]
+              },
+              "commentCount": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
               }
             },
             "required": [
@@ -3447,7 +3476,8 @@
               "replyTo",
               "forwardedFrom",
               "createdAt",
-              "editedAt"
+              "editedAt",
+              "commentCount"
             ]
           },
           "lastSeq": {
@@ -3918,6 +3948,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "commentCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
                 }
               },
               "required": [
@@ -3938,7 +3975,8 @@
                 "replyTo",
                 "forwardedFrom",
                 "createdAt",
-                "editedAt"
+                "editedAt",
+                "commentCount"
               ]
             }
           }
@@ -4409,6 +4447,13 @@
               "string",
               "null"
             ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           }
         },
         "required": [
@@ -4429,7 +4474,8 @@
           "replyTo",
           "forwardedFrom",
           "createdAt",
-          "editedAt"
+          "editedAt",
+          "commentCount"
         ]
       },
       "ReadChatBody": {
@@ -4972,6 +5018,12 @@
                     },
                     "public": {
                       "type": "boolean"
+                    },
+                    "commentsEnabled": {
+                      "type": [
+                        "boolean",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -4987,7 +5039,8 @@
                     "canViewMembers",
                     "settings",
                     "pendingRequests",
-                    "public"
+                    "public",
+                    "commentsEnabled"
                   ]
                 },
                 "lastMessage": {
@@ -5373,6 +5426,13 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "commentCount": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "minimum": 0
                     }
                   },
                   "required": [
@@ -5393,7 +5453,8 @@
                     "replyTo",
                     "forwardedFrom",
                     "createdAt",
-                    "editedAt"
+                    "editedAt",
+                    "commentCount"
                   ]
                 },
                 "lastSeq": {
@@ -5862,6 +5923,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "commentCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
                 }
               },
               "required": [
@@ -5882,7 +5950,8 @@
                 "replyTo",
                 "forwardedFrom",
                 "createdAt",
-                "editedAt"
+                "editedAt",
+                "commentCount"
               ]
             }
           },
@@ -7291,6 +7360,275 @@
           "channels"
         ]
       },
+      "ChannelCommentSettingsBody": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "ChannelCommentsResponse": {
+        "type": "object",
+        "properties": {
+          "comments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "chatId": {
+                  "type": "string"
+                },
+                "postId": {
+                  "type": "string"
+                },
+                "author": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "photoUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deleted": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "displayName",
+                    "photoUrl",
+                    "deleted"
+                  ]
+                },
+                "clientId": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "replyTo": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "authorName": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "authorName",
+                    "text"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "editedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "mine": {
+                  "type": "boolean"
+                },
+                "canDelete": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "chatId",
+                "postId",
+                "author",
+                "clientId",
+                "text",
+                "replyTo",
+                "createdAt",
+                "editedAt",
+                "mine",
+                "canDelete"
+              ]
+            }
+          },
+          "nextAfter": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "canComment": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "comments",
+          "nextAfter",
+          "count",
+          "canComment"
+        ]
+      },
+      "CreateCommentBody": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "replyToId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "clientId",
+          "text"
+        ]
+      },
+      "ChannelComment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "string"
+          },
+          "postId": {
+            "type": "string"
+          },
+          "author": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "photoUrl": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "deleted": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "displayName",
+              "photoUrl",
+              "deleted"
+            ]
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "replyTo": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "authorName": {
+                "type": "string"
+              },
+              "text": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "authorName",
+              "text"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "editedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mine": {
+            "type": "boolean"
+          },
+          "canDelete": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "chatId",
+          "postId",
+          "author",
+          "clientId",
+          "text",
+          "replyTo",
+          "createdAt",
+          "editedAt",
+          "mine",
+          "canDelete"
+        ]
+      },
+      "EditCommentBody": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
       "ScheduleMessageBody": {
         "type": "object",
         "properties": {
@@ -8055,6 +8393,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "commentCount": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0
                 }
               },
               "required": [
@@ -8075,7 +8420,8 @@
                 "replyTo",
                 "forwardedFrom",
                 "createdAt",
-                "editedAt"
+                "editedAt",
+                "commentCount"
               ]
             }
           },
@@ -17829,6 +18175,326 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/channels/{id}/comments": {
+      "put": {
+        "operationId": "setChannelComments",
+        "tags": [
+          "Channels"
+        ],
+        "summary": "Turn comments on posts on or off (owner, or admins who may change the channel info)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelCommentSettingsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Chat"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/{id}/comments": {
+      "get": {
+        "operationId": "listComments",
+        "tags": [
+          "Channels"
+        ],
+        "summary": "A channel post's comments, oldest first, 50 per page",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": false,
+            "name": "after",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelCommentsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createComment",
+        "tags": [
+          "Channels"
+        ],
+        "summary": "Comment on a channel post (subscribers, while comments are on; counts as a message)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelComment"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/comments/{id}": {
+      "patch": {
+        "operationId": "editComment",
+        "tags": [
+          "Channels"
+        ],
+        "summary": "Edit one's own comment (the previous text is kept in the history)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EditCommentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelComment"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteComment",
+        "tags": [
+          "Channels"
+        ],
+        "summary": "Delete a comment (its author, the owner, or admins who may delete messages)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
                 }
               }
             }

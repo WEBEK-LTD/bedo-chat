@@ -4,6 +4,7 @@ import type { MessagesTable } from '@bedo/db';
 import type { Selectable } from 'kysely';
 import type { Executor } from '../audit/audit.service.js';
 import { AccountsService } from '../auth/accounts.service.js';
+import { ChannelCommentsFeature } from '../groups/channel-comments.feature.js';
 import { MentionsService } from '../groups/mentions.service.js';
 import { PollsService } from '../groups/polls.service.js';
 import { MediaViewsService } from '../media/media-views.service.js';
@@ -71,6 +72,7 @@ export class ViewsService {
     @Inject(MediaViewsService) private readonly media: MediaViewsService,
     @Inject(PollsService) private readonly polls: PollsService,
     @Inject(MentionsService) private readonly mentions: MentionsService,
+    @Inject(ChannelCommentsFeature) private readonly comments: ChannelCommentsFeature,
   ) {}
 
   private async photoUrl(key: string | null): Promise<string | null> {
@@ -146,7 +148,10 @@ export class ViewsService {
     const maskedChats = new Set(chats.filter((chat) => chat.type === 'channel' && chat.role !== 'owner' && chat.role !== 'admin').map((chat) => chat.id));
     const groupSenders = [...new Set(rows.filter((row) => groupChats.has(row.conversation_id) && !maskedChats.has(row.conversation_id)).map((row) => row.sender_id))];
     const channelOriginIds = [...new Set(rows.map((row) => row.forward_from_chat_id).filter((id): id is string => id !== null))];
-    const [replies, hiddenReplies, origins, channelOrigins, attachments, stickers, reactions, polls, mentioned, senders] = await Promise.all([
+    // Comments on channel posts: one grouped count for the whole page, only when it holds channel posts.
+    const channelChats = new Set(chats.filter((chat) => chat.type === 'channel').map((chat) => chat.id));
+    const channelPosts = live.filter((row) => channelChats.has(row.conversation_id)).map((row) => ({ chatId: row.conversation_id, postId: row.id }));
+    const [replies, hiddenReplies, origins, channelOrigins, attachments, stickers, reactions, polls, mentioned, senders, commentCounts] = await Promise.all([
       replyIds.length > 0
         ? db
             .selectFrom('app.messages as r')
@@ -172,6 +177,7 @@ export class ViewsService {
       this.mentions.mentioning(db, viewerId, live.map((row) => row.id)),
       // O-02: in groups the sender's name and picture are shown on their messages (their own privacy still applies).
       groupSenders.length > 0 ? this.peers(db, viewerId, groupSenders) : Promise.resolve(new Map<string, Peer>()),
+      channelPosts.length > 0 ? this.comments.counts(db, channelPosts) : Promise.resolve(null),
     ]);
     const hidden = new Set(hiddenReplies.map((row) => row.message_id));
     const replyById = new Map(replies.map((reply) => [reply.id, reply]));
@@ -223,6 +229,7 @@ export class ViewsService {
             : null,
         createdAt: new Date(row.created_at).toISOString(),
         editedAt: iso(row.edited_at),
+        commentCount: deleted ? null : (commentCounts?.get(row.id) ?? null),
       };
     });
   }

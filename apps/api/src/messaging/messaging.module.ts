@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
-import { ChannelsController, GroupsController, InvitesController, MyPermissionsController, PollsController } from '../groups/groups.controller.js';
+import { ChannelCommentsController, ChannelsController, GroupsController, InvitesController, MyPermissionsController, PollsController } from '../groups/groups.controller.js';
+import { ChannelCommentsFeature } from '../groups/channel-comments.feature.js';
+import { ChannelCommentsService } from '../groups/channel-comments.service.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { MentionsService } from '../groups/mentions.service.js';
 import { PollsService } from '../groups/polls.service.js';
@@ -32,7 +34,7 @@ import { UpdateLogService } from './update-log.service.js';
 import { UsersService } from './users.service.js';
 import { ViewsService } from './views.service.js';
 
-/** Phase 3: private messaging core (D-29 to D-31); Phase 4: files, stickers, GIFs and reactions (D-38); Phase 5: groups (D-39); Phase 6: channels and scheduled messages (D-40); Phase 7: notifications (D-41); Phase 8: global search (D-42). */
+/** Phase 3: private messaging core (D-29 to D-31); Phase 4: files, stickers, GIFs and reactions (D-38); Phase 5: groups (D-39); Phase 6: channels and scheduled messages (D-40); Phase 7: notifications (D-41); Phase 8: global search (D-42); comments on channel posts (20261115120000). */
 @Module({
   imports: [AuthModule, MediaModule],
   controllers: [
@@ -52,6 +54,7 @@ import { ViewsService } from './views.service.js';
     PollsController,
     MyPermissionsController,
     ChannelsController,
+    ChannelCommentsController,
     ChatScheduledController,
     ScheduledController,
     InternalDispatchController,
@@ -84,6 +87,8 @@ import { ViewsService } from './views.service.js';
     NotificationsService,
     SearchService,
     BroadcastsService,
+    ChannelCommentsFeature,
+    ChannelCommentsService,
   ],
   exports: [PermissionService, RealtimeService, ScheduledService, UpdateLogService, BroadcastsService, NotificationsService, GroupsService],
 })
