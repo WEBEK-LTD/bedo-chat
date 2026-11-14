@@ -21,6 +21,7 @@ import {
   removeGroupPhoto,
   retractPollVote,
   revokeInviteLink,
+  setChannelComments,
   updateInviteLink,
   sendMessage,
   startGroupPhotoUpload,
@@ -946,6 +947,19 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
               checked={group.public}
               onChange={(on) => run(async () => store.upsertChat(cast<Chat>(await updateGroupSettings(chat.id, { isPublic: on }))))}
             />
+          </section>
+        ) : null}
+
+        {channel && rights.has('change_info') && group.commentsEnabled !== null ? (
+          <section className="border-t border-line px-4 py-3" aria-label="Comments">
+            <Toggle
+              label="Comments"
+              checked={group.commentsEnabled}
+              onChange={(on) =>
+                run(async () => store.upsertChat(cast<Chat>(await setChannelComments(chat.id, { enabled: on }))), on ? 'Comments turned on.' : 'Comments turned off.')
+              }
+            />
+            <p className="mt-1 text-xs text-ink-secondary">Subscribers can comment on the channel’s posts.</p>
           </section>
         ) : null}
 

@@ -12,6 +12,7 @@ import { Avatar, Button } from '../ui';
 import { DeleteDialog, ForwardDialog, ReportDialog } from './dialogs';
 import { canPost, chatPhoto, chatTitle, dayLabel, displayName, groupSubtitle, isMuted, presenceText } from './format';
 import { FOREVER } from './chat-list';
+import { CommentsPanel } from './comments';
 import { GroupInfoPanel, PollComposer } from './groups';
 import { ActionMenu, type MenuItem } from './menu';
 import { ExpressionPicker, MediaPanel, MediaViewer, PendingUploadItem } from './media';
@@ -73,6 +74,7 @@ export function ChatView({
     | { kind: 'info' }
     | { kind: 'poll' }
     | { kind: 'scheduled' }
+    | { kind: 'comments'; postId: string }
     | null
   >(null);
   /** The in-chat search, open with its starting words (a tapped #hashtag), or closed. */
@@ -84,6 +86,7 @@ export function ChatView({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const peer = chat.peer;
   const group = chat.group;
+  const commentsPost = dialog?.kind === 'comments' ? (messages.find((message) => message.id === dialog.postId) ?? null) : null;
   const channel = chat.type === 'channel';
   // Phase 6: channel admins who post schedule posts; elsewhere the system permission "schedule messages" (O-21).
   const [scheduleAllowed, setScheduleAllowed] = useState(false);
@@ -399,6 +402,7 @@ export function ChatView({
                 onDelete={() => setDialog({ kind: 'delete', ids: [message.id] })}
                 onReport={() => setDialog({ kind: 'report', userId: message.senderId, messageId: message.id })}
                 onHashtag={(tag) => setSearchOpen(tag)}
+                onComments={() => setDialog({ kind: 'comments', postId: message.id })}
                 onNotice={onNotice}
                 onJumpToReply={() => message.replyTo && void jumpTo({ id: message.replyTo.id })}
                 onOpenMedia={() => setViewer(message)}
@@ -507,6 +511,18 @@ export function ChatView({
       {dialog?.kind === 'info' && group ? <GroupInfoPanel chat={chat} myId={myId} onClose={() => setDialog(null)} onNotice={onNotice} onLeft={onBack} /> : null}
       {dialog?.kind === 'poll' ? <PollComposer chatId={chat.id} onClose={() => setDialog(null)} onNotice={onNotice} /> : null}
       {dialog?.kind === 'scheduled' ? <ScheduledPanel chat={chat} onClose={() => setDialog(null)} onNotice={onNotice} /> : null}
+      {dialog?.kind === 'comments' && commentsPost ? (
+        <CommentsPanel
+          chat={chat}
+          post={commentsPost}
+          onClose={() => setDialog(null)}
+          onNotice={onNotice}
+          onHashtag={(tag) => {
+            setDialog(null);
+            setSearchOpen(tag);
+          }}
+        />
+      ) : null}
     </section>
   );
 }
