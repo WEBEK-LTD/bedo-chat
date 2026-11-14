@@ -143,13 +143,15 @@ Technical choices inside the approved decisions. None changes requested behaviou
 | `undici` | Override to `^7.30.1` | Several 7.x advisories before 7.30.1; reached only through the development-time API-client generator (orval) | When orval's dependencies require ≥ 7.30.1 |
 | `source-map-js` | Override to `^1.2.2` | GHSA-68fv-2mgg-jv7q (high) in 1.0.0–1.2.1; reached only through development tools (`vite > postcss`) | When the dependents require ≥ 1.2.2 |
 | `sharp` | Override to `^0.35.5` | GHSA-wq5f-xc86-pv6w (high) in < 0.35.5; reached only through Next.js's optional image optimisation, which Bedo Chat does not use (switched off in `apps/web/next.config.ts`) | When next requires ≥ 0.35.5 |
+| `minimatch` | Override to `^11.0.1` | Denial of service via globparts amplification in 7.0.0–11.0.0; reached only through `eslint` and `typescript-eslint` (development only), which accept 10.x | When eslint and typescript-eslint require ≥ 11.0.1 |
 
 2026-11-14: the release-age exemptions of 2026-10 (`next`, `@next/*`, `sharp`, `@img/*`, `source-map-js`) were removed —
 the patched versions are older than 14 days. `next` moved from 16.3.8 to 16.4.3 (fixes the critical Image Optimization
 and `use cache` remote code execution advisories and a Server Actions denial of service in 16.0.0–16.4.0), `zod` to
 ≥ 4.6.6 (memory exhaustion on oversized collections), `vite` to ≥ 8.3.5 and `vitest` to ≥ 5.0.5 (development only).
-Still reported by `pnpm audit`: one moderate `minimatch` advisory reached only through `eslint` (development only; the
-patched version is a new major that eslint does not accept yet).
+`minimatch` is overridden to `^11.0.1` (moderate denial of service in 7.0.0–11.0.0, reached only through `eslint` and
+`typescript-eslint`, development only; eslint's own later releases use 11). `pnpm audit` then reports no known
+vulnerabilities.
 
 ## Open decisions
 

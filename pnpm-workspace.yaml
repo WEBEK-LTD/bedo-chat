@@ -30,6 +30,8 @@ allowBuilds:
 #   API-client generator: orval > @scalar/json-magic).
 # - source-map-js >=1.2.2: GHSA-68fv-2mgg-jv7q (high) in 1.0.0-1.2.1 (development only: vite > postcss).
 # - sharp >=0.35.5: GHSA-wq5f-xc86-pv6w (high) in < 0.35.5 (next's optional image optimisation).
+# - minimatch >=11.0.1: denial of service via globparts amplification in 7.0.0-11.0.0 (development only: eslint and
+#   typescript-eslint, which accept 10.x; eslint's own later releases moved to 11).
 overrides:
   fastify: ^5.12.6
   fast-uri@3: ^3.1.9
@@ -37,3 +39,4 @@ overrides:
   undici: ^7.30.1
   source-map-js: ^1.2.2
   sharp: ^0.35.5
+  minimatch: ^11.0.1
