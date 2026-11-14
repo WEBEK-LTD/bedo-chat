@@ -137,11 +137,18 @@ Technical choices inside the approved decisions. None changes requested behaviou
 
 | Package | Exception | Reason | Remove after |
 | --- | --- | --- | --- |
-| `next`, `@next/*` | Exempt from the 14-day release-age rule; pinned exactly to 16.3.8 | 16.3.8 (published 2026-09-30) fixes GHSA-cjq9-62q9-8jv4 (high, server-side request forgery in Image Optimization) and a moderate Draft Mode cache leak in 16.0.0–16.3.7; found by `pnpm audit` on 2026-10-09. (16.3.6 had been the exception for the critical `next/og` remote code execution advisory) | 2026-10-14 — then remove the exemption and return to a caret range |
-| `fastify` | Override to `^5.12.5` | `@nestjs/platform-fastify` 12.0.3 pins 5.12.4, which has a moderate denial-of-service advisory | When the Nest adapter depends on ≥ 5.12.5 |
-| `undici` | Override to `^7.29.1` | Several 7.x advisories before 7.29.1; reached only through the development-time API-client generator (orval). 7.29.1 is older than 14 days | When orval's dependencies require ≥ 7.29.1 |
-| `source-map-js` | Override to `^1.2.2` and exempt from the 14-day release-age rule | GHSA-68fv-2mgg-jv7q (high, event-loop denial of service through indexed source-map section offsets) in 1.0.0–1.2.1, published after Phase 3.2; reached only through development tools (`vite > postcss`), not the API, worker or the built apps. 1.2.2 is the first patched release, published 2026-09-30 | 2026-10-14 — then remove the release-age exemption (keep the override until the dependents require ≥ 1.2.2) |
-| `sharp`, `@img/*` | Override to `^0.35.5` and exempt from the 14-day release-age rule | GHSA-wq5f-xc86-pv6w (high, a librsvg flaw in the libvips that sharp bundles) in < 0.35.5, found by `pnpm audit` on 2026-10-09; reached only through Next.js's optional image optimisation, which Bedo Chat does not use. 0.35.5 is the first patched release, published 2026-09-27 | 2026-10-11 |
+| `fastify` | Override to `^5.12.6` | `@nestjs/platform-fastify` pins an older 5.12.x, which has a moderate denial-of-service advisory (fixed in 5.12.5) and a low header-validation bypass (fixed in 5.12.6) | When the Nest adapter depends on ≥ 5.12.6 |
+| `fast-uri` | Overrides `fast-uri@3` to `^3.1.9` and `fast-uri@4` to `^4.2.3` | URI scheme spoofing, host confusion and path equivalence advisories (2026-10) in the versions reached through `fastify > @fastify/ajv-compiler (> ajv)` | When fastify's dependencies require the patched versions |
+| `undici` | Override to `^7.30.1` | Several 7.x advisories before 7.30.1; reached only through the development-time API-client generator (orval) | When orval's dependencies require ≥ 7.30.1 |
+| `source-map-js` | Override to `^1.2.2` | GHSA-68fv-2mgg-jv7q (high) in 1.0.0–1.2.1; reached only through development tools (`vite > postcss`) | When the dependents require ≥ 1.2.2 |
+| `sharp` | Override to `^0.35.5` | GHSA-wq5f-xc86-pv6w (high) in < 0.35.5; reached only through Next.js's optional image optimisation, which Bedo Chat does not use (switched off in `apps/web/next.config.ts`) | When next requires ≥ 0.35.5 |
+
+2026-11-14: the release-age exemptions of 2026-10 (`next`, `@next/*`, `sharp`, `@img/*`, `source-map-js`) were removed —
+the patched versions are older than 14 days. `next` moved from 16.3.8 to 16.4.3 (fixes the critical Image Optimization
+and `use cache` remote code execution advisories and a Server Actions denial of service in 16.0.0–16.4.0), `zod` to
+≥ 4.6.6 (memory exhaustion on oversized collections), `vite` to ≥ 8.3.5 and `vitest` to ≥ 5.0.5 (development only).
+Still reported by `pnpm audit`: one moderate `minimatch` advisory reached only through `eslint` (development only; the
+patched version is a new major that eslint does not accept yet).
 
 ## Open decisions
 
