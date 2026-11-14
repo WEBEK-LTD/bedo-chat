@@ -308,11 +308,13 @@ export async function setupIntegrationEnv(
   const password = randomBytes(12).toString('hex');
   await query(adminUrl, `create database ${dbName}`);
   const ownerUrl = Object.assign(new URL(adminUrl), { pathname: `/${dbName}` }).toString();
-  if (options.migrateThrough) {
+  // BEDO_TEST_MIGRATE_THROUGH: run every suite on a database as the live one is before the owner runs later updates.
+  const migrateThrough = options.migrateThrough ?? process.env.BEDO_TEST_MIGRATE_THROUGH;
+  if (migrateThrough) {
     const dir = mkdtempSync(path.join(tmpdir(), 'bedo-migrations-'));
     try {
       for (const file of readdirSync(defaultMigrationsDir())) {
-        if (file.endsWith('.sql') && file.slice(0, 14) <= options.migrateThrough) copyFileSync(path.join(defaultMigrationsDir(), file), path.join(dir, file));
+        if (file.endsWith('.sql') && file.slice(0, 14) <= migrateThrough) copyFileSync(path.join(defaultMigrationsDir(), file), path.join(dir, file));
       }
       await runMigrations({ connectionString: ownerUrl, migrationsDir: dir });
     } finally {
@@ -321,7 +323,7 @@ export async function setupIntegrationEnv(
   } else {
     await runMigrations({ connectionString: ownerUrl, migrationsDir: defaultMigrationsDir() });
   }
-  if (options.withoutChannelComments || process.env.BEDO_TEST_WITHOUT_CHANNEL_COMMENTS === '1') {
+  if ((options.withoutChannelComments || process.env.BEDO_TEST_WITHOUT_CHANNEL_COMMENTS === '1') && !(migrateThrough && migrateThrough < '20261115120000')) {
     await dropChannelCommentTables(ownerUrl);
   }
   await query(adminUrl, `create role ${login} login password '${password}' in role bedo_runtime`);
