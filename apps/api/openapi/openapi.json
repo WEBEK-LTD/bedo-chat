@@ -2289,6 +2289,9 @@
                         "boolean",
                         "null"
                       ]
+                    },
+                    "topicsEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -2305,7 +2308,8 @@
                     "settings",
                     "pendingRequests",
                     "public",
-                    "commentsEnabled"
+                    "commentsEnabled",
+                    "topicsEnabled"
                   ]
                 },
                 "lastMessage": {
@@ -2683,6 +2687,12 @@
                         "deleted"
                       ]
                     },
+                    "topicId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -2717,6 +2727,7 @@
                     "mentionsMe",
                     "replyTo",
                     "forwardedFrom",
+                    "topicId",
                     "createdAt",
                     "editedAt",
                     "commentCount"
@@ -3047,6 +3058,9 @@
                   "boolean",
                   "null"
                 ]
+              },
+              "topicsEnabled": {
+                "type": "boolean"
               }
             },
             "required": [
@@ -3063,7 +3077,8 @@
               "settings",
               "pendingRequests",
               "public",
-              "commentsEnabled"
+              "commentsEnabled",
+              "topicsEnabled"
             ]
           },
           "lastMessage": {
@@ -3441,6 +3456,12 @@
                   "deleted"
                 ]
               },
+              "topicId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
               "createdAt": {
                 "type": "string"
               },
@@ -3475,6 +3496,7 @@
               "mentionsMe",
               "replyTo",
               "forwardedFrom",
+              "topicId",
               "createdAt",
               "editedAt",
               "commentCount"
@@ -3940,6 +3962,12 @@
                     "deleted"
                   ]
                 },
+                "topicId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "createdAt": {
                   "type": "string"
                 },
@@ -3974,6 +4002,7 @@
                 "mentionsMe",
                 "replyTo",
                 "forwardedFrom",
+                "topicId",
                 "createdAt",
                 "editedAt",
                 "commentCount"
@@ -4061,6 +4090,10 @@
               "question",
               "options"
             ]
+          },
+          "topicId": {
+            "type": "string",
+            "format": "uuid"
           }
         },
         "required": [
@@ -4439,6 +4472,12 @@
               "deleted"
             ]
           },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string"
           },
@@ -4473,6 +4512,7 @@
           "mentionsMe",
           "replyTo",
           "forwardedFrom",
+          "topicId",
           "createdAt",
           "editedAt",
           "commentCount"
@@ -5024,6 +5064,9 @@
                         "boolean",
                         "null"
                       ]
+                    },
+                    "topicsEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -5040,7 +5083,8 @@
                     "settings",
                     "pendingRequests",
                     "public",
-                    "commentsEnabled"
+                    "commentsEnabled",
+                    "topicsEnabled"
                   ]
                 },
                 "lastMessage": {
@@ -5418,6 +5462,12 @@
                         "deleted"
                       ]
                     },
+                    "topicId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string"
                     },
@@ -5452,6 +5502,7 @@
                     "mentionsMe",
                     "replyTo",
                     "forwardedFrom",
+                    "topicId",
                     "createdAt",
                     "editedAt",
                     "commentCount"
@@ -5915,6 +5966,12 @@
                     "deleted"
                   ]
                 },
+                "topicId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "createdAt": {
                   "type": "string"
                 },
@@ -5949,6 +6006,7 @@
                 "mentionsMe",
                 "replyTo",
                 "forwardedFrom",
+                "topicId",
                 "createdAt",
                 "editedAt",
                 "commentCount"
@@ -7194,6 +7252,158 @@
           "options"
         ]
       },
+      "GroupTopicsResponse": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "canManage": {
+            "type": "boolean"
+          },
+          "topics": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "chatId": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "color": {
+                  "type": "integer"
+                },
+                "closed": {
+                  "type": "boolean"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "lastMessageAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "messageCount": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "id",
+                "chatId",
+                "title",
+                "color",
+                "closed",
+                "createdAt",
+                "lastMessageAt",
+                "messageCount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "available",
+          "enabled",
+          "canManage",
+          "topics"
+        ]
+      },
+      "TopicSettingsBody": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ]
+      },
+      "CreateTopicBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6,
+            "default": 0
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "GroupTopic": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "chatId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "color": {
+            "type": "integer"
+          },
+          "closed": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "lastMessageAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "messageCount": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "id",
+          "chatId",
+          "title",
+          "color",
+          "closed",
+          "createdAt",
+          "lastMessageAt",
+          "messageCount"
+        ]
+      },
+      "UpdateTopicBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "color": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          }
+        }
+      },
       "UserPermissions": {
         "type": "object",
         "properties": {
@@ -7712,6 +7922,10 @@
                   "question",
                   "options"
                 ]
+              },
+              "topicId": {
+                "type": "string",
+                "format": "uuid"
               }
             },
             "required": [
@@ -7794,6 +8008,12 @@
               "null"
             ]
           },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string"
           }
@@ -7810,6 +8030,7 @@
           "fileName",
           "pollQuestion",
           "replyToId",
+          "topicId",
           "createdAt"
         ]
       },
@@ -7888,6 +8109,12 @@
                     "null"
                   ]
                 },
+                "topicId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "createdAt": {
                   "type": "string"
                 }
@@ -7904,6 +8131,7 @@
                 "fileName",
                 "pollQuestion",
                 "replyToId",
+                "topicId",
                 "createdAt"
               ]
             }
@@ -8385,6 +8613,12 @@
                     "deleted"
                   ]
                 },
+                "topicId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "createdAt": {
                   "type": "string"
                 },
@@ -8419,6 +8653,7 @@
                 "mentionsMe",
                 "replyTo",
                 "forwardedFrom",
+                "topicId",
                 "createdAt",
                 "editedAt",
                 "commentCount"
@@ -14060,6 +14295,25 @@
             "required": false,
             "name": "limit",
             "in": "query"
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "general"
+                  ]
+                }
+              ]
+            },
+            "required": false,
+            "name": "topicId",
+            "in": "query"
           }
         ],
         "responses": {
@@ -17845,6 +18099,401 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PollVotersResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/groups/{id}/topics": {
+      "get": {
+        "operationId": "listGroupTopics",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Whether the group shows topics, and its topics with their last message time and message count (D-63)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopicsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateGroupTopicSettings",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Turn topics on or off (owner, or admin with change_info; off keeps every topic)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicSettingsBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopicsResponse"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createGroupTopic",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Create a topic (owner, or admin with change_info; topics on)",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTopicBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopic"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/groups/{id}/topics/{topicId}": {
+      "patch": {
+        "operationId": "updateGroupTopic",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Rename a topic or change its colour",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "topicId",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTopicBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopic"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/groups/{id}/topics/{topicId}/close": {
+      "post": {
+        "operationId": "closeGroupTopic",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Close a topic: only the owner and admins post in it",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "topicId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopic"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/groups/{id}/topics/{topicId}/reopen": {
+      "post": {
+        "operationId": "reopenGroupTopic",
+        "tags": [
+          "Groups"
+        ],
+        "summary": "Reopen a closed topic",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "topicId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupTopic"
                 }
               }
             }

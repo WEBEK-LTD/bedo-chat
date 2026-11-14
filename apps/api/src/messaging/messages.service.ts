@@ -18,11 +18,12 @@ import { GifsService } from '../media/gifs.service.js';
 import { StickersService } from '../media/stickers.service.js';
 import { MentionsService } from '../groups/mentions.service.js';
 import { PollsService } from '../groups/polls.service.js';
+import { TopicsService } from '../groups/topics.service.js';
 import { MessagingLimitsService } from './messaging-limits.service.js';
 import { NotificationsService } from './notifications.service.js';
 import { type ChatAccess, PermissionService, type PostKind } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
-import { MESSAGE_COLUMNS, type MessageRow, ViewsService } from './views.service.js';
+import { MESSAGE_COLUMNS, ViewsService } from './views.service.js';
 
 /**
  * Phase 6: a scheduled message sent by the API when due (D-40). Its sender's limits were counted when it was
@@ -62,6 +63,7 @@ export class MessagesService {
     @Inject(PollsService) private readonly polls: PollsService,
     @Inject(MentionsService) private readonly mentions: MentionsService,
     @Inject(NotificationsService) private readonly notifications: NotificationsService,
+    @Inject(TopicsService) private readonly topics: TopicsService,
   ) {}
 
   /** What a new message carries, for the group permission it needs. */
@@ -70,7 +72,7 @@ export class MessagesService {
   }
 
   private async viewOne(db: Executor, viewerId: string, messageId: string): Promise<Message> {
-    const row = await db.selectFrom('app.messages').select(MESSAGE_COLUMNS).where('id', '=', messageId).executeTakeFirstOrThrow();
+    const row = await db.selectFrom('app.messages').select(await this.views.columns()).where('id', '=', messageId).executeTakeFirstOrThrow();
     const [view] = await this.views.messages(db, viewerId, [row]);
     return view!;
   }
@@ -82,7 +84,7 @@ export class MessagesService {
     }
     const rows = await db
       .selectFrom('app.messages as m')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('m.id', 'in', [...new Set(messageIds)])
       .where(({ not, exists, selectFrom }) =>
         not(exists(selectFrom('app.message_hidden as h').select('h.message_id').whereRef('h.message_id', '=', 'm.id').where('h.user_id', '=', viewerId))),
@@ -173,6 +175,8 @@ export class MessagesService {
         if (body.replyToId) {
           await this.assertVisibleInChat(trx, auth.userId, chatId, body.replyToId);
         }
+        // D-63: the group topic (null: General). Reads nothing for a message without a topic or a reply.
+        const topicId = await this.topics.topicForSend(trx, access, chatId, body.topicId, body.replyToId);
         if (body.stickerId) {
           await this.stickers.assertSendable(trx, body.stickerId);
         }
@@ -197,6 +201,8 @@ export class MessagesService {
             file_id: fileId,
             sticker_id: body.stickerId ?? null,
             poll_id: pollId,
+            // Named only for a message in a topic, so sending works before the update for topics is run.
+            ...(topicId ? { topic_id: topicId } : {}),
           })
           .execute();
         if (access.type !== 'private' && body.text) {
@@ -609,18 +615,24 @@ export class MessagesService {
     }
   }
 
-  /** Chat history, oldest first, in pages of at most 50 (P-17). */
-  async history(viewerId: string, chatId: string, query: { before?: number; after?: number; limit?: number }): Promise<Message[]> {
+  /** Chat history, oldest first, in pages of at most 50 (P-17); D-63: optionally one topic's, or General's. */
+  async history(viewerId: string, chatId: string, query: { before?: number | undefined; after?: number | undefined; limit?: number | undefined; topicId?: string | undefined }): Promise<Message[]> {
     const db = this.database.db;
-    await this.permissions.chatAccess(db, viewerId, chatId);
+    const access = await this.permissions.chatAccess(db, viewerId, chatId);
+    const filter = await this.topics.historyFilter(db, access, query.topicId);
     const limit = query.limit ?? MESSAGING_RULES.refetchPageSize;
     let builder = db
       .selectFrom('app.messages as m')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('m.conversation_id', '=', chatId)
       .where(({ not, exists, selectFrom }) =>
         not(exists(selectFrom('app.message_hidden as h').select('h.message_id').whereRef('h.message_id', '=', 'm.id').where('h.user_id', '=', viewerId))),
       );
+    if (filter.kind === 'general') {
+      builder = builder.where('m.topic_id', 'is', null);
+    } else if (filter.kind === 'topic') {
+      builder = builder.where('m.topic_id', '=', filter.topicId);
+    }
     if (query.after !== undefined) {
       builder = builder.where('m.seq', '>', String(query.after)).orderBy('m.seq', 'asc');
     } else {
@@ -641,14 +653,14 @@ export class MessagesService {
     const rows = await db
       .selectFrom('app.message_pins as p')
       .innerJoin('app.messages as m', 'm.id', 'p.message_id')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('p.conversation_id', '=', chatId)
       .where(({ not, exists, selectFrom }) =>
         not(exists(selectFrom('app.message_hidden as h').select('h.message_id').whereRef('h.message_id', '=', 'm.id').where('h.user_id', '=', viewerId))),
       )
       .orderBy('p.pinned_at', 'desc')
       .execute();
-    return this.views.messages(db, viewerId, rows as MessageRow[]);
+    return this.views.messages(db, viewerId, rows);
   }
 
   /**
@@ -661,7 +673,7 @@ export class MessagesService {
     await this.permissions.chatAccess(db, viewerId, chatId);
     let builder = db
       .selectFrom('app.messages as m')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('m.conversation_id', '=', chatId)
       .where('m.deleted_at', 'is', null)
       .where((eb) =>

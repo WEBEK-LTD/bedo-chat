@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 import { randomBytes } from 'node:crypto';
+import { copyFileSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { Test } from '@nestjs/testing';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { type ApiEnv, apiEnvSchema, loadEnv } from '@bedo/config';
@@ -283,7 +286,17 @@ const fakesByEnv = new WeakMap<ApiEnv, { waabek: FakeWaabek; push: FakePush; rea
 
 export async function setupIntegrationEnv(
   overrides: Record<string, string> = {},
-  options: { waabekKey?: boolean; signupMode?: 'open' | 'academy_list'; withoutChannelComments?: boolean } = {},
+  options: {
+    waabekKey?: boolean;
+    signupMode?: 'open' | 'academy_list';
+    /**
+     * Migrate only up to this version (inclusive): a database as the live one is before the owner runs a later update,
+     * to test that the API keeps working without it.
+     */
+    migrateThrough?: string;
+    /** Without the channel comment tables (as before the owner runs that update). */
+    withoutChannelComments?: boolean;
+  } = {},
 ): Promise<IntegrationEnv> {
   const adminUrl = process.env.TEST_DATABASE_URL;
   if (!adminUrl) {
@@ -295,7 +308,19 @@ export async function setupIntegrationEnv(
   const password = randomBytes(12).toString('hex');
   await query(adminUrl, `create database ${dbName}`);
   const ownerUrl = Object.assign(new URL(adminUrl), { pathname: `/${dbName}` }).toString();
-  await runMigrations({ connectionString: ownerUrl, migrationsDir: defaultMigrationsDir() });
+  if (options.migrateThrough) {
+    const dir = mkdtempSync(path.join(tmpdir(), 'bedo-migrations-'));
+    try {
+      for (const file of readdirSync(defaultMigrationsDir())) {
+        if (file.endsWith('.sql') && file.slice(0, 14) <= options.migrateThrough) copyFileSync(path.join(defaultMigrationsDir(), file), path.join(dir, file));
+      }
+      await runMigrations({ connectionString: ownerUrl, migrationsDir: dir });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  } else {
+    await runMigrations({ connectionString: ownerUrl, migrationsDir: defaultMigrationsDir() });
+  }
   if (options.withoutChannelComments || process.env.BEDO_TEST_WITHOUT_CHANNEL_COMMENTS === '1') {
     await dropChannelCommentTables(ownerUrl);
   }

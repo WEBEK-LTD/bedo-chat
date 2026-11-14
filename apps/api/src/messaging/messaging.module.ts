@@ -6,6 +6,8 @@ import { ChannelCommentsService } from '../groups/channel-comments.service.js';
 import { GroupsService } from '../groups/groups.service.js';
 import { MentionsService } from '../groups/mentions.service.js';
 import { PollsService } from '../groups/polls.service.js';
+import { TopicsController } from '../groups/topics.controller.js';
+import { TopicsService } from '../groups/topics.service.js';
 import { UserPermissionsService } from '../groups/user-permissions.service.js';
 import { FilesService } from '../media/files.service.js';
 import { ChatMediaController, FilesController, GifsController, MessageMediaController, StickersController } from '../media/media.controller.js';
@@ -30,11 +32,12 @@ import { ChatScheduledController, InternalDispatchController, ScheduledControlle
 import { ScheduledService } from './scheduled.service.js';
 import { SafetyService } from './safety.service.js';
 import { SyncService } from './sync.service.js';
+import { TopicsSchemaService } from './topics-schema.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import { UsersService } from './users.service.js';
 import { ViewsService } from './views.service.js';
 
-/** Phase 3: private messaging core (D-29 to D-31); Phase 4: files, stickers, GIFs and reactions (D-38); Phase 5: groups (D-39); Phase 6: channels and scheduled messages (D-40); Phase 7: notifications (D-41); Phase 8: global search (D-42); comments on channel posts (20261115120000). */
+/** Phase 3: private messaging core (D-29 to D-31); Phase 4: files, stickers, GIFs and reactions (D-38); Phase 5: groups (D-39); Phase 6: channels and scheduled messages (D-40); Phase 7: notifications (D-41); Phase 8: global search (D-42); comments on channel posts (D-62); topics in groups (D-63). */
 @Module({
   imports: [AuthModule, MediaModule],
   controllers: [
@@ -50,6 +53,7 @@ import { ViewsService } from './views.service.js';
     StickersController,
     GifsController,
     GroupsController,
+    TopicsController,
     InvitesController,
     PollsController,
     MyPermissionsController,
@@ -89,6 +93,8 @@ import { ViewsService } from './views.service.js';
     BroadcastsService,
     ChannelCommentsFeature,
     ChannelCommentsService,
+    TopicsSchemaService,
+    TopicsService,
   ],
   exports: [PermissionService, RealtimeService, ScheduledService, UpdateLogService, BroadcastsService, NotificationsService, GroupsService],
 })

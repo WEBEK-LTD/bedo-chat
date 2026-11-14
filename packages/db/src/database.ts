@@ -383,6 +383,26 @@ export interface GroupSettingsTable {
   updated_at: Generated<Date>;
 }
 
+/** D-63: whether a group shows topics (no row: off). From update 20261115130000. */
+export interface GroupTopicSettingsTable {
+  conversation_id: string;
+  enabled: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Generated<Date>;
+}
+
+/** D-63: a group's topics (never deleted; closed instead). From update 20261115130000. */
+export interface GroupTopicsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  title: string;
+  color: Generated<number>;
+  created_by: string;
+  created_at: CreatedAt;
+  closed_at: Date | null;
+  closed_by: string | null;
+}
+
 export interface InviteLinksTable {
   id: Generated<string>;
   conversation_id: string;
@@ -477,6 +497,11 @@ export interface MessagesTable {
   /** Phase 10: removed for everyone by this admin (O-18: a reported message). */
   removed_by_admin: string | null;
   search_vector: ColumnType<string, never, never>;
+  /**
+   * D-63: the group topic it was posted in; null for General. Only from update 20261115130000: the API reads and
+   * writes it only once TopicsSchemaService has seen the column (it never names it before).
+   */
+  topic_id: string | null;
 }
 
 export interface FilesTable {
@@ -850,6 +875,8 @@ export interface Database {
   'app.gif_files': GifFilesTable;
   'app.message_reactions': MessageReactionsTable;
   'app.group_settings': GroupSettingsTable;
+  'app.group_topic_settings': GroupTopicSettingsTable;
+  'app.group_topics': GroupTopicsTable;
   'app.invite_links': InviteLinksTable;
   'app.join_requests': JoinRequestsTable;
   'app.polls': PollsTable;

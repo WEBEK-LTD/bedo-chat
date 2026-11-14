@@ -1192,6 +1192,7 @@ export type ChatsResponseChatsItemGroup = {
   public: boolean;
   /** @nullable */
   commentsEnabled: boolean | null;
+  topicsEnabled: boolean;
 } | null;
 
 export type ChatsResponseChatsItemLastMessageKind = typeof ChatsResponseChatsItemLastMessageKind[keyof typeof ChatsResponseChatsItemLastMessageKind];
@@ -1381,6 +1382,8 @@ export type ChatsResponseChatsItemLastMessage = {
   replyTo: ChatsResponseChatsItemLastMessageReplyTo;
   /** @nullable */
   forwardedFrom: ChatsResponseChatsItemLastMessageForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -1563,6 +1566,7 @@ export type ChatGroup = {
   public: boolean;
   /** @nullable */
   commentsEnabled: boolean | null;
+  topicsEnabled: boolean;
 } | null;
 
 export type ChatLastMessageKind = typeof ChatLastMessageKind[keyof typeof ChatLastMessageKind];
@@ -1752,6 +1756,8 @@ export type ChatLastMessage = {
   replyTo: ChatLastMessageReplyTo;
   /** @nullable */
   forwardedFrom: ChatLastMessageForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -1980,6 +1986,8 @@ export type MessagesResponseMessagesItem = {
   replyTo: MessagesResponseMessagesItemReplyTo;
   /** @nullable */
   forwardedFrom: MessagesResponseMessagesItemForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -2040,6 +2048,7 @@ export interface SendMessageBody {
   /** @pattern ^[A-Za-z0-9]{1,64}$ */
   gifId?: string;
   poll?: SendMessageBodyPoll;
+  topicId?: string;
 }
 
 export type MessageKind = typeof MessageKind[keyof typeof MessageKind];
@@ -2226,6 +2235,8 @@ export interface Message {
   replyTo: MessageReplyTo;
   /** @nullable */
   forwardedFrom: MessageForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -2508,6 +2519,7 @@ export type SyncResponseChatsItemGroup = {
   public: boolean;
   /** @nullable */
   commentsEnabled: boolean | null;
+  topicsEnabled: boolean;
 } | null;
 
 export type SyncResponseChatsItemLastMessageKind = typeof SyncResponseChatsItemLastMessageKind[keyof typeof SyncResponseChatsItemLastMessageKind];
@@ -2697,6 +2709,8 @@ export type SyncResponseChatsItemLastMessage = {
   replyTo: SyncResponseChatsItemLastMessageReplyTo;
   /** @nullable */
   forwardedFrom: SyncResponseChatsItemLastMessageForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -2925,6 +2939,8 @@ export type SyncResponseMessagesItem = {
   replyTo: SyncResponseMessagesItemReplyTo;
   /** @nullable */
   forwardedFrom: SyncResponseMessagesItemForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -3534,6 +3550,63 @@ export interface PollVotersResponse {
   options: PollVotersResponseOptionsItem[];
 }
 
+export type GroupTopicsResponseTopicsItem = {
+  id: string;
+  chatId: string;
+  title: string;
+  color: number;
+  closed: boolean;
+  createdAt: string;
+  /** @nullable */
+  lastMessageAt: string | null;
+  /** @minimum 0 */
+  messageCount: number;
+};
+
+export interface GroupTopicsResponse {
+  available: boolean;
+  enabled: boolean;
+  canManage: boolean;
+  topics: GroupTopicsResponseTopicsItem[];
+}
+
+export interface TopicSettingsBody {
+  enabled: boolean;
+}
+
+export interface CreateTopicBody {
+  /** @minLength 1 */
+  title: string;
+  /**
+     * @minimum 0
+     * @maximum 6
+     */
+  color?: number;
+}
+
+export interface GroupTopic {
+  id: string;
+  chatId: string;
+  title: string;
+  color: number;
+  closed: boolean;
+  createdAt: string;
+  /** @nullable */
+  lastMessageAt: string | null;
+  /** @minimum 0 */
+  messageCount: number;
+}
+
+export interface UpdateTopicBody {
+  /** @minLength 1 */
+  title?: string;
+  /**
+     * @minimum 0
+     * @maximum 6
+     */
+  color?: number;
+}
+
 export interface UserPermissions {
   createGroups: boolean;
   createChannels: boolean;
@@ -3732,6 +3805,7 @@ export type ScheduleMessageBodyMessage = {
   /** @pattern ^[A-Za-z0-9]{1,64}$ */
   gifId?: string;
   poll?: ScheduleMessageBodyMessagePoll;
+  topicId?: string;
 };
 
 export interface ScheduleMessageBody {
@@ -3783,6 +3857,8 @@ export interface ScheduledMessage {
   pollQuestion: string | null;
   /** @nullable */
   replyToId: string | null;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
 }
 
@@ -3830,6 +3906,8 @@ export type ScheduledMessagesResponseScheduledItem = {
   pollQuestion: string | null;
   /** @nullable */
   replyToId: string | null;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
 };
 
@@ -4056,6 +4134,8 @@ export type GlobalSearchResponseMessagesItem = {
   replyTo: GlobalSearchResponseMessagesItemReplyTo;
   /** @nullable */
   forwardedFrom: GlobalSearchResponseMessagesItemForwardedFrom;
+  /** @nullable */
+  topicId: string | null;
   createdAt: string;
   /** @nullable */
   editedAt: string | null;
@@ -5340,6 +5420,7 @@ after?: number | null;
  * @maximum 50
  */
 limit?: number;
+topicId?: string | 'general';
 };
 
 export type SearchChatParams = {
@@ -9397,6 +9478,201 @@ export const listPollVoters = async (id: string, options?: Parameters<typeof api
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getListGroupTopicsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics`
+}
+
+/**
+ * @summary Whether the group shows topics, and its topics with their last message time and message count (D-63)
+ */
+export const listGroupTopics = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopicsResponse> => {
+
+  return apiFetch<GroupTopicsResponse>(getListGroupTopicsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export const getUpdateGroupTopicSettingsUrl = (id: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics`
+}
+
+/**
+ * @summary Turn topics on or off (owner, or admin with change_info; off keeps every topic)
+ */
+export const updateGroupTopicSettings = async (id: string,
+    topicSettingsBody: TopicSettingsBody, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopicsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<GroupTopicsResponse>(getUpdateGroupTopicSettingsUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(topicSettingsBody)
+  }
+);}
+
+
+
+export const getCreateGroupTopicUrl = (id: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics`
+}
+
+/**
+ * @summary Create a topic (owner, or admin with change_info; topics on)
+ */
+export const createGroupTopic = async (id: string,
+    createTopicBody: CreateTopicBody, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopic> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<GroupTopic>(getCreateGroupTopicUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createTopicBody)
+  }
+);}
+
+
+
+export const getUpdateGroupTopicUrl = (id: string,
+    topicId: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics/${topicId}`
+}
+
+/**
+ * @summary Rename a topic or change its colour
+ */
+export const updateGroupTopic = async (id: string,
+    topicId: string,
+    updateTopicBody: UpdateTopicBody, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopic> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<GroupTopic>(getUpdateGroupTopicUrl(id,topicId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(updateTopicBody)
+  }
+);}
+
+
+
+export const getCloseGroupTopicUrl = (id: string,
+    topicId: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics/${topicId}/close`
+}
+
+/**
+ * @summary Close a topic: only the owner and admins post in it
+ */
+export const closeGroupTopic = async (id: string,
+    topicId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopic> => {
+
+  return apiFetch<GroupTopic>(getCloseGroupTopicUrl(id,topicId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export const getReopenGroupTopicUrl = (id: string,
+    topicId: string,) => {
+
+
+
+
+  return `/v1/groups/${id}/topics/${topicId}/reopen`
+}
+
+/**
+ * @summary Reopen a closed topic
+ */
+export const reopenGroupTopic = async (id: string,
+    topicId: string, options?: Parameters<typeof apiFetch>[1]): Promise<GroupTopic> => {
+
+  return apiFetch<GroupTopic>(getReopenGroupTopicUrl(id,topicId),
+  {
+    ...options,
+    method: 'POST'
 
 
   }
