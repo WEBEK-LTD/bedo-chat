@@ -951,7 +951,7 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
         ) : null}
 
         {channel && rights.has('change_info') && group.commentsEnabled !== null ? (
-          <section className="border-t border-line px-4 py-3" aria-label="Comments">
+          <section className="border-t border-line px-4 py-3" aria-label="Comment settings">
             <Toggle
               label="Comments"
               checked={group.commentsEnabled}
