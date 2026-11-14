@@ -4,7 +4,7 @@ import { sql } from 'kysely';
 import { DatabaseService } from '../database/database.service.js';
 import { likePattern } from './messages.service.js';
 import { MessagingLimitsService } from './messaging-limits.service.js';
-import { MESSAGE_COLUMNS, ViewsService } from './views.service.js';
+import { ViewsService } from './views.service.js';
 
 /**
  * Global search (Phase 8, D-42; blueprint: Search §10). Postgres full text (whole words) and trigram matching
@@ -29,7 +29,7 @@ export class SearchService {
       .innerJoin('app.conversation_members as me', (join) => join.onRef('me.conversation_id', '=', 'm.conversation_id').on('me.user_id', '=', viewerId))
       .innerJoin('app.conversations as c', 'c.id', 'm.conversation_id')
       .leftJoin('app.files as f', 'f.id', 'm.file_id')
-      .select(MESSAGE_COLUMNS.map((column) => `m.${column}` as const))
+      .select(await this.views.columnsOf('m'))
       .where('c.deleted_at', 'is', null)
       .where('m.deleted_at', 'is', null)
       .where(({ not, exists, selectFrom }) =>

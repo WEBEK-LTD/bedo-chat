@@ -21,6 +21,7 @@ import {
   removeGroupPhoto,
   retractPollVote,
   revokeInviteLink,
+  setChannelComments,
   updateInviteLink,
   sendMessage,
   startGroupPhotoUpload,
@@ -54,6 +55,7 @@ import { useSwipeBack } from '../../_lib/swipe-back';
 import { Avatar, Button, FormError, TextField } from '../ui';
 import { chatPhoto, chatTitle, groupSubtitle } from './format';
 import { ActionMenu, Dialog, type MenuItem } from './menu';
+import { TopicsSection } from './topics';
 
 const cast = <T,>(value: unknown) => value as T;
 
@@ -336,7 +338,7 @@ export function JoinDialog({ code, onClose, onJoined }: { code: string; onClose:
 }
 
 /** Creating a poll or a quiz (groups). */
-export function PollComposer({ chatId, onClose, onNotice }: { chatId: string; onClose: () => void; onNotice: (message: string) => void }) {
+export function PollComposer({ chatId, topicId = null, onClose, onNotice }: { chatId: string; topicId?: string | null; onClose: () => void; onNotice: (message: string) => void }) {
   const store = useMessagingStore();
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
@@ -362,6 +364,8 @@ export function PollComposer({ chatId, onClose, onNotice }: { chatId: string; on
             multiple: quiz ? false : multiple,
             ...(quiz ? { correctOption: Math.min(correct, filled.length - 1), ...(explanation.trim() ? { explanation: explanation.trim() } : {}) } : {}),
           },
+          // D-63: posted in the topic chosen in the chat.
+          ...(topicId ? { topicId } : {}),
         }),
       );
       store.replaceMessagePublic(message);
@@ -939,6 +943,9 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
           </section>
         ) : null}
 
+        {/* D-63: topics, groups only. */}
+        {channel ? null : <TopicsSection chat={chat} onNotice={onNotice} />}
+
         {channel && rights.has('change_info') ? (
           <section className="border-t border-line px-4 py-3" aria-label="Channel type">
             <Toggle
@@ -946,6 +953,19 @@ export function GroupInfoPanel({ chat, myId, onClose, onNotice, onLeft }: { chat
               checked={group.public}
               onChange={(on) => run(async () => store.upsertChat(cast<Chat>(await updateGroupSettings(chat.id, { isPublic: on }))))}
             />
+          </section>
+        ) : null}
+
+        {channel && rights.has('change_info') && group.commentsEnabled !== null ? (
+          <section className="border-t border-line px-4 py-3" aria-label="Comment settings">
+            <Toggle
+              label="Comments"
+              checked={group.commentsEnabled}
+              onChange={(on) =>
+                run(async () => store.upsertChat(cast<Chat>(await setChannelComments(chat.id, { enabled: on }))), on ? 'Comments turned on.' : 'Comments turned off.')
+              }
+            />
+            <p className="mt-1 text-xs text-ink-secondary">Subscribers can comment on the channel’s posts.</p>
           </section>
         ) : null}
 

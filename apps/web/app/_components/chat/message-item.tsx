@@ -9,6 +9,7 @@ import { canPost, type DeliveryStatus, deliveryStatus, STATUS_LABEL, timeOf } fr
 import { PollView } from './groups';
 import { AttachmentView, ReactionChips, ReactionPicker, StickerView } from './media';
 import { ActionMenu, type MenuItem, useContextMenu } from './menu';
+import { TopicDot } from './topics';
 import { Avatar } from '../ui';
 
 const STATUS_ICON: Record<DeliveryStatus, IconName> = {
@@ -48,6 +49,8 @@ export interface MessageActions {
   onReact: (emoji: string | null) => void;
   /** Phase 5: a tapped #hashtag searches the chat for it. */
   onHashtag: (tag: string) => void;
+  /** Channel posts with comments on: opens the post's comments. */
+  onComments?: () => void;
   onNotice?: (message: string) => void;
 }
 
@@ -110,7 +113,7 @@ export function textParts(text: string): TextPart[] {
  * that search the chat (Phase 5). A link to another site opens in the browser (in the apps: outside the app); a
  * Bedo Family link opens here.
  */
-function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) => void }) {
+export function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) => void }) {
   const parts = textParts(text);
   return (
     <p dir="auto" className="whitespace-pre-wrap break-words">
@@ -141,6 +144,40 @@ function RichText({ text, onHashtag }: { text: string; onHashtag: (tag: string) 
   );
 }
 
+/** "Leave a comment", "1 comment", "12 comments". */
+export function commentsLabel(count: number): string {
+  if (count === 0) return 'Leave a comment';
+  return count === 1 ? '1 comment' : `${count} comments`;
+}
+
+/**
+ * The comment count of a channel post when its channel has comments on, else null. Messages kept on this device from
+ * before comments existed have no count at all.
+ */
+export function commentCountOf(chat: Chat, message: Message): number | null {
+  if (chat.type !== 'channel' || !chat.group?.commentsEnabled || message.deleted) return null;
+  return typeof message.commentCount === 'number' ? message.commentCount : null;
+}
+
+/** Under a channel post with comments on: how many, and opens them. */
+function CommentsButton({ count, onOpen }: { count: number; onOpen: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="comments-button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      className="mt-1 flex w-full items-center gap-2 border-t border-line/60 pt-1.5 text-left text-sm font-medium text-accent hover:underline"
+    >
+      <Icon name="comment" size={18} />
+      <span className="flex-1">{commentsLabel(count)}</span>
+      <Icon name="chevron_right" size={18} />
+    </button>
+  );
+}
+
 /** What a reply shows of the message it answers. */
 export function replyText(reply: NonNullable<Message['replyTo']>): string {
   if (reply.text) return reply.text;
@@ -156,8 +193,19 @@ export function MessageItem({
   pinned,
   selecting,
   selected,
+  topic = null,
   ...actions
-}: { message: Message; chat: Chat; mine: boolean; showAvatar?: boolean; pinned: boolean; selecting: boolean; selected: boolean } & MessageActions) {
+}: {
+  message: Message;
+  chat: Chat;
+  mine: boolean;
+  showAvatar?: boolean;
+  pinned: boolean;
+  selecting: boolean;
+  selected: boolean;
+  /** D-63: in a group's All view with topics on, the topic the message is in (null: General or not shown). */
+  topic?: { title: string; color: number } | null;
+} & MessageActions) {
   const canAct = !message.deleted;
   const canSend = canPost(chat);
   const group = chat.group;
@@ -200,7 +248,8 @@ export function MessageItem({
   const visual = !message.deleted && (message.attachment?.kind === 'photo' || message.attachment?.kind === 'video') ? message.attachment : null;
   const visualSize = visual ? photoBubbleWidth(visual, Boolean(message.text)) : null;
   const visualAtTop = Boolean(visual) && !(message.sender && !mine) && !message.forwardedFrom && !message.replyTo;
-  const visualAtBottom = Boolean(visual) && !message.text && !message.poll && message.reactions.length === 0;
+  const commentCount = actions.onComments ? commentCountOf(chat, message) : null;
+  const visualAtBottom = Boolean(visual) && !message.text && !message.poll && message.reactions.length === 0 && commentCount === null;
   const radius = 'var(--bedo-radius-bubble)';
   const tail = '6px';
 
@@ -247,6 +296,12 @@ export function MessageItem({
         ) : null}
         {message.sender && !mine && !message.deleted ? <p className="text-[13px] font-semibold text-accent">{message.sender.displayName}</p> : null}
         {message.mentionsMe && !message.deleted ? <span className="sr-only">Mentions you</span> : null}
+        {topic ? (
+          <p className="flex items-center gap-1 text-xs text-ink-secondary">
+            <TopicDot color={topic.color} size={8} />
+            <span className="truncate">{topic.title}</span>
+          </p>
+        ) : null}
         {message.forwardedFrom ? (
           <p className="flex items-center gap-1 text-xs text-accent">
             <Icon name="forward" size={14} />
@@ -298,6 +353,7 @@ export function MessageItem({
           <time dateTime={message.createdAt}>{timeOf(message.createdAt)}</time>
           {status ? <StatusMark status={status} /> : null}
         </p>
+        {commentCount !== null && actions.onComments && !selecting ? <CommentsButton count={commentCount} onOpen={actions.onComments} /> : null}
       </div>
       {selecting ? null : (
         <div className={`flex items-center self-center opacity-40 focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100 ${mine ? 'flex-row-reverse' : ''}`}>

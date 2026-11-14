@@ -20,7 +20,9 @@
 --   20  20261020120000_everyone_channels
 --   21  20261021120000_store_review_account
 --   22  20261029120000_test_accounts
--- then sets the two limits on bedo_api, checks everything and records the 16 migrations.
+--   23  20261115120000_channel_comments
+--   24  20261115130000_group_topics
+-- then sets the two limits on bedo_api, checks everything and records the 18 migrations.
 --
 -- How: SQL Editor -> New query -> paste this whole file -> Run ONCE (role: postgres). No values to change.
 -- One request = one transaction: if any check or statement fails, NOTHING is kept and the message says why.
@@ -1143,7 +1145,260 @@ comment on table app.test_accounts is 'Test accounts (D-59): accounts created by
 grant select, insert on app.test_accounts to bedo_runtime;
 -- End of the delivered migration file 20261029120000 ------------------------------------------------------------
 
--- Part 18: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
+-- Part 18: supabase/migrations/20261115120000_channel_comments.sql, exactly as delivered ------------------------
+-- Bedo Family - comments on channel posts.
+--
+-- Like the comments under a Telegram channel post, but stored in Bedo Family itself: the channel's owner, or an admin
+-- with the right to change the channel's info, turns comments on for one channel; then every subscriber who can see a
+-- post may comment on it, and reply to another comment of the same post. Comments are OFF for every channel until
+-- someone turns them on, so nothing changes for anyone until then.
+--
+-- Comments are history like messages (D-17): never removed (soft delete only), and the text before every edit and
+-- deletion is kept in audit.channel_comment_revisions, written in the same transaction (checked at commit), so admins
+-- can review edited and deleted comments. No per-user update log entries and no notifications are made for comments
+-- (a channel has up to 5000 subscribers); the apps fetch them when a post's comments are open.
+--
+-- Additive only: three new tables, their indexes, triggers and grants. No existing table, function or grant changes.
+
+-------------------------------------------------------------------------------------------------------
+-- The switch, one row per channel that ever had it changed (no row: off).
+-------------------------------------------------------------------------------------------------------
+create table app.channel_comment_settings (
+  conversation_id  uuid primary key references app.conversations (id),
+  enabled          boolean not null default false,
+  updated_by       uuid references app.users (id),
+  updated_at       timestamptz not null default now()
+);
+comment on table app.channel_comment_settings is
+  'Comments on channel posts: on or off per channel, set by the owner or an admin who may change the channel info. No row: off.';
+create trigger channel_comment_settings_no_delete before delete on app.channel_comment_settings
+  for each row execute function app.forbid_mutation();
+create trigger channel_comment_settings_no_truncate before truncate on app.channel_comment_settings
+  for each statement execute function app.forbid_mutation();
+
+-------------------------------------------------------------------------------------------------------
+-- Comments. Listed per post, oldest first (ids are version-7 UUIDs, ordered by time).
+-------------------------------------------------------------------------------------------------------
+create table app.channel_comments (
+  id                   uuid primary key default app.uuid_v7(),
+  conversation_id      uuid not null references app.conversations (id),
+  -- The channel post (a message of that channel).
+  post_message_id      uuid not null references app.messages (id),
+  author_id            uuid not null references app.users (id),
+  -- The author's client-generated id (idempotency key: a retried comment is never stored twice).
+  client_id            uuid not null,
+  -- Null only once deleted; the text is kept in audit.channel_comment_revisions. Same length rule as messages (P-16).
+  text                 text check (text is null or char_length(text) between 1 and 4096),
+  -- A reply to another comment of the same post (checked by the foreign key below).
+  reply_to_comment_id  uuid,
+  created_at           timestamptz not null default now(),
+  edited_at            timestamptz,
+  deleted_at           timestamptz,
+  deleted_by           uuid references app.users (id),
+  constraint channel_comments_author_client_key unique (author_id, client_id),
+  constraint channel_comments_post_id_key unique (post_message_id, id),
+  constraint channel_comments_reply_same_post foreign key (post_message_id, reply_to_comment_id)
+    references app.channel_comments (post_message_id, id),
+  constraint channel_comments_reply_not_self check (reply_to_comment_id is null or reply_to_comment_id <> id),
+  constraint channel_comments_deleted_state check ((deleted_at is null) = (text is not null)),
+  constraint channel_comments_deleted_by check ((deleted_at is null) = (deleted_by is null))
+);
+comment on table app.channel_comments is
+  'Comments on channel posts. Never removed: a deleted comment keeps its row, its text goes to audit.channel_comment_revisions.';
+-- Listing a post's comments (oldest first, by id) and counting them, for comments that are not deleted.
+create index channel_comments_post_live_idx on app.channel_comments (post_message_id, id) where deleted_at is null;
+
+-------------------------------------------------------------------------------------------------------
+-- Permanent history (D-17): the text before every edit and deletion.
+-------------------------------------------------------------------------------------------------------
+create table audit.channel_comment_revisions (
+  id               bigint generated always as identity primary key,
+  comment_id       uuid not null,
+  conversation_id  uuid not null,
+  post_message_id  uuid not null,
+  author_id        uuid not null,
+  action           text not null check (action in ('edited', 'deleted')),
+  -- The comment text before the change.
+  previous_text    text not null,
+  -- The text after an edit; null for deletions.
+  new_text         text,
+  actor_type       text not null check (actor_type in ('user', 'admin', 'system')),
+  actor_id         uuid,
+  session_id       uuid,
+  -- Transaction that wrote the row (set by trigger): the comment table proves a change and its record committed together.
+  tx_id            xid8 not null,
+  occurred_at      timestamptz not null default now(),
+  constraint channel_comment_revisions_new_text check ((action = 'edited') = (new_text is not null))
+);
+comment on table audit.channel_comment_revisions is
+  'Comments on channel posts: the text before every edit and deletion (D-17). Append-only.';
+create index channel_comment_revisions_comment_idx on audit.channel_comment_revisions (comment_id, occurred_at);
+create index channel_comment_revisions_conversation_idx on audit.channel_comment_revisions (conversation_id, occurred_at desc);
+create trigger channel_comment_revisions_stamp_transaction before insert on audit.channel_comment_revisions
+  for each row execute function app.stamp_transaction();
+create trigger channel_comment_revisions_no_update_delete before update or delete on audit.channel_comment_revisions
+  for each row execute function app.forbid_mutation();
+create trigger channel_comment_revisions_no_truncate before truncate on audit.channel_comment_revisions
+  for each statement execute function app.forbid_mutation();
+
+-------------------------------------------------------------------------------------------------------
+-- History protection on the comments.
+-------------------------------------------------------------------------------------------------------
+create trigger channel_comments_no_delete before delete on app.channel_comments
+  for each row execute function app.forbid_mutation();
+create trigger channel_comments_no_truncate before truncate on app.channel_comments
+  for each statement execute function app.forbid_mutation();
+
+-- A deleted comment never changes again.
+create function app.channel_comments_guard_update()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if old.deleted_at is not null then
+    raise exception 'comment % was deleted and cannot change', old.id using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$;
+create trigger channel_comments_guard_update before update on app.channel_comments
+  for each row execute function app.channel_comments_guard_update();
+
+-- At commit: an edit or a deletion must have its revision in the same transaction, recording exactly the text before
+-- and (for an edit) after the change.
+create function app.require_channel_comment_revision()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+declare
+  expected text := case when new.deleted_at is not null then 'deleted' else 'edited' end;
+begin
+  if not exists (
+    select 1 from audit.channel_comment_revisions r
+    where r.comment_id = new.id
+      and r.action = expected
+      and r.previous_text is not distinct from old.text
+      and (expected <> 'edited' or r.new_text is not distinct from new.text)
+      and r.tx_id = pg_catalog.pg_current_xact_id()
+  ) then
+    raise exception 'comment % changed without its audit record', new.id using errcode = 'integrity_constraint_violation';
+  end if;
+  return null;
+end;
+$$;
+create constraint trigger channel_comments_require_revision
+  after update on app.channel_comments
+  deferrable initially deferred
+  for each row
+  when (old.text is distinct from new.text or old.deleted_at is distinct from new.deleted_at)
+  execute function app.require_channel_comment_revision();
+
+-------------------------------------------------------------------------------------------------------
+-- Privileges: only the API's runtime role, only what it needs; nothing for Supabase's client roles.
+-------------------------------------------------------------------------------------------------------
+revoke all on app.channel_comment_settings, app.channel_comments, audit.channel_comment_revisions from public;
+do $$
+declare
+  client_role text;
+begin
+  foreach client_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = client_role) then
+      execute format('revoke all on app.channel_comment_settings, app.channel_comments, audit.channel_comment_revisions from %I', client_role);
+    end if;
+  end loop;
+end
+$$;
+
+grant select, insert on app.channel_comment_settings to bedo_runtime;
+grant update (enabled, updated_by, updated_at) on app.channel_comment_settings to bedo_runtime;
+grant select, insert on app.channel_comments to bedo_runtime;
+grant update (text, edited_at, deleted_at, deleted_by) on app.channel_comments to bedo_runtime;
+grant select, insert on audit.channel_comment_revisions to bedo_runtime;
+-- End of the delivered migration file 20261115120000 ------------------------------------------------------------
+
+-- Part 19: supabase/migrations/20261115130000_group_topics.sql, exactly as delivered ----------------------------
+-- Bedo Family - topics in groups (D-63).
+--
+-- A group's owner, or an admin with the right to change the group's info, can turn Topics on for the group (like the
+-- forum topics of Telegram): messages are then posted into a topic, or into "General" (no topic). Groups only, never
+-- channels or private chats. Off for every group until an admin turns it on; turning it off hides topics again and
+-- keeps everything. Topics are never deleted in this version: an admin closes one (then only the owner and admins post
+-- in it) and can reopen it. Unread counts, read positions, sync and search stay per group, as before.
+--
+-- Additive only: two new tables, one new nullable column on app.messages (no default, so adding it changes no stored
+-- row) and one partial index on it. Nothing existing changes behaviour; the API keeps working without this update.
+
+-- Whether a group shows topics. A group without a row has them off.
+create table app.group_topic_settings (
+  conversation_id  uuid primary key references app.conversations (id),
+  enabled          boolean not null default false,
+  updated_by       uuid references app.users (id),
+  updated_at       timestamptz not null default now()
+);
+comment on table app.group_topic_settings is
+  'Topics in groups (D-63): whether a group shows topics. Off by default; a group without a row has them off.';
+create trigger group_topic_settings_no_delete before delete on app.group_topic_settings
+  for each row execute function app.forbid_mutation();
+create trigger group_topic_settings_no_truncate before truncate on app.group_topic_settings
+  for each statement execute function app.forbid_mutation();
+
+-- The topics of a group. "General" is not a row: it is the messages without a topic.
+create table app.group_topics (
+  id               uuid primary key default app.uuid_v7(),
+  conversation_id  uuid not null references app.conversations (id),
+  title            text not null check (char_length(title) between 1 and 128),
+  -- One of the seven avatar tones (0 to 6), the dot shown next to the title.
+  color            smallint not null default 0 check (color between 0 and 6),
+  created_by       uuid not null references app.users (id),
+  created_at       timestamptz not null default now(),
+  -- Closed: only the owner and admins post in it. Reopening clears both.
+  closed_at        timestamptz,
+  closed_by        uuid references app.users (id),
+  constraint group_topics_closed check ((closed_at is null) = (closed_by is null))
+);
+comment on table app.group_topics is
+  'Topics in groups (D-63): a group''s topics. Never deleted (closed instead); messages point at them through app.messages.topic_id.';
+create index group_topics_conversation_idx on app.group_topics (conversation_id, created_at);
+create trigger group_topics_no_delete before delete on app.group_topics
+  for each row execute function app.forbid_mutation();
+create trigger group_topics_no_truncate before truncate on app.group_topics
+  for each statement execute function app.forbid_mutation();
+
+-- The topic a message was posted in; null: General (every message before this update, and every message in private
+-- chats, channels and groups without topics). No default, so adding it rewrites nothing. The API checks that the topic
+-- belongs to the message's group. The foreign key is part of the new column, so no stored message is scanned for it.
+alter table app.messages add column topic_id uuid references app.group_topics (id);
+-- A topic's messages in order, and its last message and count, for the topic list. Only messages with a topic are in
+-- it, so it starts empty.
+create index messages_topic_seq_idx on app.messages (conversation_id, topic_id, seq) where topic_id is not null;
+
+-- No one but the API reaches the new tables.
+revoke all on app.group_topic_settings from public;
+revoke all on app.group_topics from public;
+do $$
+declare
+  client_role text;
+begin
+  foreach client_role in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = client_role) then
+      execute format('revoke all on app.group_topic_settings from %I', client_role);
+      execute format('revoke all on app.group_topics from %I', client_role);
+    end if;
+  end loop;
+end
+$$;
+
+-- Runtime privileges (bedo_runtime). app.messages keeps its grants: select and insert cover the new column, and it is
+-- never updated (a message stays in its topic).
+grant select, insert on app.group_topic_settings to bedo_runtime;
+grant update (enabled, updated_by, updated_at) on app.group_topic_settings to bedo_runtime;
+grant select, insert on app.group_topics to bedo_runtime;
+grant update (title, color, closed_at, closed_by) on app.group_topics to bedo_runtime;
+-- End of the delivered migration file 20261115130000 ------------------------------------------------------------
+
+-- Part 20: the runtime login's limits. Through the transaction pooler the API cannot set them per connection, so
 -- they are set on the login itself: no statement runs longer than 15 seconds, and no connection stays idle inside
 -- an open transaction longer than 30 seconds.
 alter role bedo_api set statement_timeout = '15s';
@@ -1166,7 +1421,7 @@ begin
 end
 $bedo_rls$;
 
--- Part 19: check the result, then the bookkeeping rows ---------------------------------------------------
+-- Part 21: check the result, then the bookkeeping rows ---------------------------------------------------
 do $verify$
 begin
   if not exists (select 1 from pg_constraint
@@ -1300,6 +1555,42 @@ begin
      or not has_table_privilege('bedo_runtime', 'app.test_accounts', 'insert') or has_table_privilege('bedo_runtime', 'app.test_accounts', 'delete') then
     raise exception 'Stopped: bedo_runtime privileges on the test account tables are not as expected (nothing was kept)';
   end if;
+  if to_regclass('app.channel_comment_settings') is null or to_regclass('app.channel_comments') is null
+     or to_regclass('audit.channel_comment_revisions') is null then
+    raise exception 'Stopped: the channel comment tables are not all there (nothing was kept)';
+  end if;
+  if exists (select 1 from app.channel_comment_settings) or exists (select 1 from app.channel_comments) then
+    raise exception 'Stopped: comments must start off in every channel, with no comments (nothing was kept)';
+  end if;
+  if not has_table_privilege('bedo_runtime', 'app.channel_comment_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.channel_comment_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.channel_comment_settings', 'enabled', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.channel_comments', 'insert') or has_table_privilege('bedo_runtime', 'app.channel_comments', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.channel_comments', 'deleted_at', 'update')
+     or has_column_privilege('bedo_runtime', 'app.channel_comments', 'author_id', 'update')
+     or not has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'insert')
+     or has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'update') or has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'delete') then
+    raise exception 'Stopped: bedo_runtime privileges on the channel comment tables are not as expected (nothing was kept)';
+  end if;
+  if (select count(*) from pg_tables where schemaname = 'app' and tablename in ('group_topic_settings', 'group_topics')) <> 2 then
+    raise exception 'Stopped: the topic tables are not both there (nothing was kept)';
+  end if;
+  if exists (select 1 from app.group_topic_settings) or exists (select 1 from app.group_topics) then
+    raise exception 'Stopped: the topic tables must start empty, with topics off for every group (nothing was kept)';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'app' and table_name = 'messages' and column_name = 'topic_id'
+                 and is_nullable = 'YES' and column_default is null)
+     or not exists (select 1 from pg_indexes where schemaname = 'app' and tablename = 'messages' and indexname = 'messages_topic_seq_idx'
+                    and indexdef like '%WHERE (topic_id IS NOT NULL)%') then
+    raise exception 'Stopped: app.messages.topic_id (nullable, no default) or its partial index is missing (nothing was kept)';
+  end if;
+  if not has_table_privilege('bedo_runtime', 'app.group_topic_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.group_topic_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.group_topic_settings', 'enabled', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.group_topics', 'insert') or has_table_privilege('bedo_runtime', 'app.group_topics', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.group_topics', 'closed_at', 'update')
+     or has_column_privilege('bedo_runtime', 'app.group_topics', 'conversation_id', 'update')
+     or has_column_privilege('bedo_runtime', 'app.messages', 'topic_id', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on the topic tables are not as expected (nothing was kept)';
+  end if;
   insert into app_meta.schema_migrations (version, name, checksum) values
     ('20261006120000', 'd35_admin_password_owner_sql',
      'ce35f75dc26b4277f010930fb95a29994ff2a5bc2ccaa91970c3e6349bdb7961'),
@@ -1332,13 +1623,17 @@ begin
     ('20261021120000', 'store_review_account',
      '9f7c9cdf1c46aa6477b9932709c8c47127e6cba3d0d662b855cb9633ccb09ba4'),
     ('20261029120000', 'test_accounts',
-     'f0e84462b0c35b91f4f7ed52193cbab84f5764131b76b12710a1dec13356188b');
+     'f0e84462b0c35b91f4f7ed52193cbab84f5764131b76b12710a1dec13356188b'),
+    ('20261115120000', 'channel_comments',
+     '6bc0abf8a4d0cbc8749e5c6e522fd67d93ed5c3b5aa2e90bb451e1cd79083eb2'),
+    ('20261115130000', 'group_topics',
+     '3f164c5ba203231b07458266501618f82f92bec63d5519b1474cbbce022ff9ce');
 end
 $verify$;
 
 -- The result: every line should say "ok".
 select 'migrations recorded' as check_name,
-       case when (select count(*) from app_meta.schema_migrations) = 22 then 'ok' else 'NOT OK' end as result
+       case when (select count(*) from app_meta.schema_migrations) = 24 then 'ok' else 'NOT OK' end as result
 union all
 select 'bedo_api limits',
        case when (select setconfig from pg_db_role_setting s join pg_roles r on r.oid = s.setrole

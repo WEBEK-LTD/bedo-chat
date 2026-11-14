@@ -98,6 +98,17 @@ export const groupInfoSchema = z.object({
   pendingRequests: z.number().int().nonnegative().nullable(),
   /** Phase 6, channels: anyone in the academy can find and join it (false for groups). */
   public: z.boolean(),
+  /**
+   * Channels: whether subscribers may comment on posts (off until the owner or an admin who may change the channel
+   * info turns it on). Null for groups, and while the comments database update is not applied (the feature is not
+   * available yet).
+   */
+  commentsEnabled: z.boolean().nullable(),
+  /**
+   * D-63, groups only: the group shows topics (GET /v1/groups/{id}/topics). False for channels, for groups that did
+   * not turn them on, and while the database update for topics has not been run.
+   */
+  topicsEnabled: z.boolean(),
 });
 export type GroupInfo = z.infer<typeof groupInfoSchema>;
 
@@ -208,6 +219,60 @@ export const joinResponseSchema = z.object({ status: z.enum(['joined', 'requeste
 
 export const joinRequestSchema = z.object({ id: z.string(), user: publicUserSchema, requestedAt: timestamp });
 export const joinRequestsResponseSchema = z.object({ requests: z.array(joinRequestSchema) });
+
+// ------------------------------------------------------------------------------------------ Topics
+
+/**
+ * D-63: topics in groups (like forum topics). Groups only. The owner, or an admin with the right to change the group's
+ * info, turns them on or off and creates, renames, closes and reopens topics; topics are never deleted. "General" is
+ * not a topic: it is the messages without one (`topicId` null). Members post in open topics; in a closed topic only
+ * the owner and admins post. Unread counts, read positions, sync and search stay per group.
+ */
+export const TOPIC_RULES = {
+  titleMaxLength: 128,
+  /** Colours 0 to 6: the seven avatar tones (D-48). */
+  colors: 7,
+  /** Topics a group can have (open and closed). */
+  maxTopicsPerGroup: 100,
+} as const;
+
+export const topicTitleSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine((title) => characterCount(title) <= TOPIC_RULES.titleMaxLength, `at most ${TOPIC_RULES.titleMaxLength} characters`);
+export const topicColorSchema = z.number().int().min(0).max(TOPIC_RULES.colors - 1);
+
+export const groupTopicSchema = z.object({
+  id: z.string(),
+  chatId: z.string(),
+  title: z.string(),
+  color: z.number().int(),
+  closed: z.boolean(),
+  createdAt: timestamp,
+  /** The newest message in the topic (also one hidden from or deleted for the signed-in user); null when empty. */
+  lastMessageAt: timestamp.nullable(),
+  /** Messages posted in the topic (deleted ones included). */
+  messageCount: z.number().int().nonnegative(),
+});
+export type GroupTopic = z.infer<typeof groupTopicSchema>;
+
+export const groupTopicsResponseSchema = z.object({
+  /** False until the owner has run the database update for topics: then nothing about topics can change. */
+  available: z.boolean(),
+  enabled: z.boolean(),
+  /** The signed-in member may turn topics on or off and manage them (owner, or admin with change_info). */
+  canManage: z.boolean(),
+  /** Open topics first (oldest first), then closed ones. Empty while topics are off for members. */
+  topics: z.array(groupTopicSchema),
+});
+export type GroupTopicsResponse = z.infer<typeof groupTopicsResponseSchema>;
+
+export const topicSettingsBodySchema = z.object({ enabled: z.boolean() });
+export const createTopicBodySchema = z.object({ title: topicTitleSchema, color: topicColorSchema.default(0) });
+export const updateTopicBodySchema = z
+  .object({ title: topicTitleSchema.optional(), color: topicColorSchema.optional() })
+  .refine((body) => body.title !== undefined || body.color !== undefined, 'nothing to update');
 
 // ------------------------------------------------------------------------------------------ Polls
 

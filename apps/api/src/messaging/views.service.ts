@@ -4,11 +4,13 @@ import type { MessagesTable } from '@bedo/db';
 import type { Selectable } from 'kysely';
 import type { Executor } from '../audit/audit.service.js';
 import { AccountsService } from '../auth/accounts.service.js';
+import { ChannelCommentsFeature } from '../groups/channel-comments.feature.js';
 import { MentionsService } from '../groups/mentions.service.js';
 import { PollsService } from '../groups/polls.service.js';
 import { MediaViewsService } from '../media/media-views.service.js';
 import { PermissionService, type Relation } from './permissions.service.js';
 import { lastSeenToMinute, PresenceService } from './presence.service.js';
+import { TopicsSchemaService } from './topics-schema.service.js';
 
 export type MessageRow = Pick<
   Selectable<MessagesTable>,
@@ -28,7 +30,10 @@ export type MessageRow = Pick<
   | 'created_at'
   | 'edited_at'
   | 'deleted_at'
->;
+> & {
+  /** D-63: read only once the topics update exists (TopicsSchemaService); missing: General. */
+  topic_id?: string | null;
+};
 
 export const MESSAGE_COLUMNS = [
   'id',
@@ -48,6 +53,10 @@ export const MESSAGE_COLUMNS = [
   'edited_at',
   'deleted_at',
 ] as const;
+
+/** D-63: the message columns with the topic, once the database has it (see ViewsService.columns). */
+export const MESSAGE_COLUMNS_WITH_TOPIC = [...MESSAGE_COLUMNS, 'topic_id'] as const;
+export type MessageColumn = (typeof MESSAGE_COLUMNS_WITH_TOPIC)[number];
 
 /** Signed photo URLs last an hour; they are reused for 50 minutes. */
 const PHOTO_CACHE_MS = 50 * 60 * 1000;
@@ -71,7 +80,22 @@ export class ViewsService {
     @Inject(MediaViewsService) private readonly media: MediaViewsService,
     @Inject(PollsService) private readonly polls: PollsService,
     @Inject(MentionsService) private readonly mentions: MentionsService,
+    @Inject(ChannelCommentsFeature) private readonly comments: ChannelCommentsFeature,
+    @Inject(TopicsSchemaService) private readonly topicsSchema: TopicsSchemaService,
   ) {}
+
+  /**
+   * The columns every message query reads for its views: with the topic only once the database has it (D-63), so
+   * chats keep working before the owner runs the update for topics.
+   */
+  async columns(): Promise<readonly MessageColumn[]> {
+    return (await this.topicsSchema.available()) ? MESSAGE_COLUMNS_WITH_TOPIC : MESSAGE_COLUMNS;
+  }
+
+  /** The same, as `m.<column>` for queries that name the messages table `m`. */
+  async columnsOf(alias: 'm'): Promise<ReadonlyArray<`m.${MessageColumn}`>> {
+    return (await this.columns()).map((column) => `${alias}.${column}` as const);
+  }
 
   private async photoUrl(key: string | null): Promise<string | null> {
     if (!key) {
@@ -146,7 +170,10 @@ export class ViewsService {
     const maskedChats = new Set(chats.filter((chat) => chat.type === 'channel' && chat.role !== 'owner' && chat.role !== 'admin').map((chat) => chat.id));
     const groupSenders = [...new Set(rows.filter((row) => groupChats.has(row.conversation_id) && !maskedChats.has(row.conversation_id)).map((row) => row.sender_id))];
     const channelOriginIds = [...new Set(rows.map((row) => row.forward_from_chat_id).filter((id): id is string => id !== null))];
-    const [replies, hiddenReplies, origins, channelOrigins, attachments, stickers, reactions, polls, mentioned, senders] = await Promise.all([
+    // Comments on channel posts: one grouped count for the whole page, only when it holds channel posts.
+    const channelChats = new Set(chats.filter((chat) => chat.type === 'channel').map((chat) => chat.id));
+    const channelPosts = live.filter((row) => channelChats.has(row.conversation_id)).map((row) => ({ chatId: row.conversation_id, postId: row.id }));
+    const [replies, hiddenReplies, origins, channelOrigins, attachments, stickers, reactions, polls, mentioned, senders, commentCounts] = await Promise.all([
       replyIds.length > 0
         ? db
             .selectFrom('app.messages as r')
@@ -172,6 +199,7 @@ export class ViewsService {
       this.mentions.mentioning(db, viewerId, live.map((row) => row.id)),
       // O-02: in groups the sender's name and picture are shown on their messages (their own privacy still applies).
       groupSenders.length > 0 ? this.peers(db, viewerId, groupSenders) : Promise.resolve(new Map<string, Peer>()),
+      channelPosts.length > 0 ? this.comments.counts(db, channelPosts) : Promise.resolve(null),
     ]);
     const hidden = new Set(hiddenReplies.map((row) => row.message_id));
     const replyById = new Map(replies.map((reply) => [reply.id, reply]));
@@ -221,8 +249,10 @@ export class ViewsService {
           : row.forward_from_user_id
             ? (originById.get(row.forward_from_user_id) ?? null)
             : null,
+        topicId: row.topic_id ?? null,
         createdAt: new Date(row.created_at).toISOString(),
         editedAt: iso(row.edited_at),
+        commentCount: deleted ? null : (commentCounts?.get(row.id) ?? null),
       };
     });
   }

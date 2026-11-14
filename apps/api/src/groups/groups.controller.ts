@@ -1,7 +1,13 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Inject, Param, Patch, type PipeTransform, Post, Put, Query, UseGuards } from '@nestjs/common';
 import {
   addMembersBodySchema,
   addMembersResponseSchema,
+  channelCommentSchema,
+  channelCommentSettingsBodySchema,
+  channelCommentsQuerySchema,
+  channelCommentsResponseSchema,
+  createCommentBodySchema,
+  editCommentBodySchema,
   channelSearchQuerySchema,
   channelSearchResponseSchema,
   chatSchema,
@@ -37,6 +43,7 @@ import { ResponseSchema } from '../common/response-schema.js';
 import { ZodValidationPipe } from '../common/zod-validation.pipe.js';
 import { DatabaseService } from '../database/database.service.js';
 import { MessagesService } from '../messaging/messages.service.js';
+import { ChannelCommentsService } from './channel-comments.service.js';
 import { GroupsService } from './groups.service.js';
 import { PollsService } from './polls.service.js';
 import { UserPermissionsService } from './user-permissions.service.js';
@@ -313,5 +320,47 @@ export class MyPermissionsController {
   @ResponseSchema(userPermissionsSchema)
   get(@CurrentAuth() auth: AuthContext) {
     return this.permissions.forUser(this.database.db, auth.userId);
+  }
+}
+
+/**
+ * Comments on channel posts (migration 20261115120000): off in every channel until turned on. Every route answers 503
+ * FEATURE_UNAVAILABLE until the owner runs the database update.
+ */
+@Controller('v1')
+@UseGuards(UserAuthGuard)
+export class ChannelCommentsController {
+  constructor(@Inject(ChannelCommentsService) private readonly comments: ChannelCommentsService) {}
+
+  @Put('channels/:id/comments')
+  @ResponseSchema(chatSchema)
+  settings(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(channelCommentSettingsBodySchema)) body: z.infer<typeof channelCommentSettingsBodySchema>) {
+    return this.comments.setEnabled(auth, id, body.enabled);
+  }
+
+  @Get('messages/:id/comments')
+  @ResponseSchema(channelCommentsResponseSchema)
+  list(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string, @Query(new ZodValidationPipe(channelCommentsQuerySchema)) query: z.infer<typeof channelCommentsQuerySchema>) {
+    return this.comments.list(auth.userId, id, query.after);
+  }
+
+  @Post('messages/:id/comments')
+  @HttpCode(200)
+  @ResponseSchema(channelCommentSchema)
+  create(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(createCommentBodySchema)) body: z.infer<typeof createCommentBodySchema>) {
+    return this.comments.create(auth, id, body);
+  }
+
+  @Patch('comments/:id')
+  @ResponseSchema(channelCommentSchema)
+  edit(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(editCommentBodySchema)) body: z.infer<typeof editCommentBodySchema>) {
+    return this.comments.edit(auth, id, body.text);
+  }
+
+  @Delete('comments/:id')
+  @ResponseSchema(okResponseSchema)
+  async remove(@CurrentAuth() auth: AuthContext, @Param('id', new IdPipe()) id: string) {
+    await this.comments.delete(auth, id);
+    return OK;
   }
 }

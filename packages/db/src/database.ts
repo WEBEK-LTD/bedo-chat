@@ -383,6 +383,26 @@ export interface GroupSettingsTable {
   updated_at: Generated<Date>;
 }
 
+/** D-63: whether a group shows topics (no row: off). From update 20261115130000. */
+export interface GroupTopicSettingsTable {
+  conversation_id: string;
+  enabled: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Generated<Date>;
+}
+
+/** D-63: a group's topics (never deleted; closed instead). From update 20261115130000. */
+export interface GroupTopicsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  title: string;
+  color: Generated<number>;
+  created_by: string;
+  created_at: CreatedAt;
+  closed_at: Date | null;
+  closed_by: string | null;
+}
+
 export interface InviteLinksTable {
   id: Generated<string>;
   conversation_id: string;
@@ -477,6 +497,11 @@ export interface MessagesTable {
   /** Phase 10: removed for everyone by this admin (O-18: a reported message). */
   removed_by_admin: string | null;
   search_vector: ColumnType<string, never, never>;
+  /**
+   * D-63: the group topic it was posted in; null for General. Only from update 20261115130000: the API reads and
+   * writes it only once TopicsSchemaService has seen the column (it never names it before).
+   */
+  topic_id: string | null;
 }
 
 export interface FilesTable {
@@ -718,6 +743,46 @@ export interface MessageRevisionsTable {
   occurred_at: CreatedAt;
 }
 
+/** Comments on channel posts (migration 20261115120000): on or off per channel; no row means off. */
+export interface ChannelCommentSettingsTable {
+  conversation_id: string;
+  enabled: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Timestamp;
+}
+
+/** Comments on channel posts. Never removed: a deletion clears the text (kept in audit.channel_comment_revisions). */
+export interface ChannelCommentsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  post_message_id: string;
+  author_id: string;
+  client_id: string;
+  text: string | null;
+  reply_to_comment_id: string | null;
+  created_at: CreatedAt;
+  edited_at: Date | null;
+  deleted_at: Date | null;
+  deleted_by: string | null;
+}
+
+export interface ChannelCommentRevisionsTable {
+  id: Generated<string>;
+  comment_id: string;
+  conversation_id: string;
+  post_message_id: string;
+  author_id: string;
+  action: 'edited' | 'deleted';
+  previous_text: string;
+  new_text: string | null;
+  actor_type: ActorType;
+  actor_id: string | null;
+  session_id: string | null;
+  /** Set by a database trigger to the writing transaction. */
+  tx_id: ColumnType<string, never, never>;
+  occurred_at: CreatedAt;
+}
+
 /** Phase 6: messages sent by the API at a set time. */
 export interface ScheduledMessagesTable {
   id: Generated<string>;
@@ -810,6 +875,8 @@ export interface Database {
   'app.gif_files': GifFilesTable;
   'app.message_reactions': MessageReactionsTable;
   'app.group_settings': GroupSettingsTable;
+  'app.group_topic_settings': GroupTopicSettingsTable;
+  'app.group_topics': GroupTopicsTable;
   'app.invite_links': InviteLinksTable;
   'app.join_requests': JoinRequestsTable;
   'app.polls': PollsTable;
@@ -823,6 +890,9 @@ export interface Database {
   'app.push_keys': PushKeysTable;
   'app.user_permissions': UserPermissionsTable;
   'audit.membership_events': MembershipEventsTable;
+  'app.channel_comment_settings': ChannelCommentSettingsTable;
+  'app.channel_comments': ChannelCommentsTable;
+  'audit.channel_comment_revisions': ChannelCommentRevisionsTable;
 }
 
 export interface CreateDbOptions {

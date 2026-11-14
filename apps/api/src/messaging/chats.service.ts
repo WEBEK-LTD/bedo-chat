@@ -5,9 +5,11 @@ import { sql } from 'kysely';
 import type { Executor } from '../audit/audit.service.js';
 import { AppError } from '../common/app-error.js';
 import { DatabaseService } from '../database/database.service.js';
+import { ChannelCommentsFeature } from '../groups/channel-comments.feature.js';
 import { accessFromRow, PermissionService } from './permissions.service.js';
 import { UpdateLogService } from './update-log.service.js';
-import { MESSAGE_COLUMNS, ViewsService } from './views.service.js';
+import { TopicsService } from '../groups/topics.service.js';
+import { ViewsService } from './views.service.js';
 
 interface ChatRow {
   id: string;
@@ -51,6 +53,8 @@ export class ChatsService {
     @Inject(ViewsService) private readonly views: ViewsService,
     @Inject(UpdateLogService) private readonly updateLog: UpdateLogService,
     @Inject(AccountsService) private readonly accounts: AccountsService,
+    @Inject(ChannelCommentsFeature) private readonly comments: ChannelCommentsFeature,
+    @Inject(TopicsService) private readonly topics: TopicsService,
   ) {}
 
   /**
@@ -114,7 +118,7 @@ export class ChatsService {
     const lastIds = rows.map((row) => row.last_message_id).filter((id): id is string => id !== null);
     const [peers, lastRows, groups] = await Promise.all([
       this.views.peers(db, viewerId, rows.map((row) => row.peer_id).filter((id): id is string => id !== null)),
-      lastIds.length > 0 ? db.selectFrom('app.messages').select(MESSAGE_COLUMNS).where('id', 'in', lastIds).execute() : Promise.resolve([]),
+      lastIds.length > 0 ? this.views.columns().then((columns) => db.selectFrom('app.messages').select(columns).where('id', 'in', lastIds).execute()) : Promise.resolve([]),
       this.groupInfos(db, viewerId, rows.filter((row) => row.type !== 'private')),
     ]);
     const lastMessages = new Map((await this.views.messages(db, viewerId, lastRows)).map((message) => [message.id, message]));
@@ -157,6 +161,11 @@ export class ChatsService {
    */
   private async groupInfos(db: Executor, viewerId: string, rows: ChatRow[]): Promise<Map<string, GroupInfo>> {
     const result = new Map<string, GroupInfo>();
+    const channelIds = rows.filter((row) => row.type === 'channel').map((row) => row.id);
+    // Comments on channel posts: null while the feature is unavailable (its database update not applied).
+    const commentsOn = channelIds.length > 0 ? await this.comments.enabledChannels(db, channelIds) : null;
+    // D-63: one query for every group of the list (none before the update for topics is run).
+    const topicsOn = await this.topics.enabledChats(db, rows.filter((row) => row.type === 'group').map((row) => row.id));
     for (const row of rows) {
       const access = accessFromRow({ ...row, conversation_id: row.id, peer_id: null });
       const staff = access.role === 'owner' || access.role === 'admin';
@@ -189,6 +198,8 @@ export class ChatsService {
         settings: staff ? { defaultPermissions: [...access.defaultPermissions], hideMemberCount: access.hideMemberCount, hideMemberList: access.hideMemberList } : null,
         pendingRequests: pending,
         public: access.isPublic,
+        commentsEnabled: row.type === 'channel' && commentsOn ? commentsOn.has(row.id) : null,
+        topicsEnabled: topicsOn.has(row.id),
       });
     }
     return result;

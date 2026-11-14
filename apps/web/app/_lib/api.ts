@@ -21,7 +21,7 @@ export type SignedOutReason = 'signed_out' | 'account_deleted' | 'account_blocke
 const API_URL = API_BASE_PATH;
 
 /** Path prefixes of requests that need the signed-in user's access token (Phase 3 added messaging, D-36 realtime, Phase 4 files, stickers and GIFs). */
-const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync', '/v1/realtime', '/v1/files', '/v1/stickers', '/v1/gifs', '/v1/groups', '/v1/invites', '/v1/channels', '/v1/scheduled', '/v1/search'];
+const USER_ROUTES = ['/v1/me', '/v1/chats', '/v1/messages', '/v1/users', '/v1/folders', '/v1/reports', '/v1/sync', '/v1/realtime', '/v1/files', '/v1/stickers', '/v1/gifs', '/v1/groups', '/v1/invites', '/v1/channels', '/v1/scheduled', '/v1/search', '/v1/comments'];
 const isUserRoute = (path: string) => USER_ROUTES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`));
 
 /** Answers to a refresh that mean the session has really ended (anything else may be temporary). */
