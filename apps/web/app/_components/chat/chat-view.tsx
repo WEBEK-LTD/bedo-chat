@@ -319,7 +319,7 @@ export function ChatView({
   return (
     <section className="flex h-full min-h-0 flex-col" aria-label={channel ? `Channel ${chatTitle(chat)}` : group ? `Group ${chatTitle(chat)}` : `Chat with ${chatTitle(chat)}`}>
       {selected ? (
-        <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
+        <header className="bedo-glass relative z-20 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
           <button type="button" aria-label="Cancel selection" onClick={() => setSelected(null)} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink">
             <Icon name="close" />
           </button>
@@ -353,7 +353,7 @@ export function ChatView({
           </button>
         </header>
       ) : (
-        <header className="bedo-glass relative z-10 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
+        <header className="bedo-glass relative z-20 flex h-[var(--bedo-header-height)] shrink-0 items-center gap-2 border-b border-line px-2">
           <button type="button" aria-label="Back to chats" onClick={onBack} className="grid size-10 place-items-center rounded-full text-ink-secondary transition-colors hover:bg-surface-hover hover:text-ink md:hidden">
             <Icon name="arrow_back" />
           </button>

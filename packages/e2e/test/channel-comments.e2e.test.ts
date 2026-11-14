@@ -161,7 +161,8 @@ describe.runIf(enabled)('comments on channel posts in the browser', () => {
     await messages(owner).getByTestId('comments-button').getByText('1 comment').waitFor({ timeout: 10_000 });
     await messages(owner).getByTestId('comments-button').click();
     const panel = commentsPanel(owner);
-    const studentComment = panel.getByTestId('comment').filter({ hasText: 'Friday instead?' });
+    // The first one: a reply to it quotes its text too.
+    const studentComment = panel.getByTestId('comment').filter({ hasText: 'Friday instead?' }).first();
     await studentComment.waitFor();
     await studentComment.getByRole('button', { name: 'Actions for the comment by Rami Student' }).click();
     await owner.getByRole('menuitem', { name: 'Reply' }).click();

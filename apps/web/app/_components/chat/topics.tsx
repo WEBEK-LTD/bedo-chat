@@ -155,8 +155,16 @@ export function TopicsSection({ chat, onNotice }: { chat: Chat; onNotice: (messa
             aria-label="Topics"
             onChange={(event) => {
               const on = event.target.checked;
+              const previous = state;
+              // The switch moves at once; it moves back if the server refuses.
+              setState({ ...state, enabled: on });
               void run(async () => {
-                setState(cast<GroupTopicsResponse>(await updateGroupTopicSettings(chat.id, { enabled: on })));
+                try {
+                  setState(cast<GroupTopicsResponse>(await updateGroupTopicSettings(chat.id, { enabled: on })));
+                } catch (error) {
+                  setState(previous);
+                  throw error;
+                }
                 await store.refreshChat(chat.id);
               }, on ? 'Topics turned on.' : 'Topics turned off. Every topic and message is kept.');
             }}
