@@ -147,6 +147,8 @@ export const messageSchema = z.object({
   mentionsMe: z.boolean(),
   replyTo: replyPreviewSchema.nullable(),
   forwardedFrom: forwardOriginSchema.nullable(),
+  /** D-63: the group topic it was posted in; null for General (and everywhere outside groups with topics). */
+  topicId: z.string().nullable(),
   createdAt: timestamp,
   editedAt: timestamp.nullable(),
 });
@@ -166,6 +168,11 @@ export const sendMessageBodySchema = z
     gifId: z.string().regex(/^[A-Za-z0-9]{1,64}$/).optional(),
     /** Phase 5: a poll (groups only). */
     poll: pollInputSchema.optional(),
+    /**
+     * D-63: post into this topic of the group (topics on, the topic open or the sender an admin). Without it the message
+     * goes to General; a reply goes to the topic of the message it answers (and must not name another topic).
+     */
+    topicId: uuid.optional(),
   })
   .refine(
     (body) => [body.fileId, body.stickerId, body.gifId, body.poll].filter((value) => value !== undefined).length <= 1,
@@ -216,6 +223,11 @@ export const messageHistoryQuerySchema = z.object({
   before: seqParam.optional(),
   after: z.coerce.number().int().nonnegative().optional(),
   limit: z.coerce.number().int().min(1).max(MESSAGING_RULES.refetchPageSize).optional(),
+  /**
+   * D-63: only the messages of one topic of a group (its id), or of General (`general`: messages without a topic). The
+   * same seq paging. Refused while topics are not available; without it, every message of the chat.
+   */
+  topicId: z.union([uuid, z.literal('general')]).optional(),
 });
 
 export const chatSearchQuerySchema = z.object({

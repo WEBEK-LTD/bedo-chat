@@ -92,6 +92,8 @@ export const scheduledMessageSchema = z.object({
   fileName: z.string().nullable(),
   pollQuestion: z.string().nullable(),
   replyToId: z.string().nullable(),
+  /** D-63: the group topic it will be posted in; null for General. */
+  topicId: z.string().nullable(),
   createdAt: timestamp,
 });
 export type ScheduledMessage = z.infer<typeof scheduledMessageSchema>;
