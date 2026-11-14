@@ -182,6 +182,27 @@ const RESULT_CHECKS = {
      or not has_table_privilege('bedo_runtime', 'app.test_accounts', 'insert') or has_table_privilege('bedo_runtime', 'app.test_accounts', 'delete') then
     raise exception 'Stopped: bedo_runtime privileges on the test account tables are not as expected (nothing was kept)';
   end if;`,
+  '20261115130000': `
+  if (select count(*) from pg_tables where schemaname = 'app' and tablename in ('group_topic_settings', 'group_topics')) <> 2 then
+    raise exception 'Stopped: the topic tables are not both there (nothing was kept)';
+  end if;
+  if exists (select 1 from app.group_topic_settings) or exists (select 1 from app.group_topics) then
+    raise exception 'Stopped: the topic tables must start empty, with topics off for every group (nothing was kept)';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_schema = 'app' and table_name = 'messages' and column_name = 'topic_id'
+                 and is_nullable = 'YES' and column_default is null)
+     or not exists (select 1 from pg_indexes where schemaname = 'app' and tablename = 'messages' and indexname = 'messages_topic_seq_idx'
+                    and indexdef like '%WHERE (topic_id IS NOT NULL)%') then
+    raise exception 'Stopped: app.messages.topic_id (nullable, no default) or its partial index is missing (nothing was kept)';
+  end if;
+  if not has_table_privilege('bedo_runtime', 'app.group_topic_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.group_topic_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.group_topic_settings', 'enabled', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.group_topics', 'insert') or has_table_privilege('bedo_runtime', 'app.group_topics', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.group_topics', 'closed_at', 'update')
+     or has_column_privilege('bedo_runtime', 'app.group_topics', 'conversation_id', 'update')
+     or has_column_privilege('bedo_runtime', 'app.messages', 'topic_id', 'update') then
+    raise exception 'Stopped: bedo_runtime privileges on the topic tables are not as expected (nothing was kept)';
+  end if;`,
 };
 
 /**
