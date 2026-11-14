@@ -93,8 +93,12 @@ export function textParts(text: string): TextPart[] {
     const url = value ? linkTarget(value) : null;
     if (!url) continue;
     if (start > last) mentionParts(text.slice(last, start), parts);
-    const external = typeof window === 'undefined' || url.origin !== window.location.origin;
-    parts.push({ kind: 'link', value, href: url.href, external });
+    // Bedo Family's own links (also written www.bedochat.com or http://) open here, at this site's own address; every
+    // other site opens outside.
+    const here = typeof window === 'undefined' ? null : window.location;
+    const own = here !== null && (url.hostname === here.hostname || url.hostname === `www.${here.hostname}`);
+    const href = own ? `${here.origin}${url.pathname}${url.search}${url.hash}` : url.href;
+    parts.push({ kind: 'link', value, href, external: !own });
     last = start + value.length;
   }
   if (last < text.length) mentionParts(text.slice(last), parts);

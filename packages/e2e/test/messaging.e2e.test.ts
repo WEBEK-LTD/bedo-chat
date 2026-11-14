@@ -240,6 +240,18 @@ describe.runIf(enabled)('Phase 3 messaging in the browser (one site, Postgres, S
     // Only the addresses are links: the rest stays text, and the hashtag stays a search button.
     expect(await messages(anaPhone).getByRole('link').filter({ hasText: 'Notes at' }).count()).toBe(0);
     await messages(anaPhone).getByRole('button', { name: '#revision' }).waitFor();
+
+    // A link to Bedo Family itself opens here (same tab, same app), also when written with www.
+    const site = new URL(WEB_URL);
+    await composer(ben).fill(`Join us: ${site.protocol}//${site.host}/?join=abc and www.${site.host}/login`);
+    await composer(ben).press('Enter');
+    const own = messages(anaPhone).getByRole('link', { name: `${site.protocol}//${site.host}/?join=abc` });
+    await own.waitFor();
+    expect(await own.getAttribute('target')).toBeNull();
+    expect(await own.getAttribute('href')).toBe(`${site.origin}/?join=abc`);
+    const www = messages(anaPhone).getByRole('link', { name: `www.${site.host}/login` });
+    expect(await www.getAttribute('target')).toBeNull();
+    expect(await www.getAttribute('href')).toBe(`${site.origin}/login`);
   });
 
   it('never sends screenshot events from the web app (P-28), and raised no CSP violation', async () => {
