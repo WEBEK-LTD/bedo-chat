@@ -102,6 +102,11 @@ jobs:
     name: iPhone app
     runs-on: macos-15
     timeout-minutes: 45
+    # Each signed build removes the previous build's certificate and profile account-wide (apps/ios/ci/signing.py),
+    # so two iPhone builds (two branches, or a manual run) must never sign at the same time: they wait for each other.
+    concurrency:
+      group: apps-ios-signing
+      cancel-in-progress: false
     env:
       ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
       ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}

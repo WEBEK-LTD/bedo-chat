@@ -78,9 +78,10 @@ created, the Netlify site `bedochat`, and `bedochat.com` on Cloudflare pointing 
    is issued within minutes (*Verify DNS configuration* / *Provision certificate* if it asks).
 7. **Check**: `https://bedochat.com/api/health/ready` → `{"status":"ok", ...}` with the database `up`; then
    `https://bedochat.com/admin/login` → phone and password → set up the authenticator app → the dashboard opens.
-8. **Admin Dashboard**: OTP / WhatsApp → save the Waabek API key and send a test message; Academy phone list → add
-   the students' numbers (or import them).
-9. **On a phone**: open `https://bedochat.com` → sign in with a number from the list (the code comes by WhatsApp) →
+8. **Admin Dashboard**: OTP / WhatsApp → save the Waabek API key and send a test message; Academy phone list →
+   "Who can create an account" (D-47): *Anyone with a WhatsApp number* (the default) or *Only numbers on this list*;
+   with the list, add the students' numbers (or import them).
+9. **On a phone**: open `https://bedochat.com` → sign in (with the list: a number from it; the code comes by WhatsApp) →
    add the site to the Home Screen (iPhone: Safari → Share → **Add to Home Screen**; Android: Chrome → menu →
    **Install app**) → open it from the Home Screen → Settings → **Notifications** → **Turn on notifications**.
 
@@ -117,7 +118,9 @@ is not needed.
    service_role key. Turn **off** Project Settings → Realtime → **Allow public access**, so that no channel can be
    used without such a token. Turn off **Authentication → Allow new users to sign up**: Bedo Chat never uses
    Supabase Auth (D-08), and the baseline migration keeps the `anon` role out of the `app` schema.
-7. **Storage**: the Phase 2 migration created the private bucket `profile-photos`; nothing to do by hand.
+7. **Storage**: the migrations create the buckets, nothing to do by hand: `profile-photos` (private, Phase 2),
+   `chat-media` (private, Phase 4: photos, videos, files, voice messages and GIF copies) and `stickers` (public,
+   Phase 4).
 
 ## 2. Netlify site (one site, D-26, D-36)
 
@@ -398,7 +401,9 @@ Signing in needs the site (section 2) and migration `20261006180000` (section 1)
   **Send test message** reports that Waabek accepted it. Add your own number to the academy phone list.
 - `https://bedochat.com/` sends you to `/login`. Sign in with that number: the WhatsApp code arrives, a new
   account asks for a name, the chat interface opens at `/`, and a reload keeps you signed in.
-- A number not on the list gets the same "code sent" answer, and no WhatsApp message.
+- With "Who can create an account" set to *Only numbers on this list*: a number not on the list gets the same
+  "code sent" answer, and no WhatsApp message. With *Anyone with a WhatsApp number* (the default, D-47) it gets a
+  code and a new account.
 - Sign in on two browsers with two academy numbers, find the other by name and send a message: it appears on
   the other browser within a second or two, with typing shown while the other person writes. In the browser's
   developer tools, the Network panel shows the WebSocket to `wss://<ref>.supabase.co/realtime/v1/websocket`

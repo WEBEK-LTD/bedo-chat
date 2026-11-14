@@ -16,7 +16,11 @@ next-env.d.ts
 .env.*
 !.env.example
 
-# OS / editor
+# OS / editor / tools
+__pycache__/
+*.pyc
+# a local Redis dump (Bedo Chat uses no Redis, D-36)
+dump.rdb
 .DS_Store
 .idea/
 .vscode/

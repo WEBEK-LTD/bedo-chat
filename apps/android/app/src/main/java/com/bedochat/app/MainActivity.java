@@ -73,6 +73,7 @@ public final class MainActivity extends ComponentActivity {
     static final String EXTRA_URL = "com.bedochat.app.URL";
 
     private static final String HOST = BuildConfig.SITE_HOST;
+    private static final String STORAGE_HOST = BuildConfig.STORAGE_HOST;
     private static final String ORIGIN = "https://" + HOST;
 
     private FrameLayout root;
@@ -190,8 +191,11 @@ public final class MainActivity extends ComponentActivity {
         setIntent(intent);
         String url = target(intent);
         if (url == null) return;
-        if (loaded && webView.getUrl() != null && isSite(Uri.parse(webView.getUrl()))) {
-            // The open app switches chat itself, as with a notification on the website (no reload).
+        String path = Uri.parse(url).getPath();
+        boolean chatScreen = path == null || path.isEmpty() || "/".equals(path);
+        if (chatScreen && loaded && webView.getUrl() != null && isSite(Uri.parse(webView.getUrl()))) {
+            // The open app switches chat (or shows an invite link's preview) itself, as with a notification on the
+            // website (no reload). Any other page of the site (privacy policy, support) is opened.
             String detail = JSONObject.quote(url);
             webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('bedo-app-open', { detail: " + detail + " }))", null);
         } else {
@@ -393,8 +397,11 @@ public final class MainActivity extends ComponentActivity {
         if (!mainFrame) return true;
         String scheme = uri.getScheme();
         if (isSite(uri)) return true;
-        // Signed links to the site's file storage: the web view answers them with a download (DownloadListener).
-        return "https".equals(scheme) && uri.getHost() != null && uri.getHost().endsWith(".supabase.co");
+        // Signed links to the site's own file storage: the web view answers them with a download (DownloadListener).
+        // Only that project and its storage paths: a link to another Supabase project's page opens outside the app,
+        // where its address is shown, so it cannot pass for Bedo Family.
+        String path = uri.getPath();
+        return "https".equals(scheme) && STORAGE_HOST.equals(uri.getHost()) && path != null && path.startsWith("/storage/v1/");
     }
 
     private final class Client extends WebViewClient {
