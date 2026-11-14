@@ -12,6 +12,8 @@ export interface PendingMessage {
   chatId: string;
   text: string;
   replyToId: string | null;
+  /** D-63: the group topic it is posted in (missing in messages queued before topics: General). */
+  topicId?: string | null;
   createdAt: string;
   status: 'sending' | 'failed';
   /** Why it failed, when the server refused it (shown to the user). */

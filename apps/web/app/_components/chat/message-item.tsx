@@ -9,6 +9,7 @@ import { canPost, type DeliveryStatus, deliveryStatus, STATUS_LABEL, timeOf } fr
 import { PollView } from './groups';
 import { AttachmentView, ReactionChips, ReactionPicker, StickerView } from './media';
 import { ActionMenu, type MenuItem, useContextMenu } from './menu';
+import { TopicDot } from './topics';
 import { Avatar } from '../ui';
 
 const STATUS_ICON: Record<DeliveryStatus, IconName> = {
@@ -156,8 +157,19 @@ export function MessageItem({
   pinned,
   selecting,
   selected,
+  topic = null,
   ...actions
-}: { message: Message; chat: Chat; mine: boolean; showAvatar?: boolean; pinned: boolean; selecting: boolean; selected: boolean } & MessageActions) {
+}: {
+  message: Message;
+  chat: Chat;
+  mine: boolean;
+  showAvatar?: boolean;
+  pinned: boolean;
+  selecting: boolean;
+  selected: boolean;
+  /** D-63: in a group's All view with topics on, the topic the message is in (null: General or not shown). */
+  topic?: { title: string; color: number } | null;
+} & MessageActions) {
   const canAct = !message.deleted;
   const canSend = canPost(chat);
   const group = chat.group;
@@ -247,6 +259,12 @@ export function MessageItem({
         ) : null}
         {message.sender && !mine && !message.deleted ? <p className="text-[13px] font-semibold text-accent">{message.sender.displayName}</p> : null}
         {message.mentionsMe && !message.deleted ? <span className="sr-only">Mentions you</span> : null}
+        {topic ? (
+          <p className="flex items-center gap-1 text-xs text-ink-secondary">
+            <TopicDot color={topic.color} size={8} />
+            <span className="truncate">{topic.title}</span>
+          </p>
+        ) : null}
         {message.forwardedFrom ? (
           <p className="flex items-center gap-1 text-xs text-accent">
             <Icon name="forward" size={14} />

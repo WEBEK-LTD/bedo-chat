@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, use
 import { errorMessage } from '../../_lib/api';
 import { useMessaging, useMessagingStore } from '../../_lib/messaging/context';
 import { formatBytes, formatDuration, MEDIA_LABEL, prepareFile, type PreparedFile, prepareRecording, Recorder } from '../../_lib/messaging/media';
-import { presenceOf } from '../../_lib/messaging/store';
+import { presenceOf, topicKey, topicMessages, type TopicSelection } from '../../_lib/messaging/store';
 import { useSwipeBack } from '../../_lib/swipe-back';
 import { Avatar, Button } from '../ui';
 import { DeleteDialog, ForwardDialog, ReportDialog } from './dialogs';
@@ -17,6 +17,7 @@ import { ActionMenu, type MenuItem } from './menu';
 import { ExpressionPicker, MediaPanel, MediaViewer, PendingUploadItem } from './media';
 import { MessageItem, PendingItem } from './message-item';
 import { ScheduledPanel, ScheduleDialog, scheduleLabel } from './scheduled';
+import { TopicBar } from './topics';
 
 /** P-24: the device's share sheet where available, otherwise the text is copied. */
 export async function shareText(text: string): Promise<'shared' | 'copied'> {
@@ -57,9 +58,27 @@ export function ChatView({
 }) {
   const state = useMessaging();
   const store = useMessagingStore();
-  const messages = useMemo(() => state.messages[chat.id] ?? [], [state.messages, chat.id]);
-  const pending = state.outbox.filter((item) => item.chatId === chat.id);
-  const uploads = state.uploads.filter((item) => item.chatId === chat.id);
+  // D-63: in a group with topics on, the bar under the header picks All (the default: every message, as without
+  // topics), General or one topic; a topic's view is its own pages merged with the chat's messages in it.
+  const topicsOn = chat.type === 'group' && Boolean(chat.group?.topicsEnabled);
+  const [topicChoice, setTopicChoice] = useState<TopicSelection | null>(null);
+  const selection = topicsOn ? topicChoice : null;
+  const selectionKey = selection ? topicKey(chat.id, selection) : null;
+  const topics = useMemo(() => (topicsOn ? (state.topics[chat.id] ?? []) : []), [topicsOn, state.topics, chat.id]);
+  const currentTopic = selection?.kind === 'topic' ? topics.find((topic) => topic.id === selection.topicId) : undefined;
+  const postTopicId = selection?.kind === 'topic' ? selection.topicId : null;
+  const topicById = useMemo(() => new Map(topics.map((topic) => [topic.id, topic])), [topics]);
+  // topicMessages reads only the chat's messages and the topic pages, so only those recompute the list.
+  const allMessages = state.messages;
+  const topicPages = state.topicPages;
+  const messages = useMemo(
+    () => (selection ? topicMessages({ messages: allMessages, topicPages }, chat.id, selection) : (allMessages[chat.id] ?? [])),
+    [allMessages, topicPages, chat.id, selection],
+  );
+  const hasOlder = selectionKey ? Boolean(state.topicHasOlder[selectionKey]) : Boolean(state.hasOlder[chat.id]);
+  const inSelection = (item: { topicId?: string | null }) => !selection || (item.topicId ?? null) === postTopicId;
+  const pending = state.outbox.filter((item) => item.chatId === chat.id && inSelection(item));
+  const uploads = state.uploads.filter((item) => item.chatId === chat.id && inSelection(item));
   const [viewer, setViewer] = useState<Message | null>(null);
   const [mediaPanel, setMediaPanel] = useState(false);
   const pins = state.pins[chat.id] ?? [];
@@ -111,12 +130,24 @@ export function ChatView({
     setSelected(null);
     setSearchOpen(null);
     setPinIndex(0);
+    setTopicChoice(null);
     atBottom.current = true;
     void store.openChat(chat.id).catch((error: unknown) => onNotice(errorMessage(error)));
     // The peer's presence and privacy can change while the chat is open; refresh it every minute.
     const timer = setInterval(() => void store.refreshChat(chat.id).catch(() => undefined), 60_000);
     return () => clearInterval(timer);
   }, [chat.id, store, onNotice]);
+
+  // D-63: the group's topics while topics are on (sync fetches them again when they change).
+  useEffect(() => {
+    if (topicsOn) void store.loadTopics(chat.id).catch(() => undefined);
+  }, [topicsOn, chat.id, store]);
+  // D-63: a chosen topic (or General) loads its newest page with the server's topic filter.
+  useEffect(() => {
+    if (!selection) return;
+    atBottom.current = true;
+    void store.openTopic(chat.id, selection).catch((error: unknown) => onNotice(errorMessage(error)));
+  }, [selection, chat.id, store, onNotice]);
 
   // Mark as read while the newest messages are on screen and the page is visible (P-20).
   const lastSeq = chat.lastSeq;
@@ -152,7 +183,7 @@ export function ChatView({
   useLayoutEffect(() => {
     const element = scroller.current;
     if (element && atBottom.current) element.scrollTop = element.scrollHeight;
-  }, [count, chat.id]);
+  }, [count, chat.id, selectionKey]);
 
   const onScroll = useCallback(async () => {
     const element = scroller.current;
@@ -160,11 +191,13 @@ export function ChatView({
     atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 48;
     setShowJump(!atBottom.current);
     if (atBottom.current) void store.markRead(chat.id).catch(() => undefined);
-    if (element.scrollTop < 120 && !loadingOlder && state.hasOlder[chat.id]) {
+    if (element.scrollTop < 120 && !loadingOlder && hasOlder) {
       setLoadingOlder(true);
       const before = element.scrollHeight;
       try {
-        await store.loadOlder(chat.id);
+        // D-63: in a topic (or General), older pages come with the server's topic filter.
+        if (selection) await store.loadOlderInTopic(chat.id, selection);
+        else await store.loadOlder(chat.id);
         // Keep the same messages on screen after older ones are added above.
         requestAnimationFrame(() => {
           if (scroller.current) scroller.current.scrollTop += scroller.current.scrollHeight - before;
@@ -175,7 +208,7 @@ export function ChatView({
         setLoadingOlder(false);
       }
     }
-  }, [chat.id, store, loadingOlder, state.hasOlder]);
+  }, [chat.id, store, loadingOlder, hasOlder, selection]);
 
   function scrollToMessage(id: string) {
     const element = document.getElementById(`message-${id}`);
@@ -190,6 +223,12 @@ export function ChatView({
 
   /** Scrolls to a message, loading older pages until it is loaded (bounded); `seq` stops the search early. */
   async function jumpTo(message: { id: string; seq?: number }) {
+    // D-63: a message not shown in the chosen topic is looked for in All (a pin, a search result elsewhere).
+    if (selection && !scrollToMessage(message.id)) {
+      setTopicChoice(null);
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
     for (let page = 0; page < 40 && !scrollToMessage(message.id); page += 1) {
       const current = store.getSnapshot().messages[chat.id] ?? [];
       const reached = message.seq !== undefined && (current[0]?.seq ?? 0) <= message.seq;
@@ -333,6 +372,18 @@ export function ChatView({
         </header>
       )}
 
+      {topicsOn ? (
+        <TopicBar
+          topics={topics}
+          selected={selection}
+          onSelect={(next) => {
+            setMode({ kind: 'normal' });
+            setSelected(null);
+            setTopicChoice(next);
+          }}
+        />
+      ) : null}
+
       {currentPin ? (
         <button
           type="button"
@@ -370,7 +421,9 @@ export function ChatView({
 
       <div ref={scroller} onScroll={() => void onScroll()} className="bedo-wallpaper relative min-h-0 flex-1 overflow-y-auto px-3 py-2 md:px-8" aria-label="Messages" role="log">
         {loadingOlder ? <p className="mx-auto my-2 w-fit rounded-full bg-surface/80 px-3 py-0.5 text-xs text-ink-secondary">Loading…</p> : null}
-        {messages.length === 0 && pending.length === 0 && uploads.length === 0 ? <p className="mx-auto my-8 w-fit rounded-full bg-scrim/30 px-4 py-1.5 text-sm text-white">No messages yet.</p> : null}
+        {messages.length === 0 && pending.length === 0 && uploads.length === 0 ? (
+          <p className="mx-auto my-8 w-fit rounded-full bg-scrim/30 px-4 py-1.5 text-sm text-white">{selection ? 'No messages in this topic yet.' : 'No messages yet.'}</p>
+        ) : null}
         {messages.map((message, index) => {
           const previous = messages[index - 1];
           const next = messages[index + 1];
@@ -386,6 +439,7 @@ export function ChatView({
                 mine={message.senderId === myId}
                 showAvatar={lastOfRun}
                 pinned={pins.some((pin) => pin.id === message.id)}
+                topic={!selection && message.topicId ? (topicById.get(message.topicId) ?? null) : null}
                 selecting={selected !== null}
                 selected={selected?.includes(message.id) ?? false}
                 onToggleSelect={() => toggleSelect(message.id)}
@@ -448,6 +502,8 @@ export function ChatView({
         <Composer
           chat={chat}
           mode={mode}
+          topicId={postTopicId}
+          closedTopic={Boolean(currentTopic?.closed) && group?.role !== 'owner' && group?.role !== 'admin'}
           maySchedule={maySchedule}
           onModeChange={setMode}
           onNotice={onNotice}
@@ -505,7 +561,7 @@ export function ChatView({
       ) : null}
       {dialog?.kind === 'peer' && peer ? <PeerPanel chat={chat} onClose={() => setDialog(null)} onReport={() => setDialog({ kind: 'report', userId: peer.id })} onNotice={onNotice} /> : null}
       {dialog?.kind === 'info' && group ? <GroupInfoPanel chat={chat} myId={myId} onClose={() => setDialog(null)} onNotice={onNotice} onLeft={onBack} /> : null}
-      {dialog?.kind === 'poll' ? <PollComposer chatId={chat.id} onClose={() => setDialog(null)} onNotice={onNotice} /> : null}
+      {dialog?.kind === 'poll' ? <PollComposer chatId={chat.id} topicId={postTopicId} onClose={() => setDialog(null)} onNotice={onNotice} /> : null}
       {dialog?.kind === 'scheduled' ? <ScheduledPanel chat={chat} onClose={() => setDialog(null)} onNotice={onNotice} /> : null}
     </section>
   );
@@ -524,6 +580,8 @@ interface TrayItem {
 function Composer({
   chat,
   mode,
+  topicId,
+  closedTopic,
   maySchedule,
   onModeChange,
   onNotice,
@@ -532,6 +590,10 @@ function Composer({
 }: {
   chat: Chat;
   mode: Mode;
+  /** D-63: the topic everything sent here goes into; null: General (or, for a reply, the replied message's topic). */
+  topicId: string | null;
+  /** D-63: the chosen topic is closed and this member is not an admin. */
+  closedTopic: boolean;
   maySchedule: boolean;
   onModeChange: (mode: Mode) => void;
   onNotice: (message: string) => void;
@@ -639,6 +701,14 @@ function Composer({
       </div>
     );
   }
+  if (closedTopic) {
+    return (
+      <div className="flex shrink-0 items-center justify-center gap-2 border-t border-line px-4 py-3 text-sm text-ink-secondary" role="status">
+        <Icon name="lock" size={18} />
+        <span>This topic is closed. Only admins can post in it.</span>
+      </div>
+    );
+  }
   const mayAttach = canPost(chat, 'media');
   const mayPick = canPost(chat, 'sticker');
   const mayPoll = chat.type !== 'private' && canPost(chat, 'poll');
@@ -669,7 +739,7 @@ function Composer({
     if (tray.length > 0) {
       if (!trayReady || tooLong) return;
       const ready = tray.map((item) => item.prepared).filter((prepared): prepared is PreparedFile => prepared !== null);
-      ready.forEach((prepared, index) => store.sendFile(chat.id, prepared, index === 0 && trimmed ? trimmed : null, index === 0 ? replyToId : null));
+      ready.forEach((prepared, index) => store.sendFile(chat.id, prepared, index === 0 && trimmed ? trimmed : null, index === 0 ? replyToId : null, null, topicId));
       setTray([]);
       setText('');
       onModeChange({ kind: 'normal' });
@@ -689,7 +759,7 @@ function Composer({
       }
       return;
     }
-    store.send(chat.id, trimmed, replyToId);
+    store.send(chat.id, trimmed, replyToId, topicId);
     setText('');
     onModeChange({ kind: 'normal' });
   }
@@ -700,11 +770,11 @@ function Composer({
       if (tray.length > 0) {
         if (!trayReady || tooLong) return false;
         const ready = tray.map((item) => item.prepared).filter((prepared): prepared is PreparedFile => prepared !== null);
-        ready.forEach((prepared, index) => store.sendFile(chat.id, prepared, index === 0 && trimmed ? trimmed : null, index === 0 ? replyToId : null, sendAt));
+        ready.forEach((prepared, index) => store.sendFile(chat.id, prepared, index === 0 && trimmed ? trimmed : null, index === 0 ? replyToId : null, sendAt, topicId));
         setTray([]);
       } else {
         if (!trimmed || tooLong) return false;
-        await store.schedule(chat.id, trimmed, replyToId, sendAt);
+        await store.schedule(chat.id, trimmed, replyToId, sendAt, topicId);
       }
       setText('');
       onModeChange({ kind: 'normal' });
@@ -734,7 +804,7 @@ function Composer({
         onNotice('Hold on a little longer to record.');
         return;
       }
-      store.sendFile(chat.id, await prepareRecording(kind, result), null, replyToId);
+      store.sendFile(chat.id, await prepareRecording(kind, result), null, replyToId, null, topicId);
       onModeChange({ kind: 'normal' });
     } catch {
       onNotice('Nothing was recorded.');
@@ -838,12 +908,12 @@ function Composer({
           stickersAllowed={mayPick}
           onSticker={(sticker) => {
             setPicker(false);
-            void store.sendPicked(chat.id, { stickerId: sticker.id }, replyToId).catch((error: unknown) => onNotice(errorMessage(error)));
+            void store.sendPicked(chat.id, { stickerId: sticker.id }, replyToId, topicId).catch((error: unknown) => onNotice(errorMessage(error)));
             onModeChange({ kind: 'normal' });
           }}
           onGif={(gif) => {
             setPicker(false);
-            void store.sendPicked(chat.id, { gifId: gif.id }, replyToId).catch((error: unknown) => onNotice(errorMessage(error)));
+            void store.sendPicked(chat.id, { gifId: gif.id }, replyToId, topicId).catch((error: unknown) => onNotice(errorMessage(error)));
             onModeChange({ kind: 'normal' });
           }}
           onClose={() => setPicker(false)}

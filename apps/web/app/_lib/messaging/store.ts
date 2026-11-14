@@ -2,6 +2,7 @@ import {
   blockUser,
   cancelScheduledMessage,
   createChannel as apiCreateChannel,
+  listGroupTopics,
   getMyPermissions,
   joinChannel as apiJoinChannel,
   listScheduledMessages,
@@ -59,6 +60,7 @@ import {
   type RealtimeSignal,
   type ReportBody,
   type GlobalSearchResponse,
+  type GroupTopic,
   type ScheduledMessage,
   type SyncResponse,
   type UserPermissions,
@@ -78,6 +80,8 @@ export interface PendingUpload {
   previewUrl: string | null;
   caption: string | null;
   replyToId: string | null;
+  /** D-63: the group topic it is posted in (null: General). */
+  topicId: string | null;
   /** Phase 6: schedule it for this time instead of sending it now. */
   sendAt: string | null;
   /** 0 to 1 while uploading. */
@@ -109,6 +113,34 @@ export interface MessagingSnapshot {
   presence: Record<string, Presence | null>;
   /** Phase 6: the signed-in user's scheduled messages, per chat whose list was opened (not cached on the device). */
   scheduled: Record<string, ScheduledMessage[]>;
+  /** D-63: the topics of groups with topics on, per group opened on this page (not cached on the device). */
+  topics: Record<string, GroupTopic[]>;
+  /**
+   * D-63: pages loaded for one topic or General (key: topicKey), in memory only. The view of a topic is these merged with
+   * the chat's own messages of that topic (topicMessages()), so new and changed messages need no second copy.
+   */
+  topicPages: Record<string, Message[]>;
+  topicHasOlder: Record<string, boolean>;
+}
+
+/** D-63: one topic of a group, or its General (messages without a topic). */
+export type TopicSelection = { kind: 'general' } | { kind: 'topic'; topicId: string };
+
+export const topicKey = (chatId: string, topic: TopicSelection) => `${chatId}:${topic.kind === 'general' ? 'general' : topic.topicId}`;
+
+const inTopic = (message: Pick<Message, 'topicId'>, topic: TopicSelection) => (message.topicId ?? null) === (topic.kind === 'general' ? null : topic.topicId);
+
+/**
+ * D-63: the loaded messages of one topic (or General), oldest first: the pages loaded for it plus the chat's loaded
+ * messages in it (the chat's are newer or the same, so they win). Both end at the newest message, so this is
+ * contiguous too.
+ */
+export function topicMessages(snapshot: Pick<MessagingSnapshot, 'messages' | 'topicPages'>, chatId: string, topic: TopicSelection): Message[] {
+  const pages = snapshot.topicPages[topicKey(chatId, topic)] ?? [];
+  return mergeMessages(
+    pages,
+    (snapshot.messages[chatId] ?? []).filter((message) => inTopic(message, topic)),
+  );
 }
 
 const EMPTY: MessagingSnapshot = {
@@ -125,6 +157,9 @@ const EMPTY: MessagingSnapshot = {
   typingNames: {},
   presence: {},
   scheduled: {},
+  topics: {},
+  topicPages: {},
+  topicHasOlder: {},
 };
 
 const PAGE = MESSAGING_RULES.refetchPageSize;
@@ -143,6 +178,16 @@ function mergeMessages(current: readonly Message[], incoming: readonly Message[]
   const byId = new Map(current.map((message) => [message.id, message]));
   for (const message of incoming) byId.set(message.id, message);
   return [...byId.values()].sort((a, b) => a.seq - b.seq);
+}
+
+/** D-63: topic pages without the pages of one chat. */
+function withoutChat(pages: Record<string, Message[]>, chatId: string): Record<string, Message[]> {
+  return Object.fromEntries(Object.entries(pages).filter(([key]) => !key.startsWith(`${chatId}:`)));
+}
+
+/** D-63: topic pages of one chat without some messages (hidden for the signed-in user). */
+function withoutMessages(pages: Record<string, Message[]>, chatId: string, ids: ReadonlySet<string>): Record<string, Message[]> {
+  return Object.fromEntries(Object.entries(pages).map(([key, list]) => [key, key.startsWith(`${chatId}:`) ? list.filter((message) => !ids.has(message.id)) : list]));
 }
 
 export function presenceOf(snapshot: MessagingSnapshot, peer: Peer): Presence | null {
@@ -396,6 +441,8 @@ export class MessagingStore {
     for (const chat of result.chats) if (chat.peer) delete presence[chat.peer.id];
     const messages = { ...this.snapshot.messages };
     const pins = { ...this.snapshot.pins };
+    let topicPages = this.snapshot.topicPages;
+    const topicsChanged = new Set<string>();
     const byId = new Map(result.messages.map((message) => [message.id, message]));
     // New and changed messages go into the chats whose messages are loaded.
     const incoming = new Map<string, Message[]>();
@@ -417,11 +464,15 @@ export class MessagingStore {
         delete chats[chatId];
         delete messages[chatId];
         delete pins[chatId];
+        topicPages = withoutChat(topicPages, chatId);
         continue;
       }
+      // D-63: a group's info changed (topics turned on or off, a topic created, renamed, closed): fetched again when shown.
+      if (update.kind === 'chat.info' && this.snapshot.topics[chatId]) topicsChanged.add(chatId);
       if (update.kind === 'message.hidden' && update.messageId) {
         if (messages[chatId]) messages[chatId] = messages[chatId].filter((message) => message.id !== update.messageId);
         if (pins[chatId]) pins[chatId] = pins[chatId].filter((message) => message.id !== update.messageId);
+        topicPages = withoutMessages(topicPages, chatId, new Set([update.messageId]));
       }
       if (update.kind === 'message.new' && update.messageId) {
         const message = byId.get(update.messageId);
@@ -452,9 +503,11 @@ export class MessagingStore {
       presence,
       outbox,
       typing,
+      topicPages,
       ...(result.folders ? { folders: result.folders } : {}),
     });
     for (const [chatId, seq] of deliveredUpTo) this.acknowledge(chatId, seq);
+    for (const chatId of topicsChanged) void this.loadTopics(chatId).catch(() => undefined);
     for (const chatId of scheduledChanged) if (this.snapshot.scheduled[chatId]) void this.loadScheduled(chatId).catch(() => undefined);
     return result.hasMore;
   }
@@ -574,13 +627,14 @@ export class MessagingStore {
 
   // ------------------------------------------------------------------------------ sending
 
-  /** Queues a message (status "sending") and sends it; a retry reuses its client id. */
-  send(chatId: string, text: string, replyToId: string | null): void {
+  /** Queues a message (status "sending") and sends it; a retry reuses its client id. D-63: optionally into a topic. */
+  send(chatId: string, text: string, replyToId: string | null, topicId: string | null = null): void {
     const item: PendingMessage = {
       clientId: crypto.randomUUID(),
       chatId,
       text,
       replyToId,
+      ...(topicId ? { topicId } : {}),
       createdAt: new Date().toISOString(),
       status: 'sending',
       error: null,
@@ -619,7 +673,12 @@ export class MessagingStore {
     this.sending.add(item.clientId);
     try {
       const message = cast<Message>(
-        await sendMessage(item.chatId, { clientId: item.clientId, text: item.text, ...(item.replyToId ? { replyToId: item.replyToId } : {}) }),
+        await sendMessage(item.chatId, {
+          clientId: item.clientId,
+          text: item.text,
+          ...(item.replyToId ? { replyToId: item.replyToId } : {}),
+          ...(item.topicId ? { topicId: item.topicId } : {}),
+        }),
       );
       const messages = this.snapshot.messages[item.chatId];
       this.set({
@@ -664,7 +723,7 @@ export class MessagingStore {
     delete chats[chatId];
     delete messages[chatId];
     delete pins[chatId];
-    this.set({ chats, messages, pins });
+    this.set({ chats, messages, pins, topicPages: withoutChat(this.snapshot.topicPages, chatId) });
   }
 
   async edit(messageId: string, text: string): Promise<void> {
@@ -682,6 +741,8 @@ export class MessagingStore {
     this.set({
       messages: { ...this.snapshot.messages, [chatId]: next },
       pins: { ...this.snapshot.pins, [chatId]: (this.snapshot.pins[chatId] ?? []).filter((message) => !ids.has(message.id)) },
+      // D-63: a message hidden for me also leaves the topic pages (one deleted for both comes back through sync).
+      ...(scope === 'me' ? { topicPages: withoutMessages(this.snapshot.topicPages, chatId, ids) } : {}),
     });
     void this.refreshChat(chatId).catch(() => undefined);
   }
@@ -722,7 +783,7 @@ export class MessagingStore {
   // ------------------------------------------------------------------------------ media (Phase 4)
 
   /** Uploads a prepared file with progress, then sends it (with an optional caption and reply). */
-  sendFile(chatId: string, file: PreparedFile, caption: string | null, replyToId: string | null, sendAt: string | null = null): void {
+  sendFile(chatId: string, file: PreparedFile, caption: string | null, replyToId: string | null, sendAt: string | null = null, topicId: string | null = null): void {
     const item: PendingUpload = {
       clientId: crypto.randomUUID(),
       chatId,
@@ -732,6 +793,7 @@ export class MessagingStore {
       previewUrl: file.previewUrl,
       caption,
       replyToId,
+      topicId,
       sendAt,
       progress: 0,
       status: 'uploading',
@@ -796,7 +858,13 @@ export class MessagingStore {
         // Phase 6: the file is checked now and sent by the server at the chosen time.
         await scheduleMessage(item.chatId, {
           sendAt: item.sendAt,
-          message: { clientId, fileId: job.fileId!, ...(item.caption ? { text: item.caption } : {}), ...(item.replyToId ? { replyToId: item.replyToId } : {}) },
+          message: {
+            clientId,
+            fileId: job.fileId!,
+            ...(item.caption ? { text: item.caption } : {}),
+            ...(item.replyToId ? { replyToId: item.replyToId } : {}),
+            ...(item.topicId ? { topicId: item.topicId } : {}),
+          },
         });
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
         this.uploadJobs.delete(clientId);
@@ -810,6 +878,7 @@ export class MessagingStore {
           fileId: job.fileId!,
           ...(item.caption ? { text: item.caption } : {}),
           ...(item.replyToId ? { replyToId: item.replyToId } : {}),
+          ...(item.topicId ? { topicId: item.topicId } : {}),
         }),
       );
       if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
@@ -834,8 +903,8 @@ export class MessagingStore {
   }
 
   /** Sends a sticker or a GIF (nothing to upload). */
-  async sendPicked(chatId: string, pick: { stickerId: string } | { gifId: string }, replyToId: string | null): Promise<void> {
-    const message = cast<Message>(await sendMessage(chatId, { clientId: crypto.randomUUID(), ...pick, ...(replyToId ? { replyToId } : {}) }));
+  async sendPicked(chatId: string, pick: { stickerId: string } | { gifId: string }, replyToId: string | null, topicId: string | null = null): Promise<void> {
+    const message = cast<Message>(await sendMessage(chatId, { clientId: crypto.randomUUID(), ...pick, ...(replyToId ? { replyToId } : {}), ...(topicId ? { topicId } : {}) }));
     this.replaceMessage(message);
     void this.refreshChat(chatId).catch(() => undefined);
   }
@@ -916,8 +985,8 @@ export class MessagingStore {
   }
 
   /** Schedules a text message (files go through sendFile with a time). */
-  async schedule(chatId: string, text: string, replyToId: string | null, sendAt: string): Promise<void> {
-    await scheduleMessage(chatId, { sendAt, message: { clientId: crypto.randomUUID(), text, ...(replyToId ? { replyToId } : {}) } });
+  async schedule(chatId: string, text: string, replyToId: string | null, sendAt: string, topicId: string | null = null): Promise<void> {
+    await scheduleMessage(chatId, { sendAt, message: { clientId: crypto.randomUUID(), text, ...(replyToId ? { replyToId } : {}), ...(topicId ? { topicId } : {}) } });
     await Promise.all([this.loadScheduled(chatId), this.refreshChat(chatId)]);
   }
 
@@ -934,6 +1003,59 @@ export class MessagingStore {
   async sendScheduledNow(item: ScheduledMessage): Promise<void> {
     this.replaceMessage(cast<Message>(await sendScheduledMessageNow(item.id)));
     await Promise.all([this.loadScheduled(item.chatId), this.refreshChat(item.chatId)]);
+  }
+
+  // ------------------------------------------------------------------------------ topics (D-63)
+
+  /** A group's topics (topics on), kept in memory while the page is open; sync fetches them again on changes. */
+  async loadTopics(chatId: string): Promise<GroupTopic[]> {
+    const result = await listGroupTopics(chatId);
+    const topics = result.available && result.enabled ? cast<GroupTopic[]>(result.topics) : [];
+    this.setTopics(chatId, topics);
+    return topics;
+  }
+
+  /** The topic list as the API just returned it (after a change in the group info). */
+  setTopics(chatId: string, topics: GroupTopic[]): void {
+    this.set({ topics: { ...this.snapshot.topics, [chatId]: topics } }, false);
+  }
+
+  private topicPage(chatId: string, topic: TopicSelection, before?: number): Promise<Message[]> {
+    const topicId = topic.kind === 'general' ? 'general' : topic.topicId;
+    return listMessages(chatId, { limit: PAGE, topicId, ...(before ? { before } : {}) }).then((result) => cast<Message[]>(result.messages));
+  }
+
+  private storeTopicPage(chatId: string, topic: TopicSelection, page: Message[], replace = false, hasOlder = page.length === PAGE): void {
+    const key = topicKey(chatId, topic);
+    this.set(
+      {
+        topicPages: { ...this.snapshot.topicPages, [key]: mergeMessages(replace ? [] : (this.snapshot.topicPages[key] ?? []), page) },
+        topicHasOlder: { ...this.snapshot.topicHasOlder, [key]: hasOlder },
+      },
+      false,
+    );
+  }
+
+  /** Loads the newest page of one topic (or General) of a group, when it is chosen (pages kept from before stay). */
+  async openTopic(chatId: string, topic: TopicSelection): Promise<void> {
+    const key = topicKey(chatId, topic);
+    const page = await this.topicPage(chatId, topic);
+    const kept = this.snapshot.topicPages[key] ?? [];
+    const newestKept = kept.length > 0 ? kept[kept.length - 1]!.seq : null;
+    const oldestNew = page.length > 0 ? Math.min(...page.map((message) => message.seq)) : null;
+    // As for chats: more new messages than one page since the kept ones, so start again from the newest page.
+    const gap = newestKept !== null && oldestNew !== null && oldestNew > newestKept + 1 && page.length === PAGE;
+    const full = page.length === PAGE;
+    this.storeTopicPage(chatId, topic, page, gap, kept.length > 0 && !gap ? (this.snapshot.topicHasOlder[key] ?? full) : full);
+  }
+
+  /** Older messages of one topic (or General), with the server's topic filter and the same seq cursor. */
+  async loadOlderInTopic(chatId: string, topic: TopicSelection): Promise<number> {
+    const first = topicMessages(this.snapshot, chatId, topic)[0];
+    if (!first || !this.snapshot.topicHasOlder[topicKey(chatId, topic)]) return 0;
+    const page = await this.topicPage(chatId, topic, first.seq);
+    this.storeTopicPage(chatId, topic, page);
+    return page.length;
   }
 
   // ------------------------------------------------------------------------------ safety, folders
