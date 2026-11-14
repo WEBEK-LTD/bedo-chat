@@ -718,6 +718,46 @@ export interface MessageRevisionsTable {
   occurred_at: CreatedAt;
 }
 
+/** Comments on channel posts (migration 20261115120000): on or off per channel; no row means off. */
+export interface ChannelCommentSettingsTable {
+  conversation_id: string;
+  enabled: Generated<boolean>;
+  updated_by: string | null;
+  updated_at: Timestamp;
+}
+
+/** Comments on channel posts. Never removed: a deletion clears the text (kept in audit.channel_comment_revisions). */
+export interface ChannelCommentsTable {
+  id: Generated<string>;
+  conversation_id: string;
+  post_message_id: string;
+  author_id: string;
+  client_id: string;
+  text: string | null;
+  reply_to_comment_id: string | null;
+  created_at: CreatedAt;
+  edited_at: Date | null;
+  deleted_at: Date | null;
+  deleted_by: string | null;
+}
+
+export interface ChannelCommentRevisionsTable {
+  id: Generated<string>;
+  comment_id: string;
+  conversation_id: string;
+  post_message_id: string;
+  author_id: string;
+  action: 'edited' | 'deleted';
+  previous_text: string;
+  new_text: string | null;
+  actor_type: ActorType;
+  actor_id: string | null;
+  session_id: string | null;
+  /** Set by a database trigger to the writing transaction. */
+  tx_id: ColumnType<string, never, never>;
+  occurred_at: CreatedAt;
+}
+
 /** Phase 6: messages sent by the API at a set time. */
 export interface ScheduledMessagesTable {
   id: Generated<string>;
@@ -823,6 +863,9 @@ export interface Database {
   'app.push_keys': PushKeysTable;
   'app.user_permissions': UserPermissionsTable;
   'audit.membership_events': MembershipEventsTable;
+  'app.channel_comment_settings': ChannelCommentSettingsTable;
+  'app.channel_comments': ChannelCommentsTable;
+  'audit.channel_comment_revisions': ChannelCommentRevisionsTable;
 }
 
 export interface CreateDbOptions {

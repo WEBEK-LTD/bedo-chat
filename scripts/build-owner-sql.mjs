@@ -182,6 +182,23 @@ const RESULT_CHECKS = {
      or not has_table_privilege('bedo_runtime', 'app.test_accounts', 'insert') or has_table_privilege('bedo_runtime', 'app.test_accounts', 'delete') then
     raise exception 'Stopped: bedo_runtime privileges on the test account tables are not as expected (nothing was kept)';
   end if;`,
+  '20261115120000': `
+  if to_regclass('app.channel_comment_settings') is null or to_regclass('app.channel_comments') is null
+     or to_regclass('audit.channel_comment_revisions') is null then
+    raise exception 'Stopped: the channel comment tables are not all there (nothing was kept)';
+  end if;
+  if exists (select 1 from app.channel_comment_settings) or exists (select 1 from app.channel_comments) then
+    raise exception 'Stopped: comments must start off in every channel, with no comments (nothing was kept)';
+  end if;
+  if not has_table_privilege('bedo_runtime', 'app.channel_comment_settings', 'insert') or has_table_privilege('bedo_runtime', 'app.channel_comment_settings', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.channel_comment_settings', 'enabled', 'update')
+     or not has_table_privilege('bedo_runtime', 'app.channel_comments', 'insert') or has_table_privilege('bedo_runtime', 'app.channel_comments', 'delete')
+     or not has_column_privilege('bedo_runtime', 'app.channel_comments', 'deleted_at', 'update')
+     or has_column_privilege('bedo_runtime', 'app.channel_comments', 'author_id', 'update')
+     or not has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'insert')
+     or has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'update') or has_table_privilege('bedo_runtime', 'audit.channel_comment_revisions', 'delete') then
+    raise exception 'Stopped: bedo_runtime privileges on the channel comment tables are not as expected (nothing was kept)';
+  end if;`,
 };
 
 /**
