@@ -194,6 +194,26 @@ export class AdminConsoleService {
     };
   }
 
+  /**
+   * A Super Admin corrects a user's name. Like the user's own change (ProfileService.update) the old name goes to the
+   * identity history, here with the admin as the actor, and the admin history keeps the reason. Nothing is sent to the
+   * user or anyone else (no push, no update-log rows): their devices show the new name the next time they load it, and
+   * the user never sees which admin changed it.
+   */
+  async setUserName(admin: AdminContext, userId: string, name: string, reason: string, info: RequestInfo): Promise<AdminUserDetail> {
+    if (admin.role !== 'super_admin') throw new AppError(HttpStatus.FORBIDDEN, 'FORBIDDEN');
+    await this.db.transaction().execute(async (trx) => {
+      const user = await trx.selectFrom('app.users').select(['id', 'status', 'name']).where('id', '=', userId).forUpdate().executeTakeFirst();
+      if (!user) throw notFound();
+      if (user.status === 'deleted') throw new AppError(HttpStatus.CONFLICT, 'CONFLICT');
+      if (user.name === name) return;
+      await trx.updateTable('app.users').set({ name }).where('id', '=', userId).execute();
+      await this.audit.identity(trx, { userId, field: 'name', oldValue: user.name, newValue: name, actor: { type: 'admin', id: admin.adminId } });
+      await this.audit.admin(trx, { adminId: admin.adminId, action: 'user.rename', targetType: 'user', targetId: userId, ip: info.ip, userAgent: info.userAgent, metadata: { reason } });
+    });
+    return this.user(userId);
+  }
+
   /** Suspend, ban, reactivate, end sessions or delete (who may do which is checked by the controller's roles). */
   async userAction(admin: AdminContext, userId: string, action: 'suspend' | 'ban' | 'reactivate' | 'end_sessions' | 'delete', reason: string, info: RequestInfo): Promise<AdminUserDetail> {
     // Moderators suspend, reactivate suspended accounts and end sessions; banning and deleting are for Super Admins.

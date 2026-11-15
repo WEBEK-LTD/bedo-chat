@@ -4424,6 +4424,19 @@ export interface AdminUserActionBody {
   reason: string;
 }
 
+export interface AdminUserNameBody {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  name: string;
+  /**
+     * @minLength 3
+     * @maxLength 500
+     */
+  reason: string;
+}
+
 export type AdminChatsResponseChatsItemType = typeof AdminChatsResponseChatsItemType[keyof typeof AdminChatsResponseChatsItemType];
 
 
@@ -10592,6 +10605,45 @@ return apiFetch<AdminUserDetail>(getAdminUserActionUrl(id),
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
     body: JSON.stringify(adminUserActionBody)
+  }
+);}
+
+
+
+export const getAdminSetUserNameUrl = (id: string,) => {
+
+
+
+
+  return `/v1/admin/users/${id}/name`
+}
+
+/**
+ * @summary Correct a user's name; kept in the identity history (Super Admin)
+ */
+export const adminSetUserName = async (id: string,
+    adminUserNameBody: AdminUserNameBody, options?: Parameters<typeof apiFetch>[1]): Promise<AdminUserDetail> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiFetch<AdminUserDetail>(getAdminSetUserNameUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminUserNameBody)
   }
 );}
 

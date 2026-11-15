@@ -1,11 +1,11 @@
 'use client';
 
-import { adminGetUser, adminListUsers, adminUserAction, type AdminUserDetail, type AdminUsersResponseUsersItem as UserItem } from '@bedo/api-client';
-import { USER_STATUSES } from '@bedo/contracts';
+import { adminGetUser, adminListUsers, adminSetUserName, adminUserAction, type AdminUserDetail, type AdminUsersResponseUsersItem as UserItem } from '@bedo/api-client';
+import { ADMIN_CONSOLE_RULES, PROFILE_RULES, USER_STATUSES } from '@bedo/contracts';
 import { Icon } from '@bedo/ui';
 import { type FormEvent, useState } from 'react';
-import { formatDateTime } from '../_lib/api';
-import { Button, FormError, Notice } from './ui';
+import { errorMessage, formatDateTime } from '../_lib/api';
+import { Button, FormError, Notice, TextArea, TextField } from './ui';
 import { BackButton, Field, ReasonAction, SectionTitle, StatusBadge, STATUS_LABELS, Tabs, useLoader } from './console-ui';
 
 type Filter = 'all' | (typeof USER_STATUSES)[number];
@@ -120,6 +120,16 @@ function UserDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
   const { data: detail, setData, error } = useLoader(() => adminGetUser(id), onSessionError, [id]);
   const [done, setDone] = useState<string | null>(null);
 
+  async function rename(name: string, reason: string) {
+    try {
+      setData(await adminSetUserName(id, { name, reason }));
+      setDone('The name is changed. The user is not notified.');
+    } catch (caught) {
+      onSessionError(caught);
+      throw caught;
+    }
+  }
+
   async function act(action: 'suspend' | 'ban' | 'reactivate' | 'end_sessions' | 'delete', reason: string, message: string) {
     try {
       setData(await adminUserAction(id, { action, reason }));
@@ -206,10 +216,79 @@ function UserDetail({ id, isSuperAdmin, onBack, onSessionError }: { id: string; 
             )}
           </section>
 
+          {detail.user.status !== 'deleted' && isSuperAdmin ? <EditName current={detail.user.name ?? ''} onSave={rename} /> : null}
           {detail.user.status !== 'deleted' ? <UserActions detail={detail} isSuperAdmin={isSuperAdmin} act={act} /> : null}
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Super Admins correct a user's name (for example to the exact name the academy has). The old name stays in the
+ * identity history; the user gets no notification and never sees which admin changed it.
+ */
+function EditName({ current, onSave }: { current: string; onSave: (name: string, reason: string) => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(current);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) {
+    return (
+      <section className="flex flex-col gap-2 border-t border-line pt-6" aria-label="Name">
+        <h2 className="font-semibold">Name</h2>
+        <div>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setName(current);
+              setReason('');
+              setError(null);
+              setOpen(true);
+            }}
+          >
+            Edit name
+          </Button>
+        </div>
+      </section>
+    );
+  }
+  const trimmed = name.trim();
+  const ready = trimmed.length > 0 && trimmed !== current && reason.trim().length >= ADMIN_CONSOLE_RULES.reasonMinLength;
+  return (
+    <section className="flex flex-col gap-3 border-t border-line pt-6" aria-label="Name">
+      <h2 className="font-semibold">Name</h2>
+      <Notice tone="info">
+        <p>The user sees the new name the next time their app loads it. They are not notified and do not see who changed it. The old name stays in the history.</p>
+      </Notice>
+      <TextField id="edit-name" label="New name" maxLength={PROFILE_RULES.nameMaxLength} value={name} onChange={(event) => setName(event.target.value)} />
+      <TextArea id="edit-name-reason" label="Reason (kept in the admin history)" maxLength={ADMIN_CONSOLE_RULES.reasonMaxLength} value={reason} onChange={(event) => setReason(event.target.value)} />
+      <FormError message={error} />
+      <div className="flex gap-2">
+        <Button
+          busy={busy}
+          disabled={!ready}
+          onClick={async () => {
+            setBusy(true);
+            setError(null);
+            try {
+              await onSave(trimmed, reason.trim());
+              setOpen(false);
+            } catch (caught) {
+              setError(errorMessage(caught));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Save name
+        </Button>
+        <Button variant="secondary" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 

@@ -9351,6 +9351,25 @@
           "reason"
         ]
       },
+      "AdminUserNameBody": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "name",
+          "reason"
+        ]
+      },
       "AdminChatsResponse": {
         "type": "object",
         "properties": {
@@ -20248,6 +20267,74 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/AdminUserActionBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserDetail"
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Rejected request (see error.code).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "5XX": {
+            "description": "Unexpected error or a dependency is unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/users/{id}/name": {
+      "put": {
+        "operationId": "adminSetUserName",
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Correct a user's name; kept in the identity history (Super Admin)",
+        "security": [
+          {
+            "adminSession": [],
+            "csrfHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserNameBody"
               }
             }
           }
