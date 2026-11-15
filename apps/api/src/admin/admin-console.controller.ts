@@ -33,6 +33,7 @@ import {
   adminUpdateChatBodySchema,
   adminUpdateChatMemberBodySchema,
   adminUserActionBodySchema,
+  adminUserNameBodySchema,
   adminUserDetailSchema,
   adminUsersQuerySchema,
   adminUsersResponseSchema,
@@ -202,6 +203,14 @@ export class AdminConsoleController {
   @ResponseSchema(adminUserDetailSchema)
   userAction(@CurrentAdmin() admin: AdminContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(adminUserActionBodySchema)) body: z.infer<typeof adminUserActionBodySchema>, @Req() request: FastifyRequest) {
     return this.console.userAction(admin, id, body.action, body.reason, requestInfo(request));
+  }
+
+  /** Corrects a user's name (Super Admins): recorded in the identity and admin histories, no notification. */
+  @Put('users/:id/name')
+  @AdminRoles('super_admin')
+  @ResponseSchema(adminUserDetailSchema)
+  setUserName(@CurrentAdmin() admin: AdminContext, @Param('id', new IdPipe()) id: string, @Body(new ZodValidationPipe(adminUserNameBodySchema)) body: z.infer<typeof adminUserNameBodySchema>, @Req() request: FastifyRequest) {
+    return this.console.setUserName(admin, id, body.name, body.reason, requestInfo(request));
   }
 
   @Get('reports')

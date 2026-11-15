@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ADMIN_RIGHTS, groupDescriptionSchema, groupTitleSchema, MEMBER_PERMISSIONS, userPermissionsSchema } from './groups.js';
+import { nameSchema } from './me.js';
 
 /**
  * Phase 10: the rest of the Admin Dashboard (D-44; spec §22). Users, groups and channels, reported messages,
@@ -61,6 +62,12 @@ export type AdminUserDetail = z.infer<typeof adminUserDetailSchema>;
  */
 export const ADMIN_USER_ACTIONS = ['suspend', 'ban', 'reactivate', 'end_sessions', 'delete'] as const;
 export const adminUserActionBodySchema = z.object({ action: z.enum(ADMIN_USER_ACTIONS), reason: reasonSchema });
+
+/**
+ * A Super Admin corrects a user's name (2026-11-15). The old name stays in the identity history with the admin as the
+ * actor, and the change in the admin history with the reason; the user is not notified and never sees who changed it.
+ */
+export const adminUserNameBodySchema = z.object({ name: nameSchema, reason: reasonSchema });
 
 // ------------------------------------------------------------------------------------ groups and channels
 

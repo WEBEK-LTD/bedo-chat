@@ -176,6 +176,30 @@ describe.runIf(enabled)('Phase 10 Admin Dashboard (real Postgres, runtime role)'
     expect((await moderator.get('/v1/admin/reports?status=decided')).body.reports.some((item: { id: string }) => item.id === report.id)).toBe(true);
   });
 
+  it('lets a Super Admin correct a name, kept in the history, without telling the user who', async () => {
+    const student = await newUser('Ahmd Mohmed');
+    const body = { name: 'Ahmed Mohamed', reason: 'The name as registered with the academy' };
+    // Moderators may not; the reason is required.
+    expect((await moderator.put(`/v1/admin/users/${student.id}/name`, body)).status).toBe(403);
+    expect((await superAdmin.put(`/v1/admin/users/${student.id}/name`, { name: 'Ahmed Mohamed' })).status).toBe(400);
+    const logRows = async () => (await query(ctx.ownerUrl, 'select count(*)::int as n from app.update_log')).rows[0]!.n as number;
+    const before = await logRows();
+    const changed = await superAdmin.put(`/v1/admin/users/${student.id}/name`, body);
+    expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+    expect(changed.body.user.name).toBe('Ahmed Mohamed');
+    // The user sees the new name; nothing in their own view names the admin.
+    const me = await api(student).get('/v1/me');
+    expect(me.body.name).toBe('Ahmed Mohamed');
+    expect(JSON.stringify(me.body)).not.toContain('Console');
+    // Identity history keeps the old name with the admin as the actor; the admin history keeps the reason.
+    const history = await query(ctx.ownerUrl, `select old_value, new_value, actor_type from audit.identity_history where user_id = $1 and field = 'name' order by id`, [student.id]);
+    expect(history.rows.at(-1)).toEqual({ old_value: 'Ahmd Mohmed', new_value: 'Ahmed Mohamed', actor_type: 'admin' });
+    const log = await query(ctx.ownerUrl, `select action, metadata from app.audit_log where target_id = $1 and action = 'user.rename'`, [student.id]);
+    expect(log.rows).toEqual([{ action: 'user.rename', metadata: { reason: body.reason } }]);
+    // No notification and no sync entry for anyone.
+    expect(await logRows()).toBe(before);
+  });
+
   it('never lifts a ban with a suspension decided on a report', async () => {
     const reported = await newUser('Banned Reported');
     const chat = await api(ana).openChat(reported);
